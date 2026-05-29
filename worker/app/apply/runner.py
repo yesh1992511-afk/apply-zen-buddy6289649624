@@ -129,6 +129,18 @@ async def process_one(app: dict[str, Any]) -> None:
             await _fail(app["id"], result.error or "unknown", result.screenshots)
             db_log("warning", f"apply failed: {result.error}", scope="apply",
                    application_id=app["id"], job_id=job["id"])
+            try:
+                from .. import notify as _notify
+                err_l = (result.error or "").lower()
+                manual_markers = ("captcha", "challenge", "verify", "blocked", "robot", "2fa", "otp", "review")
+                if any(k in err_l for k in manual_markers):
+                    _notify.manual_review(job, app["id"], result.error or "portal blocked")
+                else:
+                    attempts = _bump_attempts(app["id"]) - 1
+                    if attempts >= 2:
+                        _notify.apply_failed(job, app["id"], result.error or "unknown")
+            except Exception as _e:
+                log.warning("notify_failed", error=str(_e))
     except Exception as e:
         await _fail(app["id"], str(e), [])
         db_log("error", f"apply crashed: {e}", scope="apply",
