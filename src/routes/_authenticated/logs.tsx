@@ -36,6 +36,24 @@ function LogsPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [level]);
 
+  // Realtime tail
+  useEffect(() => {
+    const ch = supabase
+      .channel("logs-tail")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "logs" },
+        (payload) => {
+          const row = payload.new as Log;
+          if (level !== "all" && row.level !== level) return;
+          if (q && !row.message.toLowerCase().includes(q.toLowerCase())) return;
+          setLogs((prev) => [row, ...prev].slice(0, 500));
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [level, q]);
+
   return (
     <div className="space-y-4">
       <div>

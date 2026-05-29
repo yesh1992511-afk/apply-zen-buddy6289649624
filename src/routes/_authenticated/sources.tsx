@@ -10,6 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { triggerScrape } from "@/lib/commands";
+import { Play } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/sources")({
   head: () => ({ meta: [{ title: "Sources — JobPilot" }] }),
@@ -102,6 +104,9 @@ function SourcesPage() {
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => triggerScrape(s.key)}>
+                  <Play className="mr-1 h-3 w-3" /> Run now
+                </Button>
                 <label className="flex items-center gap-2 text-sm">
                   <Switch checked={s.enabled} onCheckedChange={(v) => { setSources((cur) => cur.map((x) => x.id === s.id ? { ...x, enabled: v } : x)); update(s.id, { enabled: v }); }} />
                   Enabled

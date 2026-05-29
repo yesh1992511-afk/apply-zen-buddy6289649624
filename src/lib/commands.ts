@@ -15,7 +15,8 @@ async function enqueue(kind: Kind, payload: Record<string, unknown>): Promise<st
   }
   const { data, error } = await supabase
     .from("worker_commands")
-    .insert({ user_id: u.user.id, kind, payload })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .insert({ user_id: u.user.id, kind, payload: payload as any })
     .select("id")
     .single();
   if (error) {
