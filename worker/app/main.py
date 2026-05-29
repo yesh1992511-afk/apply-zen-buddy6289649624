@@ -11,6 +11,7 @@ from .logger import log, db_log
 from .heartbeat import beat
 from .sources.registry import run_due_sources
 from .apply.runner import process_queue
+from .commands import tick_commands
 
 
 def in_active_window() -> bool:
@@ -58,6 +59,7 @@ async def main():
     db_log("info", f"worker starting v{settings().WORKER_VERSION}", scope="boot")
     sched = AsyncIOScheduler()
     sched.add_job(tick_heartbeat, IntervalTrigger(seconds=30), id="heartbeat", max_instances=1)
+    sched.add_job(tick_commands, IntervalTrigger(seconds=5), id="commands", max_instances=1)
     sched.add_job(tick_sources, IntervalTrigger(minutes=2), id="sources", max_instances=1)
     sched.add_job(tick_apply, IntervalTrigger(seconds=45), id="apply", max_instances=1)
     sched.start()
