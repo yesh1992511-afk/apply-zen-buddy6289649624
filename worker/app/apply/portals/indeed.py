@@ -36,8 +36,10 @@ class Indeed(Portal):
                     await file_input.set_input_files(tf.name)
                 await pause(1, 2)
 
-            # Click Continue/Submit until end
+            # Click Continue/Submit until end (auto-fill OTP if portal asks)
+            from ..browser import fill_otp_if_present
             for _ in range(6):
+                await fill_otp_if_present(target if hasattr(target, 'query_selector') else page, portal_url=job["url"], timeout=90)
                 nxt = target.locator(
                     "button:has-text('Continue'), button:has-text('Submit'), "
                     "button:has-text('Review your application')"
