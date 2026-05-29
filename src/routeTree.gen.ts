@@ -22,6 +22,8 @@ import { Route as AuthenticatedFiltersRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
+import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
+import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -88,6 +90,18 @@ const AuthenticatedApplicationsRoute =
     path: '/applications',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicHooksDailySummaryRoute =
+  ApiPublicHooksDailySummaryRouteImport.update({
+    id: '/api/public/hooks/daily-summary',
+    path: '/api/public/hooks/daily-summary',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksCheckHeartbeatRoute =
+  ApiPublicHooksCheckHeartbeatRouteImport.update({
+    id: '/api/public/hooks/check-heartbeat',
+    path: '/api/public/hooks/check-heartbeat',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -102,6 +116,8 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
+  '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
+  '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -116,6 +132,8 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
+  '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
+  '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -132,6 +150,8 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/sources': typeof AuthenticatedSourcesRoute
+  '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
+  '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -148,6 +168,8 @@ export interface FileRouteTypes {
     | '/profile'
     | '/setup'
     | '/sources'
+    | '/api/public/hooks/check-heartbeat'
+    | '/api/public/hooks/daily-summary'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -162,6 +184,8 @@ export interface FileRouteTypes {
     | '/profile'
     | '/setup'
     | '/sources'
+    | '/api/public/hooks/check-heartbeat'
+    | '/api/public/hooks/daily-summary'
   id:
     | '__root__'
     | '/'
@@ -177,6 +201,8 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/setup'
     | '/_authenticated/sources'
+    | '/api/public/hooks/check-heartbeat'
+    | '/api/public/hooks/daily-summary'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +210,8 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicHooksCheckHeartbeatRoute: typeof ApiPublicHooksCheckHeartbeatRoute
+  ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -279,6 +307,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApplicationsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/hooks/daily-summary': {
+      id: '/api/public/hooks/daily-summary'
+      path: '/api/public/hooks/daily-summary'
+      fullPath: '/api/public/hooks/daily-summary'
+      preLoaderRoute: typeof ApiPublicHooksDailySummaryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/check-heartbeat': {
+      id: '/api/public/hooks/check-heartbeat'
+      path: '/api/public/hooks/check-heartbeat'
+      fullPath: '/api/public/hooks/check-heartbeat'
+      preLoaderRoute: typeof ApiPublicHooksCheckHeartbeatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -315,7 +357,19 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicHooksCheckHeartbeatRoute: ApiPublicHooksCheckHeartbeatRoute,
+  ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
