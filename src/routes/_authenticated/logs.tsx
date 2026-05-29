@@ -28,7 +28,7 @@ function LogsPage() {
 
   const load = async () => {
     let query = supabase.from("logs").select("id, ts, level, scope, message").order("ts", { ascending: false }).limit(500);
-    if (level !== "all") query = query.eq("level", level);
+    if (level !== "all") query = query.eq("level", level as "debug" | "info" | "warn" | "error");
     if (q) query = query.ilike("message", `%${q}%`);
     const { data } = await query;
     setLogs((data ?? []) as Log[]);
