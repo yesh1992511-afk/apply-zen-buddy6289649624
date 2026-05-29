@@ -334,6 +334,51 @@ export type Database = {
         }
         Relationships: []
       }
+      gmail_credentials: {
+        Row: {
+          app_password: string
+          created_at: string
+          email: string
+          id: string
+          imap_host: string
+          imap_port: number
+          last_error: string | null
+          smtp_host: string
+          smtp_port: number
+          updated_at: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          app_password: string
+          created_at?: string
+          email: string
+          id?: string
+          imap_host?: string
+          imap_port?: number
+          last_error?: string | null
+          smtp_host?: string
+          smtp_port?: number
+          updated_at?: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          app_password?: string
+          created_at?: string
+          email?: string
+          id?: string
+          imap_host?: string
+          imap_port?: number
+          last_error?: string | null
+          smtp_host?: string
+          smtp_port?: number
+          updated_at?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       jobs: {
         Row: {
           company: string
@@ -453,6 +498,99 @@ export type Database = {
           run_id?: string | null
           scope?: string | null
           ts?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_log: {
+        Row: {
+          application_id: string | null
+          body: string | null
+          created_at: string
+          id: string
+          job_id: string | null
+          kind: string
+          last_error: string | null
+          metadata: Json | null
+          recipient_email: string
+          status: string
+          subject: string
+          user_id: string
+        }
+        Insert: {
+          application_id?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          kind: string
+          last_error?: string | null
+          metadata?: Json | null
+          recipient_email: string
+          status?: string
+          subject: string
+          user_id: string
+        }
+        Update: {
+          application_id?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          kind?: string
+          last_error?: string | null
+          metadata?: Json | null
+          recipient_email?: string
+          status?: string
+          subject?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_settings: {
+        Row: {
+          created_at: string
+          daily_summary_enabled: boolean
+          daily_summary_time: string
+          high_score_threshold: number
+          last_daily_summary_date: string | null
+          last_worker_offline_alert: string | null
+          notify_apply_failed: boolean
+          notify_high_score: boolean
+          notify_manual_review: boolean
+          notify_worker_offline: boolean
+          recipient_email: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          daily_summary_enabled?: boolean
+          daily_summary_time?: string
+          high_score_threshold?: number
+          last_daily_summary_date?: string | null
+          last_worker_offline_alert?: string | null
+          notify_apply_failed?: boolean
+          notify_high_score?: boolean
+          notify_manual_review?: boolean
+          notify_worker_offline?: boolean
+          recipient_email?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          daily_summary_enabled?: boolean
+          daily_summary_time?: string
+          high_score_threshold?: number
+          last_daily_summary_date?: string | null
+          last_worker_offline_alert?: string | null
+          notify_apply_failed?: boolean
+          notify_high_score?: boolean
+          notify_manual_review?: boolean
+          notify_worker_offline?: boolean
+          recipient_email?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
