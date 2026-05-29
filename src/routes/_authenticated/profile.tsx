@@ -203,8 +203,9 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
   const [items, setItems] = useState<Array<Record<string, unknown> & { id: string }>>([]);
   const schema = SCHEMAS[table];
 
+  const db = supabase as unknown as { from: (t: string) => any };
   const load = () => {
-    (supabase.from(table) as any).select("*").order("sort_order", { ascending: true }).then(({ data }: { data: Array<Record<string, unknown> & { id: string }> | null }) => setItems(data ?? []));
+    db.from(table).select("*").order("sort_order", { ascending: true }).then(({ data }: { data: Array<Record<string, unknown> & { id: string }> | null }) => setItems(data ?? []));
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [table]);
 
@@ -216,17 +217,17 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
     if (table === "projects") blank.name = "New project";
     if (table === "skills") blank.name = "New skill";
     if (table === "educations") blank.school = "New school";
-    const { error } = await (supabase.from(table) as any).insert(blank);
+    const { error } = await db.from(table).insert(blank);
     if (error) toast.error(error.message); else load();
   };
 
   const update = async (id: string, patch: Record<string, unknown>) => {
-    const { error } = await (supabase.from(table) as any).update(patch).eq("id", id);
+    const { error } = await db.from(table).update(patch).eq("id", id);
     if (error) toast.error(error.message);
   };
 
   const remove = async (id: string) => {
-    const { error } = await (supabase.from(table) as any).delete().eq("id", id);
+    const { error } = await db.from(table).delete().eq("id", id);
     if (error) toast.error(error.message); else load();
   };
 
@@ -274,7 +275,7 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
 
 function ResumeUploader() {
   const { user } = useUser();
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string; tex_content: string | null; is_default: boolean; markers: unknown }>>([]);
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; tex_content: string | null; is_default: boolean | null; markers: unknown }>>([]);
   const [name, setName] = useState("My LaTeX resume");
   const [tex, setTex] = useState("");
 
