@@ -1,0 +1,14 @@
+services:
+  worker:
+    build: .
+    container_name: jobpilot-worker
+    restart: unless-stopped
+    env_file: .env
+    shm_size: "1gb"     # Chromium likes shared memory
+    volumes:
+      - ./data:/data    # scratch (PDF compile cache, screenshots before upload)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,os; urllib.request.urlopen(f\"{os.environ['SUPABASE_URL']}/auth/v1/health\").read()"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
