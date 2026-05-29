@@ -21,6 +21,7 @@ import {
   Database,
   Settings,
   ScrollText,
+  Server,
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ const setup = [
   { title: "Filters", to: "/filters", icon: Filter },
   { title: "Sources", to: "/sources", icon: Database },
   { title: "Automation", to: "/automation", icon: Settings },
+  { title: "Worker Setup", to: "/setup", icon: Server },
   { title: "Logs", to: "/logs", icon: ScrollText },
 ];
 
