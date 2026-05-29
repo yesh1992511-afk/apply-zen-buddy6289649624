@@ -1,13 +1,16 @@
 """Playwright launch with stealth, residential proxy, UA pool, and persistent
 per-portal browser profiles (cookies + cache survive restarts → looks like a
 returning user)."""
+import asyncio
 import os
 import random
 from contextlib import asynccontextmanager
 from pathlib import Path
-from playwright.async_api import async_playwright
+from urllib.parse import urlparse
+from playwright.async_api import async_playwright, Page
 from playwright_stealth import stealth_async
 from .proxy import playwright_proxy
+from .. import gmail as _gmail
 
 PROFILE_ROOT = Path(os.getenv("PROFILE_ROOT", "/data/profiles"))
 PROFILE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -88,3 +91,60 @@ async def new_browser(portal_key: str = "default", headless: bool = True, finger
             yield page, ctx
         finally:
             await ctx.close()
+
+
+# ---------------------------------------------------------------------------
+# OTP helpers — called from portal adapters when a verification field appears
+# ---------------------------------------------------------------------------
+async def wait_for_otp(page: Page, *, portal_url: str | None = None,
+                       timeout: int = 120, keywords: list[str] | None = None) -> str | None:
+    """Block until a verification code arrives in the user's Gmail inbox,
+    using `sender_domain` derived from the portal URL (e.g. indeed.com).
+
+    Returns the OTP string or None on timeout."""
+    sender_domain = None
+    if portal_url:
+        try:
+            host = urlparse(portal_url).hostname or ""
+            parts = host.split(".")
+            sender_domain = ".".join(parts[-2:]) if len(parts) >= 2 else host
+        except Exception:
+            pass
+    # Run blocking IMAP in a thread so the browser stays responsive
+    return await asyncio.to_thread(
+        _gmail.wait_for_otp, sender_domain, timeout=timeout, poll_interval=5, keywords=keywords or []
+    )
+
+
+async def fill_otp_if_present(page: Page, *, portal_url: str | None = None,
+                              timeout: int = 90) -> bool:
+    """Detect common OTP input selectors and auto-fill from Gmail.
+    Returns True if a code was filled."""
+    selectors = [
+        'input[autocomplete="one-time-code"]',
+        'input[name*="otp" i]',
+        'input[name*="code" i]',
+        'input[name*="verification" i]',
+        'input[id*="otp" i]',
+        'input[id*="verification" i]',
+        'input[placeholder*="code" i]',
+    ]
+    found = None
+    for sel in selectors:
+        try:
+            el = await page.query_selector(sel)
+            if el and await el.is_visible():
+                found = el
+                break
+        except Exception:
+            continue
+    if not found:
+        return False
+    code = await wait_for_otp(page, portal_url=portal_url, timeout=timeout)
+    if not code:
+        return False
+    try:
+        await found.fill(code)
+        return True
+    except Exception:
+        return False

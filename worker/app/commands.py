@@ -18,6 +18,9 @@ from .logger import db_log, log
 from .sources.registry import run_source_by_key
 from .apply.runner import process_one
 from .ai.resume_pipeline import build_resume_pdf
+from . import notify as _notify
+from . import gmail as _gmail
+from datetime import timedelta
 
 
 def _now() -> str:
@@ -88,10 +91,48 @@ async def _do_tailor(payload: dict[str, Any]) -> dict[str, Any]:
     return {"pdf_path": path}
 
 
+async def _do_notify_test(payload: dict[str, Any]) -> dict[str, Any]:
+    ok, err = _notify.send_test()
+    if not ok:
+        raise RuntimeError(err or "send failed")
+    return {"ok": True}
+
+
+async def _do_notify_offline(payload: dict[str, Any]) -> dict[str, Any]:
+    subject = "[JobPilot] Worker was offline"
+    body = f"Your worker was offline (last seen {payload.get('last_seen')}). It's back now.\n"
+    _gmail.send_and_log("worker_offline", subject, body)
+    return {"ok": True}
+
+
+async def _do_notify_daily_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    uid = user_id()
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    jobs_in = db().table("jobs").select("id", count="exact").eq("user_id", uid).gte("created_at", since).execute().count or 0
+    applied = db().table("applications").select("id", count="exact").eq("user_id", uid).eq("status", "applied").gte("applied_at", since).execute().count or 0
+    failed = db().table("applications").select("id", count="exact").eq("user_id", uid).eq("status", "failed").gte("finished_at", since).execute().count or 0
+    queued = db().table("applications").select("id", count="exact").eq("user_id", uid).eq("status", "queued").execute().count or 0
+    top = db().table("jobs").select("title,company,score,url").eq("user_id", uid).gte("created_at", since).order("score", desc=True).limit(5).execute().data or []
+    top_lines = "\n".join([f"  • [{j.get('score')}] {j.get('title')} @ {j.get('company')} — {j.get('url')}" for j in top]) or "  (none)"
+    body = (
+        f"Last 24h summary:\n\n"
+        f"  Jobs scraped:  {jobs_in}\n"
+        f"  Applied:       {applied}\n"
+        f"  Failed:        {failed}\n"
+        f"  Queued now:    {queued}\n\n"
+        f"Top matches:\n{top_lines}\n"
+    )
+    _gmail.send_and_log("daily_summary", f"[JobPilot] Daily summary — {applied} applied", body)
+    return {"ok": True, "applied": applied, "jobs_in": jobs_in}
+
+
 HANDLERS = {
     "scrape": _do_scrape,
     "apply": _do_apply,
     "tailor": _do_tailor,
+    "notify_test": _do_notify_test,
+    "notify_offline": _do_notify_offline,
+    "notify_daily_summary": _do_notify_daily_summary,
 }
 
 

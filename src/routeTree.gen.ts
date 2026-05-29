@@ -16,12 +16,15 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSourcesRouteImport } from './routes/_authenticated/sources'
 import { Route as AuthenticatedSetupRouteImport } from './routes/_authenticated/setup'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
 import { Route as AuthenticatedJobsRouteImport } from './routes/_authenticated/jobs'
 import { Route as AuthenticatedFiltersRouteImport } from './routes/_authenticated/filters'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
+import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
+import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -57,6 +60,12 @@ const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedNotificationsRoute =
+  AuthenticatedNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedLogsRoute = AuthenticatedLogsRouteImport.update({
   id: '/logs',
   path: '/logs',
@@ -88,6 +97,18 @@ const AuthenticatedApplicationsRoute =
     path: '/applications',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicHooksDailySummaryRoute =
+  ApiPublicHooksDailySummaryRouteImport.update({
+    id: '/api/public/hooks/daily-summary',
+    path: '/api/public/hooks/daily-summary',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksCheckHeartbeatRoute =
+  ApiPublicHooksCheckHeartbeatRouteImport.update({
+    id: '/api/public/hooks/check-heartbeat',
+    path: '/api/public/hooks/check-heartbeat',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -99,9 +120,12 @@ export interface FileRoutesByFullPath {
   '/filters': typeof AuthenticatedFiltersRoute
   '/jobs': typeof AuthenticatedJobsRoute
   '/logs': typeof AuthenticatedLogsRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
+  '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
+  '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -113,9 +137,12 @@ export interface FileRoutesByTo {
   '/filters': typeof AuthenticatedFiltersRoute
   '/jobs': typeof AuthenticatedJobsRoute
   '/logs': typeof AuthenticatedLogsRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
+  '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
+  '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -129,9 +156,12 @@ export interface FileRoutesById {
   '/_authenticated/filters': typeof AuthenticatedFiltersRoute
   '/_authenticated/jobs': typeof AuthenticatedJobsRoute
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
+  '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/sources': typeof AuthenticatedSourcesRoute
+  '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
+  '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -145,9 +175,12 @@ export interface FileRouteTypes {
     | '/filters'
     | '/jobs'
     | '/logs'
+    | '/notifications'
     | '/profile'
     | '/setup'
     | '/sources'
+    | '/api/public/hooks/check-heartbeat'
+    | '/api/public/hooks/daily-summary'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -159,9 +192,12 @@ export interface FileRouteTypes {
     | '/filters'
     | '/jobs'
     | '/logs'
+    | '/notifications'
     | '/profile'
     | '/setup'
     | '/sources'
+    | '/api/public/hooks/check-heartbeat'
+    | '/api/public/hooks/daily-summary'
   id:
     | '__root__'
     | '/'
@@ -174,9 +210,12 @@ export interface FileRouteTypes {
     | '/_authenticated/filters'
     | '/_authenticated/jobs'
     | '/_authenticated/logs'
+    | '/_authenticated/notifications'
     | '/_authenticated/profile'
     | '/_authenticated/setup'
     | '/_authenticated/sources'
+    | '/api/public/hooks/check-heartbeat'
+    | '/api/public/hooks/daily-summary'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +223,8 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicHooksCheckHeartbeatRoute: typeof ApiPublicHooksCheckHeartbeatRoute
+  ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -237,6 +278,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/notifications': {
+      id: '/_authenticated/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/logs': {
       id: '/_authenticated/logs'
       path: '/logs'
@@ -279,6 +327,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApplicationsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/hooks/daily-summary': {
+      id: '/api/public/hooks/daily-summary'
+      path: '/api/public/hooks/daily-summary'
+      fullPath: '/api/public/hooks/daily-summary'
+      preLoaderRoute: typeof ApiPublicHooksDailySummaryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/check-heartbeat': {
+      id: '/api/public/hooks/check-heartbeat'
+      path: '/api/public/hooks/check-heartbeat'
+      fullPath: '/api/public/hooks/check-heartbeat'
+      preLoaderRoute: typeof ApiPublicHooksCheckHeartbeatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -289,6 +351,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedFiltersRoute: typeof AuthenticatedFiltersRoute
   AuthenticatedJobsRoute: typeof AuthenticatedJobsRoute
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
+  AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSetupRoute: typeof AuthenticatedSetupRoute
   AuthenticatedSourcesRoute: typeof AuthenticatedSourcesRoute
@@ -301,6 +364,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedFiltersRoute: AuthenticatedFiltersRoute,
   AuthenticatedJobsRoute: AuthenticatedJobsRoute,
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,
+  AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSetupRoute: AuthenticatedSetupRoute,
   AuthenticatedSourcesRoute: AuthenticatedSourcesRoute,
@@ -315,6 +379,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicHooksCheckHeartbeatRoute: ApiPublicHooksCheckHeartbeatRoute,
+  ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

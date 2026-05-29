@@ -93,8 +93,14 @@ async def _run_source(row: dict[str, Any]) -> None:
                     j["score"] = match_score(j, active_filter) if active_filter else 50
                     j["matched_filter_ids"] = [active_filter["id"]] if active_filter else []
                 j["user_id"] = user_id()
-                db().table("jobs").insert(j).execute()
+                inserted = db().table("jobs").insert(j).execute().data
                 items_out += 1
+                if inserted and j.get("matched") and (j.get("score") or 0) >= 95:
+                    try:
+                        from .. import notify as _notify
+                        _notify.high_score_job({**j, "id": inserted[0]["id"]})
+                    except Exception as _e:
+                        log.warning("high_score_notify_failed", error=str(_e))
             except Exception as e:
                 errors += 1
                 log.warning("normalize_failed", error=str(e))
