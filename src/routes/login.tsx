@@ -9,7 +9,13 @@ import { toast } from "sonner";
 import { Bot } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Sign in — JobPilot" }] }),
+  head: () => ({
+    meta: [
+      { title: "Sign in — JobPilot" },
+      { name: "description", content: "Sign in to your JobPilot job-hunt automation cockpit." },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
   component: LoginPage,
 });
 
@@ -66,6 +72,19 @@ function LoginPage() {
     }
   };
 
+  const onForgotPassword = async () => {
+    if (!email) return toast.error("Enter your email first");
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast.success("Password reset link sent. Check your email.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to send reset email");
+    }
+  };
+
   if (checkingSession) {
     return <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Loading…</div>;
   }
@@ -97,6 +116,15 @@ function LoginPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "…" : mode === "signup" ? "Create account" : "Sign in"}
             </Button>
+            {mode === "signin" && (
+              <button
+                type="button"
+                onClick={onForgotPassword}
+                className="block w-full text-center text-xs text-muted-foreground hover:text-foreground"
+              >
+                Forgot password?
+              </button>
+            )}
             {hasUser === false && (
               <button
                 type="button"
