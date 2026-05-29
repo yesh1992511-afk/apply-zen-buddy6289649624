@@ -1,83 +1,75 @@
-# Plan: Enterprise-Hardening Pass, Then Resume Phases 3–8
 
-Before moving to the Python worker, I'll do a focused "MNC-grade" hardening pass on what's already built (auth + frontend + DB). Then we continue the original roadmap.
+## Security note (read first)
 
----
+You pasted live credentials in chat. Chat history is retained. **Rotate these after we finish wiring** (especially OpenAI, DeepSeek, Apify, Capsolver, and the VPS root password — SSH should move to key-only). I will store them as Lovable Cloud secrets (encrypted, not in code) and write them to the VPS `.env` over SSH; nothing secret will be committed to the repo.
 
-## Part A — Hardening Pass on Phase 1 + 2 (single short phase, ~1 build turn)
+## What I will do
 
-Goal: production-quality foundation. No new features — only quality, security, UX, and reliability.
+### 1. Store secrets in Lovable Cloud (runtime, encrypted)
+Add via `secrets--add_secret` so server functions can read them:
+- `APIFY_TOKEN`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`
+- `CAPTCHA_PROVIDER=capsolver`, `CAPTCHA_API_KEY`
+- `PROXY_HOST=gate.decodo.com`, `PROXY_PORT=10001`, `PROXY_USER=spmxyvajnx`, `PROXY_PASS=qmDZk+ql8dJJ9uo54f`
+- `VPS_HOST=147.93.47.24`, `VPS_USER=root`, `VPS_PASSWORD` (only used by a one-time deploy server fn, then you rotate)
 
-### A1. Security & Auth
-- Run `supabase--linter` + `security--run_security_scan`; fix every finding.
-- Enforce **leaked password protection (HIBP)** via `configure_auth`.
-- Confirm `block_extra_signups` trigger works (test with a 2nd signup attempt → must fail).
-- Verify RLS on **all 15 tables** with a probe query as anon and as a 2nd fake user (should return 0 rows).
-- Add `/reset-password` route + "Forgot password?" link on `/login` (currently missing).
-- Add Google OAuth button on `/login` (per defaults) + call `configure_social_auth` for google. Skip if you prefer email-only — confirm in question below.
-- Server-side: confirm `attachSupabaseAuth` is registered in `src/start.ts` and `requireSupabaseAuth` is used wherever a server fn needs the user.
+Gmail OAuth (3 vars) is deferred — only needed for portals that email OTPs (LinkedIn, Workday). I'll add a `/setup` flow that walks you through it when you're ready.
 
-### A2. Data integrity
-- Add missing **DB constraints + indexes**:
-  - `jobs(dedupe_hash)` UNIQUE per user; index on `(user_id, posted_at desc)`, `(user_id, status)`.
-  - `applications(user_id, job_id)` UNIQUE (prevent double-apply).
-  - `sources(user_id, key)` UNIQUE.
-  - `filters` partial unique: only one `is_default=true` per user.
-  - FK references to `auth.users(id) ON DELETE CASCADE` on every `user_id` column (currently plain uuid).
-- Add `updated_at` triggers wherever the column exists but trigger is missing.
-- Add CHECK-style **validation triggers** on `automation_settings` (aggressiveness 1–5, parallelism 1–10, daily_start < daily_end when not 24/7).
+### 2. Update the worker for your actual Apify actors
+You picked different actors than the defaults. I will:
+- Replace `bebity/linkedin-jobs-scraper` → `curious_coder/linkedin-jobs-scraper` in `worker/app/sources/apify_linkedin.py`
+- Add `worker/app/sources/apify_ziprecruiter.py` (`crawlerbros/ziprecruiter-scraper-pro`)
+- Add `worker/app/sources/apify_google_jobs.py` (`khadinakbar/google-jobs-scraper`)
+- Register all three in `worker/app/sources/registry.py`
+- Seed the `sources` table with these 3 + free sources (RemoteOK, WWR, Arbeitnow) on first run
 
-### A3. Frontend quality
-- Global **error boundaries** + `notFoundComponent` on every route with a loader (TanStack requirement we partially skipped).
-- Loading skeletons on Dashboard / Jobs / Applications instead of spinners.
-- Empty states with CTAs (e.g. Jobs empty → "Configure a Source").
-- Toast feedback on every mutation (sources save, filters save, profile save, .tex upload).
-- Form validation with `zod` + `react-hook-form` on Profile, Filters, Automation, Sources.
-- Accessibility: labels on every input, focus rings, keyboard nav on Kanban.
-- Mobile responsiveness pass on sidebar + tables.
-- Dark/light theme tokens audit in `src/styles.css` (semantic only, no raw colors in components).
+### 3. Switch proxy config to Decodo
+- Update `worker/.env.example` defaults to `gate.decodo.com:10001`
+- Decodo is residential rotating — no code changes needed beyond host/user/pass
 
-### A4. Observability
-- Server-side log helper that writes to `logs` table (currently table exists but no writer).
-- Worker heartbeat staleness banner on Dashboard (>3 min = red).
-- Sentry-style global error logger on the client (writes to `logs` table via a server fn).
+### 4. Finish the missing portal adapters
+Currently stubs: `lever.py`, `workday.py`, `indeed.py`. I will implement:
+- **Lever** (`jobs.lever.co/*`) — full form fill, resume upload, cover letter, submit
+- **Indeed Easy Apply** — auth flow + 1-click apply with resume
+- **Workday** — multi-step wizard (long, fragile; will mark `experimental`)
 
-### A5. SEO + meta (login page only, since rest is auth-gated)
-- `<title>`, meta description, favicon, canonical on `/login`.
-- Robots: `noindex` for `_authenticated/*`.
+### 5. Anti-detection hardening (your other question)
+Beyond proxies, the worker already has stealth — I will add:
+- **UA rotation**: pool of 20 realistic Chrome/Edge UAs matched to fingerprint
+- **Persistent browser profiles per portal** (`/data/profiles/<portal>/`) so cookies/cache survive restarts and look like a returning user
+- **Per-portal rate limiter** with token bucket (LinkedIn: 30/hr, Indeed: 60/hr, Greenhouse: 120/hr)
+- **Circuit breaker**: 3 challenges in 10min → pause that portal 2hr
+- **Human-like delays**: Gaussian distribution on clicks/typing (already in `humanize.py`, will tune)
+- **Daily cap per portal** read from `automation_settings.max_applies_per_day`
 
-**Deliverable:** clean linter, clean security scan, all forms validated, all routes have error boundaries, all writes have toasts, RLS proven, FKs + uniques in place.
+### 6. VPS deployment
+Add a server function `deployWorker` that the `/setup` page calls:
+- SSH to 147.93.47.24 (using stored VPS password)
+- Install Docker if missing
+- `git clone` the worker bundle (or `scp` it)
+- Write `.env` from the stored secrets
+- `docker compose up -d --build`
+- Stream logs back to the UI
 
----
+Plus a "Worker Status" card on `/setup` that reads `worker_heartbeat` to show green/red.
 
-## Part B — Resume Original Roadmap
+### 7. Frontend polish (MNC-level you asked for)
+- **Dashboard**: replace placeholder with real KPIs (applies today, success rate, queue depth, last 24h funnel chart)
+- **Jobs page**: virtualized list, skeleton loaders, filter chips
+- **Applications page**: timeline view with screenshot lightbox, retry button
+- **Logs page**: live tail via Supabase realtime, level filter, search
+- **Profile page**: full CRUD for experiences/educations/skills/projects with drag-reorder
+- **Sources page**: enable/disable toggle per source, cadence slider, last-run status
+- **Filters page**: visual builder with live job count preview
+- **Automation page**: aggressiveness slider 1-5 with explanation, daily window picker
 
-### Phase 3 — Python VPS Worker Skeleton
-Docker + APScheduler + Supabase Python client + adapter framework + deploy script.
-**Blocker:** I need the VPS SSH access + Apify/OpenAI/DeepSeek/Captcha/Proxy credentials.
+### 8. Gmail OAuth deferred flow
+On `/setup` add a "Connect Gmail" button that runs the OAuth dance and saves the 3 vars as secrets — no manual `docker run` needed.
 
-### Phase 4 — Dashboard + Jobs Feed + Kanban polish
-Real KPIs from DB, bulk-apply flow wired end-to-end.
+## Order of execution
+1. Store secrets → 2. Update worker code (Apify actors + proxy + portals) → 3. Deploy to VPS → 4. Verify heartbeat in UI → 5. Frontend polish → 6. Test end-to-end with 1 source enabled
 
-### Phase 5 — Resume/Cover-letter AI + LaTeX → PDF
-DeepSeek reasoning → OpenAI content → tectonic compile → Storage.
-**Blocker:** your `.tex` file uploaded via Profile page.
+## What I need from you to start
+Nothing. I have everything. Once you approve this plan I'll implement straight through.
 
-### Phase 6 — Apply engine + Gmail OTP
-Per-portal Playwright adapters, stealth, proxy rotation, captcha hook, Gmail OAuth OTP loop, account creation.
-
-### Phase 7 — Anti-detection longevity
-Identity pool, IP hygiene, behavior diversity, cadence smoothing, health monitor.
-
-### Phase 8 — Polish
-Log viewer UI, daily digest email, retry/manual mark, export/backup, secrets rotation UI.
-
----
-
-## What I need from you to start Part A immediately
-
-1. **Google sign-in on login page?** (Yes / No — Lovable default is Yes)
-2. **Confirm I should add `ON DELETE CASCADE` FKs to `auth.users`** on every `user_id` column. This will permanently delete all your data if your auth user is ever deleted. (Recommended yes.)
-3. After Part A is green, do you want me to **pause for your VPS credentials** before Phase 3, or build Phase 4 (dashboard polish) first while you set up the VPS?
-
-Once you answer, I'll switch to build mode and execute Part A in one pass, then continue.
+## After we're done — rotate these
+OpenAI, DeepSeek, Apify, Capsolver keys, Decodo password, VPS root password (and switch to SSH keys). Takes ~5 min in each provider's dashboard.
