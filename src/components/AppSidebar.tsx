@@ -23,6 +23,7 @@ import {
   ScrollText,
   Server,
   LogOut,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +40,7 @@ const setup = [
   { title: "Filters", to: "/filters", icon: Filter },
   { title: "Sources", to: "/sources", icon: Database },
   { title: "Automation", to: "/automation", icon: Settings },
+  { title: "Notifications", to: "/notifications", icon: Bell },
   { title: "Worker Setup", to: "/setup", icon: Server },
   { title: "Logs", to: "/logs", icon: ScrollText },
 ];
