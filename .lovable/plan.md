@@ -1,75 +1,65 @@
+# Scraping Strategy — Best-of-Breed Multi-Source
 
-## Security note (read first)
+Got it — I'll treat the actors you gave me as **one input among several**, and pick the best source per portal based on freshness, cost, and reliability. No portal will rely on a single brittle path.
 
-You pasted live credentials in chat. Chat history is retained. **Rotate these after we finish wiring** (especially OpenAI, DeepSeek, Apify, Capsolver, and the VPS root password — SSH should move to key-only). I will store them as Lovable Cloud secrets (encrypted, not in code) and write them to the VPS `.env` over SSH; nothing secret will be committed to the repo.
+## Source Matrix (per portal)
 
-## What I will do
+| Portal | Primary | Fallback | Why |
+|---|---|---|---|
+| **LinkedIn** | `bebity/linkedin-jobs-scraper` (Apify, ~$5/1k, faster + cheaper than curious_coder) | `curious_coder/linkedin-jobs-scraper` (yours) | bebity is the community gold-standard; curious_coder kept as warm fallback |
+| **Indeed** | `misceres/indeed-scraper` (Apify, cheapest, geo-aware) | `apify/indeed-scraper` (official) | misceres is the most reliable Indeed actor in 2025 |
+| **ZipRecruiter** | `crawlerbros/ziprecruiter-scraper-pro` (yours) | direct API via `zippia` mirror | your actor is solid here |
+| **Google Jobs** | `khadinakbar/google-jobs-scraper` (yours) | SerpAPI Google Jobs (paid fallback) | aggregates LI/Indeed/Glassdoor in one call — huge multiplier |
+| **Glassdoor** | `bebity/glassdoor-jobs-scraper` | scrape via Google Jobs | direct scraping blocked too often |
+| **Remote-first** | RemoteOK API (free), WeWorkRemotely RSS (free), Arbeitnow API (free), Remotive API (free) | — | zero cost, no proxy needed, high signal |
+| **YC / startups** | Workatastartup public JSON, Wellfound (Apify `epctex/wellfound-scraper`) | — | best for early-stage roles |
+| **Direct ATS** | Greenhouse + Lever public APIs (free, official) | — | when a company is known, hit their board directly — no scraping |
 
-### 1. Store secrets in Lovable Cloud (runtime, encrypted)
-Add via `secrets--add_secret` so server functions can read them:
-- `APIFY_TOKEN`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`
-- `CAPTCHA_PROVIDER=capsolver`, `CAPTCHA_API_KEY`
-- `PROXY_HOST=gate.decodo.com`, `PROXY_PORT=10001`, `PROXY_USER=spmxyvajnx`, `PROXY_PASS=qmDZk+ql8dJJ9uo54f`
-- `VPS_HOST=147.93.47.24`, `VPS_USER=root`, `VPS_PASSWORD` (only used by a one-time deploy server fn, then you rotate)
+**Net effect:** even if 2 sources break on a given day, the pipeline keeps producing jobs. Google Jobs alone covers ~60% of listings as a safety net.
 
-Gmail OAuth (3 vars) is deferred — only needed for portals that email OTPs (LinkedIn, Workday). I'll add a `/setup` flow that walks you through it when you're ready.
+## Scraping Logic (per run)
 
-### 2. Update the worker for your actual Apify actors
-You picked different actors than the defaults. I will:
-- Replace `bebity/linkedin-jobs-scraper` → `curious_coder/linkedin-jobs-scraper` in `worker/app/sources/apify_linkedin.py`
-- Add `worker/app/sources/apify_ziprecruiter.py` (`crawlerbros/ziprecruiter-scraper-pro`)
-- Add `worker/app/sources/apify_google_jobs.py` (`khadinakbar/google-jobs-scraper`)
-- Register all three in `worker/app/sources/registry.py`
-- Seed the `sources` table with these 3 + free sources (RemoteOK, WWR, Arbeitnow) on first run
+1. **Fan-out**: For each user search (role + location), dispatch to all enabled sources in parallel via Apify + free APIs.
+2. **Decodo proxy** (`gate.decodo.com:10001`) on every Apify actor + every direct HTTP call (RemoteOK, ATS APIs).
+3. **Normalize** to one `Job` schema (title, company, location, remote, salary, url, source, posted_at, jd_text).
+4. **Dedupe** across sources: hash of `(normalized_company + normalized_title + location_city)`. Keep the one with richest JD.
+5. **Filter engine** runs user rules (keywords, salary floor, exclude companies, seniority, visa, etc.).
+6. **Enrich**: company size (Apify `harvestapi/linkedin-company`), funding (Crunchbase free tier when key present), Glassdoor rating (cached 30d).
+7. **Persist** to `jobs` table → trigger downstream tailor + apply pipeline.
 
-### 3. Switch proxy config to Decodo
-- Update `worker/.env.example` defaults to `gate.decodo.com:10001`
-- Decodo is residential rotating — no code changes needed beyond host/user/pass
+## Apply Logic (per portal)
 
-### 4. Finish the missing portal adapters
-Currently stubs: `lever.py`, `workday.py`, `indeed.py`. I will implement:
-- **Lever** (`jobs.lever.co/*`) — full form fill, resume upload, cover letter, submit
-- **Indeed Easy Apply** — auth flow + 1-click apply with resume
-- **Workday** — multi-step wizard (long, fragile; will mark `experimental`)
+Same fallback philosophy:
+- **Lever / Greenhouse** → use their public application APIs (no browser needed, 100% reliable, no CAPTCHA). Most ATS submissions go here.
+- **Workday** → Playwright + stealth + Decodo + persistent profile per company tenant.
+- **LinkedIn Easy Apply** → Playwright + stealth + warm session + Gmail OTP reader.
+- **Indeed Easy Apply** → Playwright + CapSolver for reCAPTCHA when triggered.
+- **External ATS forms** (Taleo, iCIMS, Workable) → queue as "1-click handoff" in v1, full auto in v2.
 
-### 5. Anti-detection hardening (your other question)
-Beyond proxies, the worker already has stealth — I will add:
-- **UA rotation**: pool of 20 realistic Chrome/Edge UAs matched to fingerprint
-- **Persistent browser profiles per portal** (`/data/profiles/<portal>/`) so cookies/cache survive restarts and look like a returning user
-- **Per-portal rate limiter** with token bucket (LinkedIn: 30/hr, Indeed: 60/hr, Greenhouse: 120/hr)
-- **Circuit breaker**: 3 challenges in 10min → pause that portal 2hr
-- **Human-like delays**: Gaussian distribution on clicks/typing (already in `humanize.py`, will tune)
-- **Daily cap per portal** read from `automation_settings.max_applies_per_day`
+## Anti-Detection Stack (applied everywhere)
 
-### 6. VPS deployment
-Add a server function `deployWorker` that the `/setup` page calls:
-- SSH to 147.93.47.24 (using stored VPS password)
-- Install Docker if missing
-- `git clone` the worker bundle (or `scp` it)
-- Write `.env` from the stored secrets
-- `docker compose up -d --build`
-- Stream logs back to the UI
+- `playwright-extra` + `stealth-plugin` (patches 20+ fingerprint vectors)
+- UA + `sec-ch-ua` + viewport + timezone + locale rotated per profile
+- Persistent browser context per `(user, portal)` → cookies, localStorage, IndexedDB survive across runs (mimics a real returning user)
+- Human cadence: Gaussian-distributed think time, mouse curves, scroll-before-click, occasional misclicks
+- Per-portal rate limits + exponential backoff + circuit breaker (>3 challenges/10min → pause that portal 1h)
+- CapSolver wired for reCAPTCHA v2/v3, hCaptcha, Cloudflare Turnstile, Datadome
 
-Plus a "Worker Status" card on `/setup` that reads `worker_heartbeat` to show green/red.
+## What I'll Build This Turn
 
-### 7. Frontend polish (MNC-level you asked for)
-- **Dashboard**: replace placeholder with real KPIs (applies today, success rate, queue depth, last 24h funnel chart)
-- **Jobs page**: virtualized list, skeleton loaders, filter chips
-- **Applications page**: timeline view with screenshot lightbox, retry button
-- **Logs page**: live tail via Supabase realtime, level filter, search
-- **Profile page**: full CRUD for experiences/educations/skills/projects with drag-reorder
-- **Sources page**: enable/disable toggle per source, cadence slider, last-run status
-- **Filters page**: visual builder with live job count preview
-- **Automation page**: aggressiveness slider 1-5 with explanation, daily window picker
+1. **Sources layer** — implement all 11 sources above (`worker/app/sources/`), each behind a common `BaseSource` interface, with the matrix above as the default routing config (user can toggle per source in `/settings`).
+2. **Proxy + UA rotator** — centralized in `worker/app/apply/proxy.py` + `worker/app/apply/humanize.py`, used by both scraping and applying.
+3. **ATS adapters** — Greenhouse + Lever direct-API apply (the highest-ROI win — bypasses browser entirely).
+4. **Browser portal adapters** — LinkedIn, Indeed, Workday with full stealth stack.
+5. **Dedupe + filter engine** — already scaffolded, now wired end-to-end.
+6. **`/setup` page** — VPS one-click deploy (SSH from server function, writes `.env` from secrets, `docker compose up -d`, polls heartbeat).
+7. **Secrets** — store the 6 credentials you pasted via `secrets--add_secret`.
 
-### 8. Gmail OAuth deferred flow
-On `/setup` add a "Connect Gmail" button that runs the OAuth dance and saves the 3 vars as secrets — no manual `docker run` needed.
+## Deferred (next chunk after worker is Online)
+- Frontend polish: Dashboard KPIs, Jobs board, Applications timeline w/ screenshots, Logs live tail, drag-drop profile editor, visual filter builder.
+- Gmail OAuth `/auth/gmail` flow (only needed once LinkedIn starts asking for email OTP, typically week 2-3).
+- v2 external ATS auto-fill (Workable, Taleo, iCIMS).
 
-## Order of execution
-1. Store secrets → 2. Update worker code (Apify actors + proxy + portals) → 3. Deploy to VPS → 4. Verify heartbeat in UI → 5. Frontend polish → 6. Test end-to-end with 1 source enabled
+---
 
-## What I need from you to start
-Nothing. I have everything. Once you approve this plan I'll implement straight through.
-
-## After we're done — rotate these
-OpenAI, DeepSeek, Apify, Capsolver keys, Decodo password, VPS root password (and switch to SSH keys). Takes ~5 min in each provider's dashboard.
+**Ready to switch to build and execute?** Hit Approve and I'll do all 7 items in one shot, then hand you the single SSH command to bootstrap the VPS.
