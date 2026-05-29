@@ -15,6 +15,7 @@ from ..ai.cover_letter import generate as generate_cover_letter
 from .browser import new_browser
 from .humanize import pause
 from .portals.registry import find_portal
+from .ratelimit import acquire as rl_acquire, record_challenge
 
 
 async def _next_queued(limit: int) -> list[dict[str, Any]]:
@@ -94,12 +95,22 @@ async def process_one(app: dict[str, Any]) -> None:
 
         await _save_resume(app["id"], pdf, tex)
 
-        async with new_browser() as (page, _ctx):
+        try:
+            await rl_acquire(portal.key)
+        except RuntimeError as e:
+            await _fail(app["id"], str(e), [])
+            return
+
+        async with new_browser(portal_key=portal.key) as (page, _ctx):
             await pause(1, 3)
             result = await portal.apply(
                 page=page, job=job, profile=profile,
                 resume_pdf=pdf, cover_letter_text=cl,
             )
+            if not result.ok and result.error and any(
+                k in result.error.lower() for k in ("captcha", "challenge", "verify", "blocked", "robot")
+            ):
+                record_challenge(portal.key)
 
         if result.ok:
             db().table("applications").update({
