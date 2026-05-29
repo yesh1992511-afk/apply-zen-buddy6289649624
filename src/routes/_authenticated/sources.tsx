@@ -59,12 +59,12 @@ function SourcesPage() {
     const existing = new Set(sources.map((s) => s.key));
     const rows = PRESETS.filter((p) => !existing.has(p.key)).map((p) => ({ ...p, user_id: user.id, enabled: false }));
     if (rows.length === 0) { toast.info("All presets already added"); return; }
-    const { error } = await supabase.from("sources").insert(rows);
+    const { error } = await supabase.from("sources").insert(rows as never);
     if (error) toast.error(error.message); else { toast.success(`Seeded ${rows.length} sources`); load(); }
   };
 
   const update = async (id: string, patch: Partial<Source>) => {
-    const { error } = await supabase.from("sources").update(patch).eq("id", id);
+    const { error } = await supabase.from("sources").update(patch as never).eq("id", id);
     if (error) toast.error(error.message);
   };
 
