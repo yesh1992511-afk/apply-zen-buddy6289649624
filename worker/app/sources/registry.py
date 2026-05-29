@@ -1,13 +1,11 @@
-"""Source registry + orchestration.
-
-Reads enabled rows from public.sources, calls the matching adapter,
-normalizes → dedupes → filters → scores → inserts into public.jobs.
-"""
+"""Source registry + orchestration."""
 from datetime import datetime, timezone, timedelta
 from typing import Any
 from .base import Source
 from .apify_linkedin import ApifyLinkedIn
 from .apify_indeed import ApifyIndeed
+from .apify_ziprecruiter import ApifyZipRecruiter
+from .apify_google_jobs import ApifyGoogleJobs
 from .remoteok import RemoteOK
 from .weworkremotely import WeWorkRemotely
 from .arbeitnow import Arbeitnow
@@ -19,7 +17,8 @@ from ..pipeline.filter_engine import load_active_filter, passes, match_score
 
 
 ADAPTERS: dict[str, Source] = {a.key: a for a in [
-    ApifyLinkedIn(), ApifyIndeed(), RemoteOK(), WeWorkRemotely(), Arbeitnow(),
+    ApifyLinkedIn(), ApifyIndeed(), ApifyZipRecruiter(), ApifyGoogleJobs(),
+    RemoteOK(), WeWorkRemotely(), Arbeitnow(),
 ]}
 
 
