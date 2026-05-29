@@ -204,7 +204,7 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
   const schema = SCHEMAS[table];
 
   const load = () => {
-    supabase.from(table).select("*").order("sort_order", { ascending: true }).then(({ data }) => setItems(data ?? []));
+    (supabase.from(table) as any).select("*").order("sort_order", { ascending: true }).then(({ data }: { data: Array<Record<string, unknown> & { id: string }> | null }) => setItems(data ?? []));
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [table]);
 
@@ -212,22 +212,21 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
     if (!user) return;
     const blank: Record<string, unknown> = { user_id: user.id };
     schema.fields.forEach((f) => { blank[f.key] = f.multi ? [] : ""; });
-    if (table === "experiences" || table === "projects") blank.company = blank.company ?? "New";
     if (table === "experiences") { blank.company = "New company"; blank.title = "New title"; }
     if (table === "projects") blank.name = "New project";
     if (table === "skills") blank.name = "New skill";
     if (table === "educations") blank.school = "New school";
-    const { error } = await supabase.from(table).insert(blank);
+    const { error } = await (supabase.from(table) as any).insert(blank);
     if (error) toast.error(error.message); else load();
   };
 
   const update = async (id: string, patch: Record<string, unknown>) => {
-    const { error } = await supabase.from(table).update(patch).eq("id", id);
+    const { error } = await (supabase.from(table) as any).update(patch).eq("id", id);
     if (error) toast.error(error.message);
   };
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from(table).delete().eq("id", id);
+    const { error } = await (supabase.from(table) as any).delete().eq("id", id);
     if (error) toast.error(error.message); else load();
   };
 
