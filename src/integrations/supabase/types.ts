@@ -736,6 +736,39 @@ export type Database = {
         }
         Relationships: []
       }
+      usage_events: {
+        Row: {
+          cost_usd: number
+          created_at: string
+          id: string
+          kind: string
+          metadata: Json | null
+          provider: string
+          units: number
+          user_id: string
+        }
+        Insert: {
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          kind: string
+          metadata?: Json | null
+          provider: string
+          units?: number
+          user_id: string
+        }
+        Update: {
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          kind?: string
+          metadata?: Json | null
+          provider?: string
+          units?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -753,6 +786,45 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      worker_commands: {
+        Row: {
+          created_at: string
+          finished_at: string | null
+          id: string
+          kind: string
+          last_error: string | null
+          payload: Json
+          result: Json | null
+          started_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          kind: string
+          last_error?: string | null
+          payload?: Json
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          kind?: string
+          last_error?: string | null
+          payload?: Json
+          result?: Json | null
+          started_at?: string | null
+          status?: string
           user_id?: string
         }
         Relationships: []

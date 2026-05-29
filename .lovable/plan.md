@@ -1,65 +1,94 @@
-# Scraping Strategy — Best-of-Breed Multi-Source
+# Full System Build — All Phases to Production
 
-Got it — I'll treat the actors you gave me as **one input among several**, and pick the best source per portal based on freshness, cost, and reliability. No portal will rely on a single brittle path.
+Current state: backend (worker ~2,400 LOC, 15 source adapters, AI pipeline, LaTeX, anti-detection) is ~80% done. Frontend has CRUD scaffolds for every page. What's missing is **wiring it all together end-to-end**, hardening the rough edges, and giving you a verifiable path from "git pull on VPS" → "first auto-application sent."
 
-## Source Matrix (per portal)
-
-| Portal | Primary | Fallback | Why |
-|---|---|---|---|
-| **LinkedIn** | `bebity/linkedin-jobs-scraper` (Apify, ~$5/1k, faster + cheaper than curious_coder) | `curious_coder/linkedin-jobs-scraper` (yours) | bebity is the community gold-standard; curious_coder kept as warm fallback |
-| **Indeed** | `misceres/indeed-scraper` (Apify, cheapest, geo-aware) | `apify/indeed-scraper` (official) | misceres is the most reliable Indeed actor in 2025 |
-| **ZipRecruiter** | `crawlerbros/ziprecruiter-scraper-pro` (yours) | direct API via `zippia` mirror | your actor is solid here |
-| **Google Jobs** | `khadinakbar/google-jobs-scraper` (yours) | SerpAPI Google Jobs (paid fallback) | aggregates LI/Indeed/Glassdoor in one call — huge multiplier |
-| **Glassdoor** | `bebity/glassdoor-jobs-scraper` | scrape via Google Jobs | direct scraping blocked too often |
-| **Remote-first** | RemoteOK API (free), WeWorkRemotely RSS (free), Arbeitnow API (free), Remotive API (free) | — | zero cost, no proxy needed, high signal |
-| **YC / startups** | Workatastartup public JSON, Wellfound (Apify `epctex/wellfound-scraper`) | — | best for early-stage roles |
-| **Direct ATS** | Greenhouse + Lever public APIs (free, official) | — | when a company is known, hit their board directly — no scraping |
-
-**Net effect:** even if 2 sources break on a given day, the pipeline keeps producing jobs. Google Jobs alone covers ~60% of listings as a safety net.
-
-## Scraping Logic (per run)
-
-1. **Fan-out**: For each user search (role + location), dispatch to all enabled sources in parallel via Apify + free APIs.
-2. **Decodo proxy** (`gate.decodo.com:10001`) on every Apify actor + every direct HTTP call (RemoteOK, ATS APIs).
-3. **Normalize** to one `Job` schema (title, company, location, remote, salary, url, source, posted_at, jd_text).
-4. **Dedupe** across sources: hash of `(normalized_company + normalized_title + location_city)`. Keep the one with richest JD.
-5. **Filter engine** runs user rules (keywords, salary floor, exclude companies, seniority, visa, etc.).
-6. **Enrich**: company size (Apify `harvestapi/linkedin-company`), funding (Crunchbase free tier when key present), Glassdoor rating (cached 30d).
-7. **Persist** to `jobs` table → trigger downstream tailor + apply pipeline.
-
-## Apply Logic (per portal)
-
-Same fallback philosophy:
-- **Lever / Greenhouse** → use their public application APIs (no browser needed, 100% reliable, no CAPTCHA). Most ATS submissions go here.
-- **Workday** → Playwright + stealth + Decodo + persistent profile per company tenant.
-- **LinkedIn Easy Apply** → Playwright + stealth + warm session + Gmail OTP reader.
-- **Indeed Easy Apply** → Playwright + CapSolver for reCAPTCHA when triggered.
-- **External ATS forms** (Taleo, iCIMS, Workable) → queue as "1-click handoff" in v1, full auto in v2.
-
-## Anti-Detection Stack (applied everywhere)
-
-- `playwright-extra` + `stealth-plugin` (patches 20+ fingerprint vectors)
-- UA + `sec-ch-ua` + viewport + timezone + locale rotated per profile
-- Persistent browser context per `(user, portal)` → cookies, localStorage, IndexedDB survive across runs (mimics a real returning user)
-- Human cadence: Gaussian-distributed think time, mouse curves, scroll-before-click, occasional misclicks
-- Per-portal rate limits + exponential backoff + circuit breaker (>3 challenges/10min → pause that portal 1h)
-- CapSolver wired for reCAPTCHA v2/v3, hCaptcha, Cloudflare Turnstile, Datadome
-
-## What I'll Build This Turn
-
-1. **Sources layer** — implement all 11 sources above (`worker/app/sources/`), each behind a common `BaseSource` interface, with the matrix above as the default routing config (user can toggle per source in `/settings`).
-2. **Proxy + UA rotator** — centralized in `worker/app/apply/proxy.py` + `worker/app/apply/humanize.py`, used by both scraping and applying.
-3. **ATS adapters** — Greenhouse + Lever direct-API apply (the highest-ROI win — bypasses browser entirely).
-4. **Browser portal adapters** — LinkedIn, Indeed, Workday with full stealth stack.
-5. **Dedupe + filter engine** — already scaffolded, now wired end-to-end.
-6. **`/setup` page** — VPS one-click deploy (SSH from server function, writes `.env` from secrets, `docker compose up -d`, polls heartbeat).
-7. **Secrets** — store the 6 credentials you pasted via `secrets--add_secret`.
-
-## Deferred (next chunk after worker is Online)
-- Frontend polish: Dashboard KPIs, Jobs board, Applications timeline w/ screenshots, Logs live tail, drag-drop profile editor, visual filter builder.
-- Gmail OAuth `/auth/gmail` flow (only needed once LinkedIn starts asking for email OTP, typically week 2-3).
-- v2 external ATS auto-fill (Workable, Taleo, iCIMS).
+I'll do this in 5 ordered phases. Each phase ends in a thing you can **see working** before I move on.
 
 ---
 
-**Ready to switch to build and execute?** Hit Approve and I'll do all 7 items in one shot, then hand you the single SSH command to bootstrap the VPS.
+## Phase 1 — Backend hardening & contract lock (worker side)
+
+Goal: worker can be deployed, heartbeats, runs a full scrape→tailor→apply loop without crashing.
+
+1. **Heartbeat + control loop** — verify `worker/app/main.py` loops every 30s: heartbeat → poll due sources → poll queued applications → respect `automation_settings.run_24_7` + daily window + `parallelism` + `max_applies_per_day`.
+2. **AI pipeline glue** — confirm `ai/resume_pipeline.py` calls DeepSeek reasoner for JD analysis → OpenAI for LaTeX marker fills → `latex/compile.py` produces PDF → uploads to `resumes` bucket → writes `resumes` row. Add fallback to OpenAI if DeepSeek errors.
+3. **Apply runner** — confirm `apply/runner.py` picks queued app → loads tailored resume + cover letter → routes via portal registry → captures screenshots to `screenshots` bucket → updates `applications.status` to `applied`/`failed` with `last_error`.
+4. **Sane defaults & guardrails** — never apply > N/day per user, never apply to same `dedupe_hash` twice, respect `exclude_companies`, skip jobs older than `filter.posted_within_hours`.
+5. **CLI commands** — `python -m app.cli scrape <key>`, `apply <job_id>`, `tailor <job_id>` for manual ops + debugging.
+6. **Dockerfile + compose** — verify Playwright Chromium installs, `/data/profiles` volume mounts, restart policy = `unless-stopped`, healthcheck calls heartbeat.
+
+**Verify:** `ssh root@147.93.47.24 'cd /root/jobpilot/worker && docker compose logs --tail 50'` shows heartbeat ticks.
+
+---
+
+## Phase 2 — Server functions + deploy automation
+
+Goal: one click in the UI does what currently requires SSH.
+
+1. **`deployWorker` server fn** (`src/lib/worker.functions.ts`) — uses `node-ssh` to: rsync `worker/` to VPS, write `.env` from server-side secrets (`SUPABASE_SERVICE_ROLE_KEY` injected, `JOBPILOT_USER_ID` = caller's UUID), run `docker compose up -d --build`, stream logs back. Stores SSH key in `WORKER_SSH_PRIVATE_KEY` secret.
+2. **`triggerScrape(sourceId)` / `triggerApply(jobId)`** — bypass cadence, set a row in a new `worker_commands` table that the worker polls every 5s.
+3. **`tailorJobNow(jobId)`** — same path: queue a `tailor` command so the user can preview a resume before queuing apply.
+4. **`getWorkerStatus()`** — returns heartbeat freshness + last 10 runs + queue depths.
+
+**New migration:** `worker_commands(id, user_id, kind, payload jsonb, status, created_at, processed_at)` + RLS + GRANTs.
+
+**Verify:** click "Deploy worker" → progress drawer streams docker logs → green checkmark in <90s.
+
+---
+
+## Phase 3 — Frontend polish (the parts that actually need it)
+
+Goal: each page is usable for daily ops, not just a CRUD table.
+
+1. **Dashboard** — KPI tiles (jobs scraped 24h, matches today, applied today, success rate 7d), 24h funnel chart (scraped→matched→queued→applied→succeeded), live worker status pill, "today's queue" list.
+2. **Jobs** — virtualized table (already wired) + side drawer with full JD + "Tailor" + "Queue apply" buttons + score breakdown + dedup badge.
+3. **Applications** — timeline view per job: queued → tailored → applied → result, with screenshot lightbox carousel. Filter by status.
+4. **Logs** — Supabase Realtime tail (subscribe to `logs` insert), level filter, scope filter, auto-scroll toggle, pause button.
+5. **Sources** — toggle, edit config JSON in a typed form (not raw JSON), "Run now" button, last-run badge with error popover.
+6. **Filters** — visual builder (chips for keywords, sliders for salary/score, multi-select for seniority/locations) + live count preview ("would match 234 of last 1000 jobs").
+7. **Profile** — drag-drop section reorder (experiences, education, projects, skills), markdown bullet editor, autosave with toast.
+8. **Automation** — start/stop big switch, schedule grid, parallelism slider, "today's plan" preview.
+
+---
+
+## Phase 4 — Onboarding + Gmail OAuth
+
+Goal: a brand-new user can go from signup → first application without docs.
+
+1. **`/onboarding` wizard** (5 steps): basics → upload existing resume (PDF parse → prefill experiences via OpenAI) → preferences/filter → enable sources → review & deploy worker.
+2. **Gmail OAuth flow** — `/api/public/oauth/gmail/start` + `/callback`, stores refresh token encrypted in `secrets_meta` rows. Used by `apply/gmail_otp.py` to read LinkedIn / Indeed OTP codes.
+3. **First-run nudges** — empty-state CTAs everywhere ("No jobs yet — run a source", "No filter active — create one").
+
+---
+
+## Phase 5 — Reliability + observability
+
+1. **Cron via pg_cron** — every 5min: `POST /api/public/hooks/worker-watchdog` that checks `worker_heartbeat.last_seen`; if stale > 5min, email user + show banner.
+2. **Daily summary email** — pg_cron at 18:00 user-local: "Today we scraped 412 jobs, applied to 17, 14 succeeded."
+3. **Cost tracker** — track Apify credits + OpenAI tokens per run, surface on dashboard.
+4. **Backup** — nightly `pg_dump` of `resumes`/`applications`/`logs` to a `backups` bucket.
+5. **Security pass** — run security linter, fix any RLS gaps, rotate the pasted-in-chat secrets.
+
+---
+
+## Technical notes
+
+- **node-ssh package**: `bun add node-ssh` (Node-compat, works in Worker SSR via WebCrypto).
+- **Realtime logs**: enable `ALTER PUBLICATION supabase_realtime ADD TABLE logs;` in Phase 3 migration.
+- **Charts**: use `recharts` (already standard in shadcn stack) for funnel + KPI sparklines.
+- **Drag-drop**: `@dnd-kit/sortable` for profile section reordering.
+- **Resume parsing**: OpenAI `gpt-5-mini` with PDF→text via `pdf-parse` in a server fn.
+
+---
+
+## What you'll do between phases
+
+- **After P1:** SSH to VPS, run `bash bootstrap.sh`, watch heartbeat go green at `/setup`.
+- **After P2:** delete the worker, click "Deploy" in UI, watch it come back.
+- **After P3:** sign up fresh, click through every page, give visual feedback.
+- **After P4:** complete onboarding as a real user, send your first auto-application.
+- **After P5:** rotate secrets, publish.
+
+---
+
+**Approve to start Phase 1.** I'll mark each phase done with a verification step before moving to the next so we never have a "everything looks built but nothing works" moment.

@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
-import { ExternalLink, MapPin, Building2, Search } from "lucide-react";
+import { ExternalLink, MapPin, Building2, Search, Sparkles, Send } from "lucide-react";
+import { triggerApply, triggerTailor } from "@/lib/commands";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
   head: () => ({ meta: [{ title: "Jobs — JobPilot" }] }),
@@ -160,11 +161,17 @@ function JobsPage() {
                   <div className="flex items-center justify-between pt-2">
                     <Badge variant="outline" className="text-[10px] uppercase">{j.source_key}</Badge>
                     <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" title="Preview tailored resume" onClick={() => triggerTailor(j.id)}>
+                        <Sparkles className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" title="Apply now" onClick={() => triggerApply(j.id)}>
+                        <Send className="h-3 w-3" />
+                      </Button>
                       <Button asChild size="sm" variant="ghost">
                         <a href={j.url} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3" /></a>
                       </Button>
                       <Button size="sm" variant={isSel ? "default" : "outline"} onClick={() => toggle(j.id)}>
-                        {isSel ? "Selected" : "Select"}
+                        {isSel ? "✓" : "+"}
                       </Button>
                     </div>
                   </div>
