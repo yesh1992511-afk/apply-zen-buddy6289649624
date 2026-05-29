@@ -78,8 +78,10 @@ class LinkedIn(Portal):
                     await page.locator(SEL["phone"]).first.fill(settings().APPLY_DEFAULT_PHONE)
                     await pause(0.5, 1.2)
 
-                # Multi-step: click Next/Review until Submit appears
+                # Multi-step: click Next/Review until Submit appears (auto-fill OTP if asked)
+                from ..browser import fill_otp_if_present
                 for _ in range(8):
+                    await fill_otp_if_present(page, portal_url=job["url"], timeout=90)
                     if await page.locator(SEL["submit"]).count():
                         await page.locator(SEL["submit"]).first.click()
                         await pause(2, 4)
