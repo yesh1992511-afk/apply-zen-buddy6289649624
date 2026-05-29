@@ -9,7 +9,7 @@ import ssl
 import time
 from email.header import decode_header
 from email.message import EmailMessage
-from email.utils import parseaddr
+from email.utils import parseaddr  # noqa: F401  (kept for future from-filtering)
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 
