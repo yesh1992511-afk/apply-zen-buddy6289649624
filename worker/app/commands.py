@@ -45,8 +45,8 @@ async def _do_scrape(payload: dict[str, Any]) -> dict[str, Any]:
     key = payload.get("source_key")
     if not key:
         raise ValueError("source_key required")
-    out = await run_source_by_key(key, force=True)
-    return {"items": out}
+    await run_source_by_key(key, force=True)
+    return {"ok": True, "source_key": key}
 
 
 async def _do_apply(payload: dict[str, Any]) -> dict[str, Any]:
