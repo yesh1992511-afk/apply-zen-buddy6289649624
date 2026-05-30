@@ -289,7 +289,31 @@ function Dashboard() {
         <MetricTile className="col-span-3 md:col-span-2 lg:col-span-3" label="Queued" value={stats?.queued} hint="awaiting apply" icon={Clock} />
         <MetricTile className="col-span-3 md:col-span-2 lg:col-span-3" label="Failed" value={stats?.failedToday} hint="today" icon={AlertTriangle} accent={stats?.failedToday ? "danger" : "default"} />
 
-        {/* Funnel */}
+        {/* Month-to-date spend */}
+        <div className="col-span-full rounded-2xl border border-border/60 bg-card p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <h3 className="font-heading text-sm font-semibold">Month-to-date spend</h3>
+            </div>
+            <span className="font-heading text-2xl font-semibold tabular-nums">
+              ${(mtdSpend ?? []).reduce((sum, r) => sum + Number(r.total_cost ?? 0), 0).toFixed(2)}
+            </span>
+          </div>
+          {!mtdSpend || mtdSpend.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No usage recorded yet this month.</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {mtdSpend.map((r) => (
+                <div key={r.provider} className="flex items-center justify-between rounded-md bg-surface-2 px-3 py-2">
+                  <span className="text-xs capitalize text-muted-foreground">{r.provider}</span>
+                  <span className="font-mono text-xs tabular-nums">${Number(r.total_cost ?? 0).toFixed(3)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="col-span-full rounded-2xl border border-border/60 bg-card p-5 lg:col-span-7">
           <div className="mb-4 flex items-center justify-between">
             <div>
