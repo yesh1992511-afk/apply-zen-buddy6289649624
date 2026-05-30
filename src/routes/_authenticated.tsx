@@ -7,8 +7,11 @@ import { StatusDot } from "@/components/StatusDot";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ChevronRight, Command } from "lucide-react";
+import { ChevronRight, Command, Keyboard } from "lucide-react";
 import { CommandPalette } from "@/components/CommandPalette";
+import { ShortcutHelp } from "@/components/ShortcutHelp";
+import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
+import { useCallback } from "react";
 
 export const Route = createFileRoute("/_authenticated")({
   head: () => ({ meta: [{ name: "robots", content: "noindex,nofollow" }] }),
