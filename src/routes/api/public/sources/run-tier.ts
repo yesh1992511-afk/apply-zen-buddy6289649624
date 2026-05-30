@@ -33,7 +33,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
           return Response.json({ ok: true, message: 'no enabled users', tier, shard });
         }
 
-        const sourceSpecs =
+        const sourceSpecs: Array<{ provider: string; slug?: string }> =
           tier === 'hot'
             ? AGGREGATOR_PROVIDERS.map((provider) => ({ provider }))
             : SEED_SLUGS.filter((_, i) => i % 4 === shard).map((s) => ({ provider: s.provider, slug: s.slug }));
