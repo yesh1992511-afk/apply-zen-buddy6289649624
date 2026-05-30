@@ -181,8 +181,9 @@ function Dashboard() {
               </div>
               <div className="min-w-0">
                 <div className="font-heading text-5xl font-semibold tabular-nums tracking-tight">
-                  {used}
+                  <CountUp value={used} />
                 </div>
+
                 <p className="mt-1 text-sm text-muted-foreground">applications today</p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   {budget > 0 ? (
