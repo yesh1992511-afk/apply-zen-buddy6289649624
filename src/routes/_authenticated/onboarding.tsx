@@ -29,7 +29,8 @@ function OnboardingPage() {
   useEffect(() => {
     const load = async () => {
       const [{ data: p }, { data: ext }, { data: gmail }, { data: hb }, { data: filters }, { data: sources }, { data: apps }] = await Promise.all([
-        supabase.from("profile").select("full_name, location, work_authorization").maybeSingle(),
+        supabase.from("profile").select("full_name, location, work_authorization, onboarded_at").maybeSingle(),
+
         supabase.from("extension_tokens").select("last_seen_at").not("last_seen_at", "is", null).limit(1),
         supabase.from("gmail_credentials").select("verified_at").not("verified_at", "is", null).limit(1),
         supabase.from("worker_heartbeat").select("last_seen").maybeSingle(),
@@ -46,6 +47,8 @@ function OnboardingPage() {
         source: (sources ?? []).length > 0,
         firstApply: (apps ?? []).length > 0,
       });
+      setOnboardedAt((p?.onboarded_at as string | null) ?? null);
+
     };
     load();
     const t = setInterval(load, 5000);
