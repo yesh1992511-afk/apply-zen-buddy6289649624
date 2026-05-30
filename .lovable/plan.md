@@ -1,61 +1,66 @@
-# Finish the Awwwards-level polish pass
+# Final polish pass — close out the 4-hour scope
 
-Previous turns shipped: design tokens + motion, global shortcuts, command palette, extension wizard, 404, EmptyState. This plan closes everything else from the original 4-hour scope.
+Previous turns shipped: design tokens + motion, shortcuts + palette + help, extension wizard, 404, EmptyState, shared primitives (Sparkline/Section/CountUp/skeletons/ErrorBoundaryRoute), Dashboard + Jobs loading states, route-level error boundaries.
 
-## 1. Shared primitives (foundation)
-- `src/components/PageHeader.tsx` — title, eyebrow, description, action slot, animated underline.
-- `src/components/Section.tsx` — consistent vertical rhythm + optional divider-soft.
-- `src/components/StatCard.tsx` — animated counter (count-up), optional sparkline slot, delta chip.
-- `src/components/Sparkline.tsx` — tiny SVG sparkline (no new deps).
-- `src/components/skeletons/` — `TableSkeleton`, `CardSkeleton`, `ListSkeleton` with shimmer.
-- `src/components/ErrorBoundaryRoute.tsx` — reusable `errorComponent` with `router.invalidate()` + `reset()`.
+What's still missing from `.lovable/plan.md`. This plan closes all of it.
 
-## 2. Dashboard (`_authenticated/index.tsx`)
-- Replace stat blocks with `StatCard` + sparklines and animated counters.
-- Live worker status dot (pulse) with last-run timestamp.
-- Recent activity feed with float-in stagger.
-- Empty + skeleton states.
+## 1. Jobs — finish what was started
+- Sticky filter bar with frosted blur (`surface-frost` + `top-0 sticky z-10`).
+- Gradient score chip: red < 60 → amber 60–84 → emerald ≥ 85, with subtle ring.
+- Saved-filter quick chips row (reads existing filters, click = applies).
+- Row hover `lift` + already-staggered entry.
 
-## 3. Jobs (`_authenticated/jobs.tsx`)
-- Sticky filter bar with frosted blur.
-- Gradient score chip (red→amber→emerald) by match score.
-- Row hover lift + stagger entry.
-- Saved-filter quick chips.
-- Skeleton table + empty state.
+## 2. Applications
+- Status pipeline header strip: Applied → Screen → Interview → Offer → Rejected, each with live count + active highlight.
+- Per-row timeline popover (Popover) showing status changes from existing data.
+- Screenshot lightbox: click capture thumbnail → Dialog with zoomable image.
+- Skeleton + empty states.
 
-## 4. Applications (`_authenticated/applications.tsx`)
-- Status pipeline header (Applied → Screen → Interview → Offer) with counts.
-- Per-row timeline popover.
-- Screenshot lightbox (Dialog) for capture previews.
-- Skeleton + empty.
+## 3. Sources
+- Group by Server / Extension / ATS using `Section`.
+- Per-source mini `Sparkline` (last 7d ingest counts from `automation_runs`).
+- Health pill (healthy / degraded / paused) derived from `last_run_status`.
+- Relative last-sync time (`timeAgo`).
 
-## 5. Sources (`_authenticated/sources.tsx`)
-- Group by Server / Extension / ATS.
-- Per-source mini sparkline (last 7d jobs ingested).
-- Health pill (healthy / degraded / paused) + last-sync relative time.
+## 4. Setup
+- Vertical stepper with completion ring (SVG circle progress).
+- Per-step check animation on complete.
+- Auto-scroll/resume to last incomplete step on mount.
 
-## 6. Setup (`_authenticated/setup.tsx`)
-- Vertical stepper with completion ring.
-- Per-step success state with check animation.
-- Resume from last incomplete step.
+## 5. Profile
+- Tabs: Basics · Resume · Preferences · Connected accounts.
+- Reuses existing fields; just reorganizes into shadcn `Tabs`.
 
-## 7. Profile / Filters / Automation / Notifications / Logs
-- Profile: tabbed (Basics, Resume, Preferences, Connected accounts).
-- Filters: side-by-side editor (rule list ↔ live preview count).
-- Automation: primary action button morphs (Idle → Starting → Running) with state color.
-- Notifications: digest preview card + channel toggles.
-- Logs: virtualised list (simple windowing, no new dep), level pill colors, copy-row.
+## 6. Filters
+- Side-by-side editor: rule list on left, live preview count on right (queries `jobs` with current rules, debounced).
 
-## 8. Global polish
-- `ErrorBoundaryRoute` wired into every `_authenticated/*` route.
-- Toast styling refined (frosted, tabular-nums for counts).
-- Focus rings audited on every interactive element.
-- Reduced-motion honored throughout (already in tokens; verify per-component).
-- A11y: `aria-label` on every icon-only button; `<main>` landmark check.
+## 7. Automation
+- Primary action button state machine: Idle (outline) → Starting (spinner, amber) → Running (pulse dot, emerald) → Stopping.
+- Disable during transitions.
 
-## 9. QA
-- Walk every route in preview; verify skeletons, empty states, error boundaries.
-- Verify ⌘K, `g d/j/a/s/e`, `?` from each page.
-- No new dependencies. No backend / schema changes. Existing scraping + extension untouched.
+## 8. Notifications
+- Digest preview card (renders a sample of what the daily email looks like).
+- Channel toggles styled as switch rows with descriptions.
 
-Estimated: ~2.5 hr remaining of the original 4-hour scope.
+## 9. Logs
+- Simple virtualised list (windowing via `useRef` + scroll math, no new dep), level pill colors (info/warn/error/debug), copy-row button on hover.
+
+## 10. Global a11y + polish
+- `aria-label` audit on every icon-only button (sidebar, palette, lightbox close, etc.).
+- Single `<main>` landmark in `_authenticated.tsx`.
+- Focus-visible ring audit on interactive surfaces.
+- `prefers-reduced-motion` honored (verify shimmer + float-in respect it).
+- Toast `tabular-nums` for counts.
+
+## 11. QA pass
+- Walk every authenticated route in preview.
+- Verify skeletons → empty → error boundary paths.
+- Verify ⌘K, `g d/j/a/s/f/e/o/p/n/l`, `?` from each page.
+- No new deps, no schema changes, no backend touches, extension + worker untouched.
+
+## Technical notes
+- All new visual logic is presentational; no server functions or migrations.
+- Reuses existing primitives: `Section`, `Sparkline`, `CountUp`, `skeletons`, `ErrorBoundaryRoute`, `EmptyState`, `Kbd`, `PageHeader`.
+- Status colors via existing semantic tokens; no new CSS variables unless a gap is found during the audit.
+
+Estimated: ~2 hr to ship and QA.
