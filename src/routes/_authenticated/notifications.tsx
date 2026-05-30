@@ -18,7 +18,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/PageHeader";
-import { toast } from "sonner";
+import { SavedIndicator, type SaveState } from "@/components/SavedIndicator";
+import { FieldError } from "@/components/FieldError";
+import { toastError, toastSaved } from "@/lib/toast";
+import { notificationsSchema, gmailSchema } from "@/lib/validation/settings";
 import { CheckCircle2, XCircle, Mail, ExternalLink } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/notifications")({
@@ -27,6 +30,26 @@ export const Route = createFileRoute("/_authenticated/notifications")({
   errorComponent: ErrorBoundaryRoute,
   notFoundComponent: () => <NotFoundRoute />,
 });
+
+type NotificationSettingsRow = {
+  recipient_email: string | null;
+  notify_manual_review: boolean;
+  notify_apply_failed: boolean;
+  notify_worker_offline: boolean;
+  notify_high_score: boolean;
+  high_score_threshold: number;
+  daily_summary_enabled: boolean;
+  daily_summary_time: string;
+};
+type GmailCreds = { email: string; verified_at: string | null; last_error: string | null } | null;
+type NotificationLogEntry = {
+  id: string;
+  kind: string;
+  subject: string;
+  status: string;
+  last_error: string | null;
+  created_at: string;
+};
 
 function NotificationsPage() {
   const qc = useQueryClient();
@@ -40,53 +63,97 @@ function NotificationsPage() {
 
   const [email, setEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
-  const [settings, setSettings] = useState<any>(null);
+  const [settings, setSettings] = useState<NotificationSettingsRow | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [credsErrors, setCredsErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (data?.settings) setSettings(data.settings);
-    if (data?.creds?.email) setEmail(data.creds.email);
+    if (data?.settings) setSettings(data.settings as NotificationSettingsRow);
+    if (data?.creds?.email) setEmail((data.creds as { email: string }).email);
   }, [data]);
 
   const saveCredsMutation = useMutation({
     mutationFn: () => saveCreds({ data: { email, app_password: appPassword } }),
     onSuccess: () => {
-      toast.success("Gmail credentials saved. Click 'Send test' to verify.");
+      toastSaved("Gmail credentials saved. Click 'Send test' to verify.");
       setAppPassword("");
+      setCredsErrors({});
       qc.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: (e: any) => toast.error(e?.message || "Failed to save"),
+    onError: (e: Error) => toastError(e),
   });
 
   const deleteCredsMutation = useMutation({
     mutationFn: () => deleteCreds({}),
     onSuccess: () => {
-      toast.success("Credentials removed");
+      toastSaved("Credentials removed");
       setEmail("");
       qc.invalidateQueries({ queryKey: ["notifications"] });
     },
+    onError: (e: Error) => toastError(e),
   });
 
   const testMutation = useMutation({
     mutationFn: () => sendTest({}),
     onSuccess: () => {
-      toast.success("Test queued — check your inbox in a few seconds");
+      toastSaved("Test queued — check your inbox in a few seconds");
       setTimeout(() => qc.invalidateQueries({ queryKey: ["notifications"] }), 8000);
     },
+    onError: (e: Error) => toastError(e),
   });
 
   const saveSettingsMutation = useMutation({
-    mutationFn: (patch: any) => saveSettings({ data: patch }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
-    onError: (e: any) => toast.error(e?.message || "Save failed"),
+    mutationFn: (patch: Partial<NotificationSettingsRow>) => saveSettings({ data: patch }),
+    onMutate: () => setSaveState("saving"),
+    onSuccess: () => {
+      setSaveState("saved");
+      setTimeout(() => setSaveState((s) => (s === "saved" ? "idle" : s)), 1800);
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (e: Error) => {
+      setSaveState("error");
+      toastError(e);
+    },
   });
 
-  const update = (patch: any) => {
-    setSettings({ ...settings, ...patch });
+  const validateAndUpdate = (patch: Partial<NotificationSettingsRow>) => {
+    const next = { ...(settings ?? {}), ...patch } as NotificationSettingsRow;
+    setSettings(next);
+    const result = notificationsSchema.safeParse(next);
+    if (!result.success) {
+      const map: Record<string, string> = {};
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0] ?? "_");
+        if (!map[key]) map[key] = issue.message;
+      }
+      setErrors(map);
+      setSaveState("dirty");
+      return;
+    }
+    setErrors({});
+    setSaveState("dirty");
     saveSettingsMutation.mutate(patch);
   };
 
-  const creds = data?.creds;
+  const handleSaveCreds = () => {
+    const result = gmailSchema.safeParse({ email, app_password: appPassword });
+    if (!result.success) {
+      const map: Record<string, string> = {};
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0] ?? "_");
+        if (!map[key]) map[key] = issue.message;
+      }
+      setCredsErrors(map);
+      return;
+    }
+    setCredsErrors({});
+    saveCredsMutation.mutate();
+  };
+
+  const creds = data?.creds as GmailCreds;
   const isVerified = !!creds?.verified_at && !creds?.last_error;
+
 
   return (
     <div className="space-y-6 max-w-4xl">
