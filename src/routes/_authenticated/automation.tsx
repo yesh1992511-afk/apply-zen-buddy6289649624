@@ -44,6 +44,7 @@ function AutomationPage() {
   const [s, setS] = useState<Settings | null>(null);
   const [filters, setFilters] = useState<Array<{ id: string; name: string }>>([]);
   const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -59,11 +60,34 @@ function AutomationPage() {
       exclude_companies: s.exclude_companies ?? [],
     }).eq("user_id", user.id);
     setSaving(false);
-    if (error) toast.error(error.message); else toast.success("Saved");
+    if (error) toast.error(error.message);
+    else {
+      setJustSaved(true);
+      toast.success("Saved");
+      setTimeout(() => setJustSaved(false), 1800);
+    }
   };
 
   if (!s) return <div className="text-muted-foreground">Loading…</div>;
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS({ ...s, [k]: v });
+
+  const SaveBtn = (
+    <Button
+      onClick={save}
+      disabled={saving}
+      className={cn(
+        "gap-1.5 transition-all ease-apple-spring",
+        justSaved
+          ? "bg-success text-success-foreground shadow-glow"
+          : saving
+            ? "bg-warning/80 text-warning-foreground"
+            : "bg-gradient-emerald shadow-glow disabled:shadow-none",
+      )}
+    >
+      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : justSaved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+      {saving ? "Saving…" : justSaved ? "Saved" : "Save changes"}
+    </Button>
+  );
 
   return (
     <div className="space-y-6 max-w-4xl">
