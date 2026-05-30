@@ -307,6 +307,115 @@ function SourcesPage() {
         }
       />
 
+      {/* Job Target — drives keywords across every source + default filter */}
+      <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/10 via-card to-card p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
+            <Target className="h-5 w-5 text-accent-foreground" />
+          </div>
+          <div>
+            <h3 className="font-heading font-semibold">Job target</h3>
+            <p className="text-xs text-muted-foreground">
+              One place to set what jobs you want — applies to every source's search keywords and your default filter.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Field</Label>
+            <select
+              value={target.field}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "custom") { setTarget((t) => ({ ...t, field: "custom" })); return; }
+                const p = findPreset(v);
+                if (p) setTarget({
+                  field: p.field, titles: p.titles, locations: p.locations,
+                  country: p.country, postedWithinHours: p.postedWithinHours,
+                  excludeKeywords: p.excludeKeywords,
+                });
+              }}
+              className="mt-1.5 w-full rounded-md border border-border/60 bg-surface-2 px-3 py-2 text-sm"
+            >
+              {JOB_TARGET_PRESETS.map((p) => (
+                <option key={p.field} value={p.field}>{p.label}</option>
+              ))}
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div>
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Location</Label>
+            <Input
+              value={target.locations[0] ?? ""}
+              onChange={(e) => setTarget((t) => ({ ...t, locations: [e.target.value], field: "custom" }))}
+              placeholder="United States"
+              className="mt-1.5 bg-surface-2 border-border/60"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Titles / keywords (comma-separated)
+            </Label>
+            <Textarea
+              rows={3}
+              value={target.titles.join(", ")}
+              onChange={(e) => setTarget((t) => ({
+                ...t,
+                field: "custom",
+                titles: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+              }))}
+              placeholder="cybersecurity, SOC analyst, penetration tester, ..."
+              className="mt-1.5 bg-surface-2 border-border/60 text-sm"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Exclude keywords (comma-separated)
+            </Label>
+            <Input
+              value={target.excludeKeywords.join(", ")}
+              onChange={(e) => setTarget((t) => ({
+                ...t,
+                field: "custom",
+                excludeKeywords: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+              }))}
+              placeholder="recruiter, intern, sales, physical security, ..."
+              className="mt-1.5 bg-surface-2 border-border/60"
+            />
+          </div>
+          <div>
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Country code</Label>
+            <Input
+              value={target.country}
+              onChange={(e) => setTarget((t) => ({ ...t, country: e.target.value, field: "custom" }))}
+              placeholder="US"
+              className="mt-1.5 bg-surface-2 border-border/60"
+            />
+          </div>
+          <div>
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Posted within (hours)</Label>
+            <Input
+              type="number"
+              value={target.postedWithinHours}
+              onChange={(e) => setTarget((t) => ({ ...t, postedWithinHours: Number(e.target.value) || 168, field: "custom" }))}
+              className="mt-1.5 bg-surface-2 border-border/60"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground">
+            Applies to all {sources.length} sources + your default filter. Existing jobs already in your feed are not re-scored.
+          </p>
+          <Button onClick={applyTarget} disabled={applyingTarget} className="bg-gradient-emerald gap-1.5">
+            {applyingTarget ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Target className="h-3.5 w-3.5" />}
+            Apply to all sources + filter
+          </Button>
+        </div>
+      </div>
+
+
       {/* Prominent ingestion controls */}
       <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
