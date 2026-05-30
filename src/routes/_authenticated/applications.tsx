@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -37,7 +39,7 @@ function ApplicationsPage() {
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     supabase
       .from("applications")
       .select("id, status, job_id, attempts, last_error, queued_at, applied_at, job:jobs(title, company, url)")
@@ -48,6 +50,9 @@ function ApplicationsPage() {
         setLoading(false);
       });
   }, []);
+  useEffect(() => { load(); }, [load]);
+  useRealtimeInvalidate({ table: "applications", onChange: load });
+
 
   if (loading) {
     return (

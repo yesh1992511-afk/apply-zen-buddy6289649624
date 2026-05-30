@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { triggerScrape, triggerTestSource } from "@/lib/commands";
 import { waitForCommand } from "@/lib/commands";
 import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
@@ -77,6 +79,8 @@ function SourcesPage() {
     supabase.from("automation_settings").select("enabled").maybeSingle().then(({ data }) => setIngestionEnabled(!!data?.enabled));
   };
   useEffect(() => { load(); }, []);
+  useRealtimeInvalidate({ table: "sources", onChange: load });
+
 
   // First-visit autopilot: if the user has zero sources, seed + enable everything
   // and create a permissive default filter so jobs aren't all dropped.
