@@ -120,7 +120,6 @@ function JobsPage() {
     try {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
-      // Check for existing application
       const { data: existing } = await supabase
         .from("applications")
         .select("id")
@@ -136,11 +135,13 @@ function JobsPage() {
           .single();
         if (error) { toast.error(error.message); return; }
         appId = data.id;
-        toast.success("Application queued");
+        toast.success("Application queued — worker starting");
       } else {
         toast.message("Already queued — opening application");
       }
       setDialogJob(null);
+      // Kick the worker immediately so user sees activity right away (don't wait for the 1-min cron)
+      fetch(`/api/public/hooks/apply-worker?application_id=${appId}`, { method: "POST" }).catch(() => {});
       navigate({ to: "/applications/$id", params: { id: appId } });
     } finally {
       setApplyingId(null);

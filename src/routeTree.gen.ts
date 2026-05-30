@@ -27,6 +27,7 @@ import { Route as AuthenticatedApplicationsIdRouteImport } from './routes/_authe
 import { Route as ApiPublicSourcesRunTierRouteImport } from './routes/api/public/sources/run-tier'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
+import { Route as ApiPublicHooksApplyWorkerRouteImport } from './routes/api/public/hooks/apply-worker'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -122,6 +123,12 @@ const ApiPublicHooksCheckHeartbeatRoute =
     path: '/api/public/hooks/check-heartbeat',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksApplyWorkerRoute =
+  ApiPublicHooksApplyWorkerRouteImport.update({
+    id: '/api/public/hooks/apply-worker',
+    path: '/api/public/hooks/apply-worker',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
+  '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
@@ -157,6 +165,7 @@ export interface FileRoutesByTo {
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
+  '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
@@ -178,6 +187,7 @@ export interface FileRoutesById {
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/sources': typeof AuthenticatedSourcesRoute
   '/_authenticated/applications/$id': typeof AuthenticatedApplicationsIdRoute
+  '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/sources'
     | '/applications/$id'
+    | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/run-tier'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/sources'
     | '/applications/$id'
+    | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/run-tier'
@@ -238,6 +250,7 @@ export interface FileRouteTypes {
     | '/_authenticated/setup'
     | '/_authenticated/sources'
     | '/_authenticated/applications/$id'
+    | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/run-tier'
@@ -248,6 +261,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicHooksApplyWorkerRoute: typeof ApiPublicHooksApplyWorkerRoute
   ApiPublicHooksCheckHeartbeatRoute: typeof ApiPublicHooksCheckHeartbeatRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
   ApiPublicSourcesRunTierRoute: typeof ApiPublicSourcesRunTierRoute
@@ -381,6 +395,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksCheckHeartbeatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/apply-worker': {
+      id: '/api/public/hooks/apply-worker'
+      path: '/api/public/hooks/apply-worker'
+      fullPath: '/api/public/hooks/apply-worker'
+      preLoaderRoute: typeof ApiPublicHooksApplyWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -433,6 +454,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicHooksApplyWorkerRoute: ApiPublicHooksApplyWorkerRoute,
   ApiPublicHooksCheckHeartbeatRoute: ApiPublicHooksCheckHeartbeatRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
   ApiPublicSourcesRunTierRoute: ApiPublicSourcesRunTierRoute,
