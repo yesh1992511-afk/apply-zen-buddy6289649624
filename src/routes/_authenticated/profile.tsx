@@ -734,43 +734,66 @@ function ResumeUploader() {
       markers, is_default: templates.length === 0,
     }).select("id").single();
     if (error) { toast.error(error.message); return; }
-    toast.success(`Template saved (${markers.length} markers). Compiling…`);
     setTex("");
     load();
-    const { triggerCompileResume, waitForCommand, getResumePdfUrl } = await import("@/lib/commands");
-    const cid = await triggerCompileResume(data.id);
-    if (cid) {
+    setSelectedId(data.id);
+    const { triggerCompileResume, waitForCommand, getResumePdfUrl, isWorkerOnline } = await import("@/lib/commands");
+    const online = await isWorkerOnline();
+    if (!online) {
+      toast.warning(`Template saved (${markers.length} markers). Worker is offline — compile will run once it's back.`);
+      await triggerCompileResume(data.id);
+      return;
+    }
+    toast.success(`Template saved (${markers.length} markers). Compiling…`);
+    setCompiling(true);
+    try {
+      const cid = await triggerCompileResume(data.id);
+      if (!cid) return;
       const res = await waitForCommand(cid, 60_000);
       if (res?.status === "done") {
         toast.success("PDF ready");
         const r = res.result as { pdf_path?: string } | null;
         if (r?.pdf_path) setPdfUrl(await getResumePdfUrl(r.pdf_path));
-        setSelectedId(data.id);
         load();
+      } else if (res?.status === "pending" || res?.status === "running") {
+        toast.warning("Worker is busy — compile still queued. PDF will appear once it finishes.");
       } else {
-        toast.error(`Compile failed: ${res?.last_error ?? "timeout"}`);
+        toast.error(`Compile failed: ${res?.last_error ?? "unknown error"}`);
       }
+    } finally {
+      setCompiling(false);
     }
   };
 
   const saveAndCompile = async () => {
     if (!selectedId) return;
-    setCompiling(true);
     setPdfUrl(null);
     const markers = detectMarkers(editing);
     await supabase.from("resumes").update({ tex_content: editing, markers }).eq("id", selectedId);
-    const { triggerCompileResume, waitForCommand, getResumePdfUrl } = await import("@/lib/commands");
-    const cid = await triggerCompileResume(selectedId);
-    if (!cid) { setCompiling(false); return; }
-    const res = await waitForCommand(cid, 60_000);
-    setCompiling(false);
-    if (res?.status === "done") {
-      toast.success("PDF updated");
-      const r = res.result as { pdf_path?: string } | null;
-      if (r?.pdf_path) setPdfUrl(await getResumePdfUrl(r.pdf_path));
-      load();
-    } else {
-      toast.error(`Compile failed: ${res?.last_error ?? "timeout"}`);
+    const { triggerCompileResume, waitForCommand, getResumePdfUrl, isWorkerOnline } = await import("@/lib/commands");
+    const online = await isWorkerOnline();
+    if (!online) {
+      await triggerCompileResume(selectedId);
+      toast.warning("Worker offline — compile queued. It will run once the worker is back.");
+      return;
+    }
+    setCompiling(true);
+    try {
+      const cid = await triggerCompileResume(selectedId);
+      if (!cid) return;
+      const res = await waitForCommand(cid, 60_000);
+      if (res?.status === "done") {
+        toast.success("PDF updated");
+        const r = res.result as { pdf_path?: string } | null;
+        if (r?.pdf_path) setPdfUrl(await getResumePdfUrl(r.pdf_path));
+        load();
+      } else if (res?.status === "pending" || res?.status === "running") {
+        toast.warning("Worker is busy — compile still queued. PDF will appear once it finishes.");
+      } else {
+        toast.error(`Compile failed: ${res?.last_error ?? "unknown error"}`);
+      }
+    } finally {
+      setCompiling(false);
     }
   };
 

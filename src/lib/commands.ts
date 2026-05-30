@@ -61,17 +61,26 @@ export async function getResumePdfUrl(storage_path: string): Promise<string | nu
   return data.signedUrl;
 }
 
-/** Polls a command row until done/failed, returns the final row. */
+/** Polls a command row until done/failed. On timeout, returns the last seen row (with status like "pending"/"running") so callers can distinguish worker-offline from compile-failed. */
 export async function waitForCommand(id: string, timeoutMs = 120_000) {
   const start = Date.now();
+  let last: { status: string | null; result: unknown; last_error: string | null } | null = null;
   while (Date.now() - start < timeoutMs) {
     const { data } = await supabase
       .from("worker_commands")
       .select("status, result, last_error")
       .eq("id", id)
       .maybeSingle();
+    if (data) last = data;
     if (data?.status === "done" || data?.status === "failed") return data;
     await new Promise((r) => setTimeout(r, 1500));
   }
-  return null;
+  return last;
+}
+
+/** True if worker heartbeat is within the last 60s. */
+export async function isWorkerOnline(): Promise<boolean> {
+  const { data } = await supabase.from("worker_heartbeat").select("last_seen").maybeSingle();
+  if (!data?.last_seen) return false;
+  return Date.now() - new Date(data.last_seen).getTime() < 60_000;
 }
