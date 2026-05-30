@@ -613,6 +613,27 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
                   </div>
                 );
               }
+              if (f.dateField) {
+                return (
+                  <DatePickerField
+                    key={f.key}
+                    label={f.label}
+                    value={(val as string | null) ?? ""}
+                    onChange={(v) => update(it.id, { [f.key]: v })}
+                  />
+                );
+              }
+              if (f.options) {
+                return (
+                  <SelectField
+                    key={f.key}
+                    label={f.label}
+                    value={(val as string | null) ?? ""}
+                    onChange={(v) => update(it.id, { [f.key]: v })}
+                    options={f.options}
+                  />
+                );
+              }
               return (
                 <div key={f.key}>
                   <Label>{f.label}</Label>
@@ -620,6 +641,7 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
                 </div>
               );
             })}
+
             <div className="md:col-span-2 flex justify-end">
               <Button size="sm" variant="ghost" onClick={() => remove(it.id)}><Trash2 className="h-4 w-4" /></Button>
             </div>
