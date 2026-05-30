@@ -57,7 +57,7 @@ function ProfilePage() {
     // strip read-only / managed columns
     const { user_id: _u, created_at: _c, updated_at: _up, ...patch } = p;
     void _u; void _c; void _up;
-    const { error } = await supabase.from("profile").update(patch).eq("user_id", user.id);
+    const { error } = await (supabase as unknown as { from: (t: string) => { update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: { message: string } | null }> } } }).from("profile").update(patch).eq("user_id", user.id);
     setSaving(false);
     if (error) toast.error(error.message); else toast.success("Profile saved");
   };
