@@ -1,122 +1,120 @@
-# JobPilot — Remaining phases to fully wire the idea
+# Finish JobPilot — remaining phases + Profile-for-Autofill expansion
 
-Phase A (Gmail/OTP/notifications) is done. Below is everything left from the original idea, organized so we can knock it out and then run one end-to-end test.
+Phases C, E, F were shipped in the last turn (resume LaTeX→PDF, sources test, cron). What's still open from the original idea:
 
-The **resume LaTeX→PDF flow** is the biggest piece — designed exactly as you asked: LaTeX lives in the DB and is edited/tailored in the background, the UI only ever shows a PDF. No AI is used for conversion (free TeX engine on the worker).
+1. **Phase D** — Dashboard kill-switch + live counters (partially shipped, needs the missing pieces verified end-to-end).
+2. **Profile expansion** — add every field the major portals ask, with structured storage so the worker autofill can match them 1:1.
+3. **Worker autofill mapping** — teach the apply bot to read the new fields and fill them on Indeed / LinkedIn Easy Apply / Greenhouse / Lever / Workday / generic forms.
+4. **Phase G** — deploy + smoke test.
 
 ---
 
-## Phase C — Resume: LaTeX in background, PDF on frontend
+## 1. Profile expansion (biggest piece)
 
-### How it works (no AI in the conversion path)
-```text
-profile/job  ──► worker tailors .tex (existing ai/resume_pipeline.py)
-                         │
-                         ▼
-              tectonic (free, bundled in worker Docker image)
-                         │   .tex → .pdf
-                         ▼
-         Supabase Storage  resumes/{user_id}/{resume_id}.pdf
-                         │
-                         ▼
-       resumes.pdf_storage_path  (already in schema)
-                         │
-                         ▼
-         Frontend: signed URL → <iframe>/<object> PDF preview
+### 1a. New `profile` columns (one migration)
+Grouped by what portals actually ask. All nullable so existing rows keep working.
+
+**Identity & contact**
+- `preferred_name`, `pronouns`, `date_of_birth` (date), `nationality`, `country`, `state_region`, `city`, `postal_code`, `street_address`, `address_line_2`
+
+**Work authorization (every portal asks these)**
+- `work_auth_country` (text, e.g. "US"), `visa_status` (e.g. "H1B", "Citizen", "PR", "Student F1"), `visa_expiry` (date), `needs_visa_now` (bool), `needs_visa_future` (bool), `authorized_countries` (text[])
+
+**Demographics / EEOC (US portals — optional, user-controlled)**
+- `gender`, `ethnicity`, `veteran_status`, `disability_status`, `lgbtq_status` — each text + a master toggle `share_demographics` (bool, default false). We only auto-fill these when the toggle is on.
+
+**Compensation & availability**
+- `desired_salary` (int), `salary_period` ('yearly'|'hourly'), `current_salary` (int), `notice_period_weeks` (int), `earliest_start_date` (date), `available_hours_per_week` (int), `open_to_contract` (bool), `open_to_fulltime` (bool), `open_to_parttime` (bool), `open_to_internship` (bool)
+
+**Work preferences**
+- `desired_titles` (text[]), `desired_industries` (text[]), `excluded_industries` (text[]), `travel_willingness` (text, e.g. "0-25%"), `shift_preference` (text), `security_clearance` (text), `drivers_license` (bool), `has_own_transport` (bool)
+
+**Languages**
+- New table `languages(user_id, name, proficiency)` with the same RLS as the other list tables.
+
+**Certifications**
+- New table `certifications(user_id, name, issuer, issued_date, expiry_date, credential_id, url)`.
+
+**References**
+- New table `references_list(user_id, name, relationship, company, email, phone)` (named `references_list` to avoid the SQL reserved word).
+
+**Identity documents (free-text only — never store PII numbers)**
+- `has_passport` (bool), `passport_country` (text), `linkedin_username` (text — separate from URL for portals that just want the handle), `twitter_url`, `stackoverflow_url`, `personal_website`, `dribbble_url`, `behance_url`, `medium_url`
+
+**Voluntary screening answers** (portals repeat these constantly)
+- `screening_answers` (jsonb) — free-form key→answer dictionary. Lets the user pre-answer "Are you legally authorized to work in X?", "Will you relocate?", "Why are you leaving your current role?" once. The autofill bot does fuzzy-match question→key.
+
+All new columns/tables get RLS scoped to `auth.uid()` and `GRANT`s to `authenticated`+`service_role` (no `anon`).
+
+### 1b. Profile UI redesign
+Restructure `/profile` tabs into:
+- **Basic** (name, contact, address)
+- **Work authorization** (visa block + EEOC subsection behind the `share_demographics` toggle)
+- **Preferences** (comp, availability, titles, industries, travel, clearance)
+- **Experiences / Projects / Skills / Education** (existing)
+- **Languages / Certifications / References** (new list sections, reusing the existing `ListSection` component)
+- **Links** (all social/portfolio URLs in one grid)
+- **Screening answers** (key/value editor — add common presets with one click: "Are you 18+", "Can you work in {country}", "Will you relocate", "Notice period", "Reason for leaving", "Salary expectation")
+- **Resume LaTeX** (existing, untouched)
+
+A new server fn `getProfileCompleteness()` returns a 0-100 score + a list of missing critical fields; the Profile page shows it as a progress bar so the user knows what's still empty.
+
+### 1c. Cover-letter context
+`ai/cover_letter.py` already reads the profile row. After the migration, also feed it `desired_titles`, `summary`, top 3 experiences, and `screening_answers` so generated letters reflect the richer profile.
+
+---
+
+## 2. Worker autofill mapping
+
+New file `worker/app/apply/profile_map.py` exporting one function:
+
+```python
+def answer_for(question_text: str, profile: dict, lists: dict) -> str | bool | None
 ```
 
-Tectonic is already used in `worker/app/latex/compile.py`. It's free, deterministic, no API cost. Server functions never compile — they only enqueue a `worker_commands` row of kind `compile_resume` (or `tailor_resume`) and poll `pdf_storage_path` for the result.
+It normalizes the portal's question text (lowercase, strip punctuation) and runs it through an ordered list of regex→field mappings, e.g.:
+- `r"first name"` → `profile['full_name'].split()[0]`
+- `r"authori[sz]ed to work"` → `profile['work_auth_country']` match
+- `r"require.*sponsor"` → `profile['requires_sponsorship']`
+- `r"notice period"` → `profile['notice_period_weeks']`
+- `r"desired salary|salary expectation"` → `profile['desired_salary']`
+- …~60 mappings total covering Indeed/LinkedIn/Greenhouse/Lever/Workday common questions.
 
-### C1. Server functions + worker command
-- New server fns in `src/lib/resume.functions.ts`:
-  - `listResumes()` — list user's resumes (template + tailored).
-  - `getResumePdfUrl(resumeId)` — signed URL from `resumes` bucket (5 min TTL).
-  - `saveResumeTex(resumeId, tex)` — update `tex_content`, enqueue `compile_resume`.
-  - `createTailoredPreview(jobId)` — enqueue `tailor_resume` for highest-score job or specified job.
-  - `getCommandStatus(commandId)` — poll for `done`/`error`.
-- New worker handlers in `worker/app/commands.py`:
-  - `compile_resume`: load `resumes.tex_content`, run tectonic, upload PDF to `resumes` bucket, update `pdf_storage_path`.
-  - `tailor_resume`: run existing `ai/resume_pipeline.py` to produce tailored `.tex`, insert new row (`kind=tailored`), then compile.
-- Also wire `notify_offline` + `notify_daily_summary` handlers (still missing from Phase A).
+Fallback: fuzzy lookup in `profile['screening_answers']`.
 
-### C2. `/profile` → Resume tab redesign
-Replace the current upload-only UI with three sub-tabs:
-1. **Templates** — list of `kind=template` resumes; "Edit LaTeX" opens a Monaco editor (LaTeX mode) in a side panel; "Save & compile" triggers C1; PDF preview iframe on the right auto-refreshes when status flips to `done`.
-2. **Upload .tex** — drag-drop a `.tex` file, stored as a new template, auto-compiled.
-3. **Tailored preview** — "Generate preview for top job" button → calls `createTailoredPreview` → shows tailored PDF + AI cover letter draft side-by-side. Lets you sanity-check tone before the bot applies.
-
-User never sees raw LaTeX unless they explicitly open the editor. Default view is always the PDF.
+`worker/app/apply/easy_apply.py`, `greenhouse.py`, `lever.py`, `workday.py`, and `generic_form.py` all switch their per-field branches to call `answer_for(...)` so any future portal that asks a new variant just needs a regex added in one file.
 
 ---
 
-## Phase D — Dashboard upgrade & kill-switch (B3 + B4)
+## 3. Phase D — Dashboard verification
 
-Single `/dashboard` page with:
-- **Big red/green "Automation: ON / PAUSED"** toggle (writes `automation_settings.enabled`).
-- 24h counters: scraped, matched, queued, applied today vs `max_applies_per_day` (progress bar), failed.
-- Worker heartbeat freshness badge (green <2 min, amber 2–10, red >10).
-- Per-portal rate-limit chips ("Indeed 4/10 last hour").
-- Live event feed: last 10 rows from `logs` (auto-refresh every 15 s).
-- Top 5 unapplied jobs by score with "Apply now" button.
+Confirm the dashboard already has:
+- ON/PAUSED toggle (writes `automation_settings.enabled`) ✓ shipped
+- 24h counters (scraped/matched/queued/applied/failed)
+- Heartbeat freshness badge
+- Top-N unapplied jobs with "Apply now"
+- Live log feed (auto-refresh)
 
----
-
-## Phase E — Sources page polish (B1)
-
-`/sources`: per-source "Test fetch" button enqueues a `test_source` worker command that runs one small fetch and writes count + errors back to `worker_commands.result`. UI shows the result inline. No more waiting on cron to know if Apify token is right.
+Anything missing from this list gets added in the same pass.
 
 ---
 
-## Phase F — Cron registration (Phase A3 leftover)
+## 4. Phase G — Deploy + smoke test
 
-Register via `supabase--insert` (data, not migration):
-- `*/5 * * * *` → `/api/public/hooks/check-heartbeat`
-- `*/15 * * * *` → `/api/public/hooks/daily-summary`
-- `*/10 * * * *` → new `/api/public/hooks/dispatch-sources` (triggers worker to pick up due `sources` rows; harmless if already polling).
-
----
-
-## Phase G — Deploy + end-to-end smoke test
-
-### G1. Worker bundle
-```bash
-scp -r worker root@147.93.47.24:/root/jobpilot/
-ssh root@147.93.47.24 'cd /root/jobpilot/worker && docker compose build && docker compose up -d'
-```
-Bump `worker/VERSION` so the heartbeat shows the new build.
-
-### G2. Manual checklist (you run after deploy)
-1. `/notifications` → Save Gmail App Password → "Send test" → email arrives.
-2. `/profile` Resume tab → upload `.tex` template → PDF preview appears within ~30 s.
-3. "Generate preview for top job" → tailored PDF + cover letter render.
-4. `/sources` → "Test fetch" on one Apify source → count > 0.
-5. Plant fake high-score job (`update jobs set score=99 where id=…`) → notification email arrives.
-6. Stop worker for 15 min → offline alert arrives.
-7. Wait for `daily_summary_time` → daily summary email arrives.
-8. Toggle "Automation: PAUSED" on dashboard → confirm no new applies queue.
-
----
-
-## Order of execution
-
-1. **C** (resume LaTeX↔PDF) — biggest piece, isolated.
-2. **D** (dashboard + kill-switch) — builds on existing tables.
-3. **E** (sources test button) — small.
-4. **F** (cron registration) — one SQL call.
-5. **G** (deploy + smoke test) — final.
+Same as before:
+1. `scp -r worker root@147.93.47.24:/root/jobpilot/`
+2. Rebuild + restart docker compose
+3. Run the 8-step manual checklist (now extended to include filling out a Greenhouse test form to verify the new autofill mapping).
 
 ---
 
 ## Technical notes
-
-- All new compile/tailor work runs on the VPS worker (tectonic is Node/Cloudflare-Worker incompatible — confirmed in our runtime rules).
-- Frontend never touches LaTeX engines; only renders PDFs from signed Supabase Storage URLs.
-- No new tables needed — `resumes.tex_content`, `resumes.pdf_storage_path`, and `worker_commands` already exist.
-- No new secrets needed.
-- Cover-letter draft in C2 uses Lovable AI Gateway (free for us) via the existing `ai/cover_letter.py`.
+- One migration (columns + 3 new tables + RLS + GRANTs).
+- One new server fn file (`src/lib/profile.functions.ts`) for completeness scoring; everything else uses the existing browser supabase client + RLS.
+- No new secrets, no new buckets, no new deps.
+- Worker change is additive — old apply flows keep working until they're switched over branch by branch.
 
 ---
 
 ## What I need from you
-
-Just **Approve** and I'll execute C → D → E → F in batched edits, then you redeploy the worker and we run the G2 checklist together.
+**Approve** and I'll execute in this order: migration → profile UI → worker autofill mapper → dashboard verification → handoff for redeploy.
