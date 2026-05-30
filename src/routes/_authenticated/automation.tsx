@@ -15,7 +15,10 @@ import { QueryErrorState } from "@/components/QueryErrorState";
 import { useAutosaveSection } from "@/hooks/useAutosaveSection";
 import { automationQueryOptions, filtersListQueryOptions, useUpdateAutomation, type AutomationSettings } from "@/lib/queries/automation";
 import { automationSchema, validateAutomationCross, type AutomationPatch } from "@/lib/validation/settings";
+import type { z } from "zod";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+
+type AutomationValues = z.infer<typeof automationSchema>;
 
 export const Route = createFileRoute("/_authenticated/automation")({
   head: () => ({ meta: [{ title: "Automation — JobPilot" }] }),
