@@ -82,7 +82,7 @@ export const dispatchWorkerCommand = createServerFn({ method: "POST" })
     const { error } = await supabase.from("worker_commands").insert({
       user_id: userId,
       kind: data.kind,
-      payload: data.payload ?? {},
+      payload: (data.payload ?? {}) as any,
     });
     if (error) throw new Error(error.message);
     await supabase.from("audit_log").insert({

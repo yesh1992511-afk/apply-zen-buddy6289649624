@@ -72,9 +72,9 @@ function ObservabilityPage() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <MetricTile icon={AlertOctagon} label="Open errors" value={stats.open} tone={stats.open > 0 ? "destructive" : "muted"} />
-        <MetricTile icon={Clock} label="Errors (24h)" value={stats.last_24h} tone="warning" />
-        <MetricTile icon={Activity} label="Resolved" value={stats.resolved} tone="success" />
+        <MetricTile icon={AlertOctagon} label="Open errors" value={stats.open} accent={stats.open > 0 ? "danger" : "default"} />
+        <MetricTile icon={Clock} label="Errors (24h)" value={stats.last_24h} accent="gold" />
+        <MetricTile icon={Activity} label="Resolved" value={stats.resolved} accent="success" />
       </div>
       <DataTable
         rows={errors}

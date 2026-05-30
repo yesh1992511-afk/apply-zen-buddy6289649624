@@ -22,9 +22,9 @@ export const recordAudit = createServerFn({ method: "POST" })
       action: data.action,
       entity_type: data.entity_type,
       entity_id: data.entity_id ?? null,
-      before: data.before ?? null,
-      after: data.after ?? null,
-      metadata: data.metadata ?? {},
+      before: (data.before ?? null) as any,
+      after: (data.after ?? null) as any,
+      metadata: (data.metadata ?? {}) as any,
     });
     if (error) throw new Error(error.message);
     return { ok: true };

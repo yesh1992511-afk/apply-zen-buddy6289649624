@@ -13,9 +13,9 @@ export const exportMyData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const dump: Record<string, unknown> = { exported_at: new Date().toISOString(), user_id: userId };
+    const dump: Record<string, any> = { exported_at: new Date().toISOString(), user_id: userId };
     for (const table of EXPORT_TABLES) {
-      const { data } = await supabase.from(table).select("*").limit(10000);
+      const { data } = await supabase.from(table as any).select("*").limit(10000);
       dump[table] = data ?? [];
     }
     await supabase.from("audit_log").insert({
