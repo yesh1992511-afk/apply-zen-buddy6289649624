@@ -12,18 +12,17 @@ import { toastError } from "@/lib/toast";
  * - `flush()` saves now (call from onBlur / beforeunload).
  * - `errors` is keyed by field name for inline <FieldError /> rendering.
  */
-export function useAutosaveSection<TSchema extends z.ZodObject<z.ZodRawShape>>({
+export function useAutosaveSection<Values extends Record<string, unknown>>({
   schema,
   initial,
   onSave,
   debounceMs = 800,
 }: {
-  schema: TSchema;
-  initial: z.infer<TSchema> | null;
-  onSave: (patch: Partial<z.infer<TSchema>>) => Promise<void>;
+  schema: z.ZodType<Values> | z.ZodObject<z.ZodRawShape>;
+  initial: Values | null;
+  onSave: (patch: Partial<Values>) => Promise<void>;
   debounceMs?: number;
 }) {
-  type Values = z.infer<TSchema>;
   const [values, setValues] = useState<Values | null>(initial);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState<string | null>(null);
