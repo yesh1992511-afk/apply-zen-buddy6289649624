@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { ScrollText, Search, RefreshCw } from "lucide-react";
+import { ScrollText, Search, RefreshCw, Copy } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/logs")({
@@ -101,15 +102,24 @@ function LogsPage() {
           <div className="max-h-[70vh] overflow-auto font-mono text-xs">
             {logs.map((l) => {
               const meta = LEVEL_META[l.level] ?? LEVEL_META.debug;
+              const fullLine = `${new Date(l.ts).toISOString()} [${l.level}] ${l.scope ?? ""} ${l.message}`;
               return (
-                <div key={l.id} className="flex items-start gap-2 border-b border-border/30 px-4 py-1.5 hover:bg-surface-2">
+                <div key={l.id} className="group flex items-start gap-2 border-b border-border/30 px-4 py-1.5 hover:bg-surface-2">
                   <span className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)} />
                   <span className="shrink-0 tabular-nums text-muted-foreground/70">{new Date(l.ts).toLocaleTimeString()}</span>
                   <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase", meta.bg, meta.text)}>
                     {l.level}
                   </span>
                   {l.scope && <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted-foreground">{l.scope}</span>}
-                  <span className="break-all leading-relaxed text-foreground/90">{l.message}</span>
+                  <span className="break-all leading-relaxed text-foreground/90 flex-1">{l.message}</span>
+                  <button
+                    type="button"
+                    aria-label="Copy log line"
+                    onClick={() => { navigator.clipboard.writeText(fullLine); toast.success("Copied"); }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </button>
                 </div>
               );
             })}

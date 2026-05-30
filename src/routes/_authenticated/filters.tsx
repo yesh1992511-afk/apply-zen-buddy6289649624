@@ -80,15 +80,16 @@ function FiltersPage() {
 
 
       {items.map((f) => (
-        <Card key={f.id}>
+        <Card key={f.id} className="lift">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="flex items-center gap-2 text-base">
               <Input className="max-w-xs" defaultValue={f.name} onBlur={(e) => update(f.id, { name: e.target.value })} />
               {f.is_default && <Badge variant="secondary"><Star className="mr-1 h-3 w-3" /> default</Badge>}
+              <FilterPreview filter={f} />
             </CardTitle>
             <div className="flex gap-2">
               {!f.is_default && <Button size="sm" variant="outline" onClick={() => setDefault(f.id)}>Make default</Button>}
-              <Button size="sm" variant="ghost" onClick={() => remove(f.id)}><Trash2 className="h-4 w-4" /></Button>
+              <Button size="sm" variant="ghost" aria-label="Delete filter" onClick={() => remove(f.id)}><Trash2 className="h-4 w-4" /></Button>
             </div>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
@@ -136,5 +137,33 @@ function ArrField({ label, value, onChange }: { label: string; value: string[]; 
       <Label>{label}</Label>
       <Input defaultValue={value.join(", ")} placeholder="comma-separated" onBlur={(e) => onChange(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
     </div>
+  );
+}
+
+function FilterPreview({ filter }: { filter: Filter }) {
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      let q = supabase.from("jobs").select("id", { count: "exact", head: true });
+      if (filter.min_score) q = q.gte("score", filter.min_score);
+      if (filter.posted_within_hours) {
+        const since = new Date(Date.now() - filter.posted_within_hours * 3600_000).toISOString();
+        q = q.gte("scraped_at", since);
+      }
+      if ((filter.keywords ?? []).length > 0) {
+        const or = filter.keywords.map((k) => `title.ilike.%${k}%,description.ilike.%${k}%`).join(",");
+        q = q.or(or);
+      }
+      const { count: c } = await q;
+      if (!cancelled) setCount(c ?? 0);
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [filter]);
+  return (
+    <Badge variant="outline" className="ml-1 gap-1 font-mono tabular-nums">
+      <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-dot" />
+      {count === null ? "…" : `${count} match`}
+    </Badge>
   );
 }

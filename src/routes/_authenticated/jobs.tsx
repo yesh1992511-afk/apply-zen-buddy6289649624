@@ -49,10 +49,11 @@ const windows = [
   { label: "All", hours: 0 },
 ];
 
-function scoreColor(s: number) {
-  if (s >= 80) return "bg-gradient-gold text-gold-foreground";
-  if (s >= 60) return "bg-success/20 text-success border border-success/30";
-  return "bg-surface-3 text-muted-foreground";
+function scoreChip(s: number) {
+  // Gradient ramp: red < 60 → amber 60–84 → emerald ≥ 85
+  if (s >= 85) return "bg-gradient-to-br from-emerald-500/30 to-emerald-700/40 text-emerald-200 ring-1 ring-emerald-400/40 shadow-[0_0_12px_-2px_oklch(0.65_0.16_162/0.5)]";
+  if (s >= 60) return "bg-gradient-to-br from-amber-500/25 to-amber-700/30 text-amber-200 ring-1 ring-amber-400/30";
+  return "bg-gradient-to-br from-rose-500/15 to-rose-700/20 text-rose-200/90 ring-1 ring-rose-400/20";
 }
 
 function JobsPage() {
@@ -64,6 +65,8 @@ function JobsPage() {
   const [loading, setLoading] = useState(false);
   const [dialogJob, setDialogJob] = useState<JobDialogJob | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [savedFilters, setSavedFilters] = useState<Array<{ id: string; name: string; keywords: string[] }>>([]);
+  const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -85,6 +88,12 @@ function JobsPage() {
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [hours]);
+  useEffect(() => {
+    supabase.from("filters").select("id, name, keywords").order("created_at").then(({ data }) => {
+      setSavedFilters((data ?? []) as Array<{ id: string; name: string; keywords: string[] }>);
+    });
+  }, []);
+
 
   const filtered = useMemo(() => {
     if (!search) return jobs;
@@ -164,25 +173,57 @@ function JobsPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-card p-3">
-        <ToggleGroup type="single" value={String(hours)} onValueChange={(v) => v && setHours(Number(v))} className="bg-surface-2 rounded-lg p-0.5">
-          {windows.map((w) => (
-            <ToggleGroupItem key={w.label} value={String(w.hours)} className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-md text-xs">
-              {w.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search title, company, location…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-surface-2 border-border/60"
-          />
+      <div className="sticky top-14 z-10 -mx-4 px-4 py-3 md:-mx-6 md:px-6 surface-frost rounded-none border-x-0 border-y border-border/40 space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <ToggleGroup type="single" value={String(hours)} onValueChange={(v) => v && setHours(Number(v))} className="bg-surface-2 rounded-lg p-0.5">
+            {windows.map((w) => (
+              <ToggleGroupItem key={w.label} value={String(w.hours)} className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-md text-xs">
+                {w.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search title, company, location…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 bg-surface-2 border-border/60"
+            />
+          </div>
+          <Button variant="outline" onClick={load} disabled={loading} aria-label="Refresh jobs">{loading ? "…" : "Refresh"}</Button>
         </div>
-        <Button variant="outline" onClick={load} disabled={loading}>{loading ? "…" : "Refresh"}</Button>
+        {savedFilters.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70 mr-1">Saved</span>
+            <button
+              onClick={() => { setActiveFilterId(null); setSearch(""); }}
+              className={cn(
+                "h-6 rounded-full border px-2.5 text-[11px] font-medium transition-all ease-apple",
+                activeFilterId === null
+                  ? "border-primary/50 bg-primary/15 text-foreground"
+                  : "border-border/50 bg-surface-2/60 text-muted-foreground hover:text-foreground hover:border-border",
+              )}
+            >All</button>
+            {savedFilters.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => {
+                  setActiveFilterId(f.id);
+                  setSearch((f.keywords ?? []).join(" "));
+                }}
+                className={cn(
+                  "h-6 rounded-full border px-2.5 text-[11px] font-medium transition-all ease-apple",
+                  activeFilterId === f.id
+                    ? "border-primary/50 bg-primary/15 text-foreground"
+                    : "border-border/50 bg-surface-2/60 text-muted-foreground hover:text-foreground hover:border-border",
+                )}
+              >{f.name}</button>
+            ))}
+          </div>
+        )}
       </div>
+
 
       {loading && jobs.length === 0 ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -222,7 +263,7 @@ function JobsPage() {
                     </div>
                     <h3 className="mt-1.5 line-clamp-2 font-heading text-[15px] font-semibold leading-snug">{j.title}</h3>
                   </div>
-                  <div className={cn("shrink-0 rounded-full px-2.5 py-1 font-mono text-xs font-bold tabular-nums", scoreColor(j.score))}>
+                  <div className={cn("shrink-0 rounded-full px-2.5 py-1 font-mono text-xs font-bold tabular-nums", scoreChip(j.score))}>
                     {j.score}
                   </div>
                 </div>

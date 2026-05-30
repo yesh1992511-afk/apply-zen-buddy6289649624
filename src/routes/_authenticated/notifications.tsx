@@ -250,6 +250,40 @@ function NotificationsPage() {
           </CardContent>
         </Card>
       )}
+      {/* Daily digest preview */}
+      {settings?.daily_summary_enabled && (
+        <Card className="overflow-hidden lift">
+          <CardHeader className="border-b border-border/40 bg-surface-1">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Mail className="h-4 w-4 text-primary" /> Daily digest preview
+            </CardTitle>
+            <CardDescription>What lands in your inbox at {(settings.daily_summary_time || "20:00").slice(0, 5)} UTC.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="border-b border-border/30 bg-background/60 px-5 py-3 text-xs text-muted-foreground">
+              <div><span className="text-muted-foreground/70">From: </span>JobPilot &lt;{creds?.email || "you@gmail.com"}&gt;</div>
+              <div><span className="text-muted-foreground/70">Subject: </span><span className="text-foreground font-medium">Your JobPilot digest — 24 matched · 7 applied</span></div>
+            </div>
+            <div className="p-5 space-y-3 text-sm">
+              <div className="font-heading text-base font-semibold">Yesterday in one glance</div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Matched", value: "24", tone: "text-primary" },
+                  { label: "Applied", value: "7", tone: "text-success" },
+                  { label: "Needs review", value: "2", tone: "text-warning" },
+                ].map((m) => (
+                  <div key={m.label} className="rounded-lg border border-border/40 bg-surface-1 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80">{m.label}</div>
+                    <div className={`mt-1 font-heading text-2xl font-bold tabular-nums ${m.tone}`}>{m.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="text-xs text-muted-foreground italic">+ top 5 high-score matches and any failures requiring attention.</div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
 
       {/* Recent notifications */}
       <Card>
