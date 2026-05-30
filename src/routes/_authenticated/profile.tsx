@@ -149,7 +149,15 @@ function ProfilePage() {
         )}
       </div>
 
-      <Tabs defaultValue="basic">
+      <Tabs
+        value={typeof window !== "undefined" && window.location.hash.length > 1 ? window.location.hash.slice(1) : "basic"}
+        onValueChange={(v) => {
+          if (typeof window !== "undefined") {
+            history.replaceState(null, "", `#${v}`);
+          }
+        }}
+      >
+
         <TabsList className="flex h-auto flex-wrap gap-1 bg-surface-1 p-1">
           <TabsTrigger value="basic" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Basic</TabsTrigger>
           <TabsTrigger value="address" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Address</TabsTrigger>
