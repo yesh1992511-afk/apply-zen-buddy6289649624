@@ -20,16 +20,22 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
         const url = new URL(request.url);
         const tier = (url.searchParams.get('tier') ?? 'hot') as 'hot' | 'warm';
         const shard = Number(url.searchParams.get('shard') ?? 0);
+        const forcedUserId = url.searchParams.get('user_id');
 
-        const { data: users, error: usersErr } = await supabaseAdmin
-          .from('automation_settings')
-          .select('user_id, enabled')
-          .eq('enabled', true);
-
-        if (usersErr) {
-          return Response.json({ error: usersErr.message }, { status: 500 });
+        // If a user_id is passed (manual "Run now" from the UI) we run for that user
+        // regardless of automation_settings.enabled. Otherwise cron-mode: only enabled users.
+        let users: Array<{ user_id: string }> | null = null;
+        if (forcedUserId) {
+          users = [{ user_id: forcedUserId }];
+        } else {
+          const { data, error: usersErr } = await supabaseAdmin
+            .from('automation_settings')
+            .select('user_id, enabled')
+            .eq('enabled', true);
+          if (usersErr) return Response.json({ error: usersErr.message }, { status: 500 });
+          users = (data ?? []) as Array<{ user_id: string }>;
         }
-        if (!users?.length) {
+        if (!users.length) {
           return Response.json({ ok: true, message: 'no enabled users', tier, shard });
         }
 
