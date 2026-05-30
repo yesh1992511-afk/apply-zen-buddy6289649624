@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { triggerScrape, triggerTestSource } from "@/lib/commands";
 import { waitForCommand } from "@/lib/commands";
-import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2, Target } from "lucide-react";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 
 import { PageHeader } from "@/components/PageHeader";
@@ -20,6 +20,12 @@ import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { BusyOverlay, SourceRowSkeleton } from "@/components/skeletons";
 import { timeAgo } from "@/lib/timeAgo";
+import {
+  JOB_TARGET_PRESETS,
+  applyTargetToSourceConfig,
+  findPreset,
+  type JobTarget,
+} from "@/lib/jobTarget";
 
 export const Route = createFileRoute("/_authenticated/sources")({
   head: () => ({ meta: [{ title: "Sources — JobPilot" }] }),
@@ -42,22 +48,26 @@ type Source = {
   last_error: string | null;
 };
 
+// Note: worker uses a unified config schema {queries, locations, rows, remote}.
+// Per-source keyword/location values get filled in from the active Job Target
+// at seed time (and overwritten by "Apply" later) — no more hard-coded
+// "software engineer".
 const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_status" | "last_run_count" | "last_error">> = [
   // Paid Apify actors (LinkedIn / Indeed / ZipRecruiter / Glassdoor / Google / Wellfound)
-  { key: "apify_linkedin", display_name: "LinkedIn (Apify)", kind: "apify", cadence_minutes: 60, config: { actor_id: "bebity~linkedin-jobs-scraper", maxItems: 50, searchTerms: ["software engineer"], locations: ["United States"], publishedAt: "r86400" } },
-  { key: "apify_indeed", display_name: "Indeed (Apify)", kind: "apify", cadence_minutes: 60, config: { actor_id: "misceres~indeed-scraper", maxItems: 50, position: "software engineer", country: "US" } },
-  { key: "apify_ziprecruiter", display_name: "ZipRecruiter (Apify)", kind: "apify", cadence_minutes: 120, config: { actor_id: "bebity~zip-recruiter-scraper", maxItems: 50, search: "software engineer" } },
-  { key: "apify_glassdoor", display_name: "Glassdoor (Apify)", kind: "apify", cadence_minutes: 120, config: { maxItems: 50, keyword: "software engineer", location: "United States" } },
-  { key: "apify_google_jobs", display_name: "Google Jobs (Apify)", kind: "apify", cadence_minutes: 60, config: { maxItems: 50, queries: ["software engineer"], location: "United States" } },
-  { key: "apify_wellfound", display_name: "Wellfound / AngelList (Apify)", kind: "apify", cadence_minutes: 180, config: { maxItems: 50, keywords: ["software engineer"] } },
+  { key: "apify_linkedin", display_name: "LinkedIn (Apify)", kind: "apify", cadence_minutes: 60, config: { rows: 50, published_at: "r86400" } },
+  { key: "apify_indeed", display_name: "Indeed (Apify)", kind: "apify", cadence_minutes: 60, config: { rows: 50, country: "US" } },
+  { key: "apify_ziprecruiter", display_name: "ZipRecruiter (Apify)", kind: "apify", cadence_minutes: 120, config: { rows: 50 } },
+  { key: "apify_glassdoor", display_name: "Glassdoor (Apify)", kind: "apify", cadence_minutes: 120, config: { rows: 50 } },
+  { key: "apify_google_jobs", display_name: "Google Jobs (Apify)", kind: "apify", cadence_minutes: 60, config: { rows: 50 } },
+  { key: "apify_wellfound", display_name: "Wellfound / AngelList (Apify)", kind: "apify", cadence_minutes: 180, config: { rows: 50 } },
   // Free REST / RSS APIs
-  { key: "remoteok", display_name: "RemoteOK (free)", kind: "rest", cadence_minutes: 60, config: { keywords: ["python", "typescript"] } },
-  { key: "remotive", display_name: "Remotive (free)", kind: "rest", cadence_minutes: 60, config: { search: "software" } },
+  { key: "remoteok", display_name: "RemoteOK (free)", kind: "rest", cadence_minutes: 60, config: {} },
+  { key: "remotive", display_name: "Remotive (free)", kind: "rest", cadence_minutes: 60, config: {} },
   { key: "arbeitnow", display_name: "Arbeitnow (free)", kind: "rest", cadence_minutes: 60, config: {} },
-  { key: "weworkremotely", display_name: "We Work Remotely (free)", kind: "rest", cadence_minutes: 120, config: { categories: ["programming"] } },
-  { key: "usajobs", display_name: "USAJobs (federal, free)", kind: "rest", cadence_minutes: 240, config: { keyword: "software" } },
-  { key: "builtin", display_name: "BuiltIn (US tech)", kind: "rest", cadence_minutes: 120, config: { queries: ["software engineer"], locations: ["remote"] } },
-  { key: "workatastartup", display_name: "YC Work At A Startup (free)", kind: "rest", cadence_minutes: 240, config: { query: "software engineer" } },
+  { key: "weworkremotely", display_name: "We Work Remotely (free)", kind: "rest", cadence_minutes: 120, config: { category: "remote-programming-jobs" } },
+  { key: "usajobs", display_name: "USAJobs (federal, free)", kind: "rest", cadence_minutes: 240, config: {} },
+  { key: "builtin", display_name: "BuiltIn (US tech)", kind: "rest", cadence_minutes: 120, config: { rows: 50 } },
+  { key: "workatastartup", display_name: "YC Work At A Startup (free)", kind: "rest", cadence_minutes: 240, config: { rows: 50 } },
   // Direct ATS boards (public APIs, no proxy needed)
   { key: "greenhouse_boards", display_name: "Greenhouse boards", kind: "board", cadence_minutes: 180, config: { companies: ["stripe", "airbnb"] } },
   { key: "lever_boards", display_name: "Lever boards", kind: "board", cadence_minutes: 180, config: { companies: ["netflix"] } },
@@ -69,6 +79,15 @@ const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_s
 ];
 
 
+const DEFAULT_TARGET: JobTarget = {
+  field: "cybersecurity",
+  titles: findPreset("cybersecurity")!.titles,
+  locations: findPreset("cybersecurity")!.locations,
+  country: findPreset("cybersecurity")!.country,
+  postedWithinHours: findPreset("cybersecurity")!.postedWithinHours,
+  excludeKeywords: findPreset("cybersecurity")!.excludeKeywords,
+};
+
 function SourcesPage() {
   const { user } = useUser();
   const [sources, setSources] = useState<Source[]>([]);
@@ -76,10 +95,28 @@ function SourcesPage() {
   const [ingestionEnabled, setIngestionEnabled] = useState(false);
   const [runningNow, setRunningNow] = useState(false);
   const [lastIngestResult, setLastIngestResult] = useState<string | null>(null);
+  const [target, setTarget] = useState<JobTarget>(DEFAULT_TARGET);
+  const [applyingTarget, setApplyingTarget] = useState(false);
 
   const load = () => {
     supabase.from("sources").select("*").order("display_name").then(({ data }) => setSources((data ?? []) as Source[]));
-    supabase.from("automation_settings").select("enabled").maybeSingle().then(({ data }) => setIngestionEnabled(!!data?.enabled));
+    supabase
+      .from("automation_settings")
+      .select("enabled, target_titles, target_locations, target_country, target_posted_within_hours, target_exclude_keywords")
+      .maybeSingle()
+      .then(({ data }) => {
+        setIngestionEnabled(!!data?.enabled);
+        if (data && (data.target_titles?.length ?? 0) > 0) {
+          setTarget({
+            field: "custom",
+            titles: data.target_titles ?? [],
+            locations: data.target_locations ?? ["United States"],
+            country: data.target_country ?? "US",
+            postedWithinHours: data.target_posted_within_hours ?? 168,
+            excludeKeywords: data.target_exclude_keywords ?? [],
+          });
+        }
+      });
   };
   useEffect(() => { load(); }, []);
   useRealtimeInvalidate({ table: "sources", onChange: load });
@@ -107,7 +144,12 @@ function SourcesPage() {
         } as never);
       }
       if ((srcCount ?? 0) === 0) {
-        const rows = PRESETS.map((p) => ({ ...p, user_id: user.id, enabled: true }));
+        const rows = PRESETS.map((p) => ({
+          ...p,
+          config: applyTargetToSourceConfig(p.key, p.config, target),
+          user_id: user.id,
+          enabled: true,
+        }));
         await supabase.from("sources").insert(rows as never);
         toast.success(`Seeded ${rows.length} sources — enabled by default`);
         load();
@@ -146,11 +188,76 @@ function SourcesPage() {
   const seed = async () => {
     if (!user) return;
     const existing = new Set(sources.map((s) => s.key));
-    const rows = PRESETS.filter((p) => !existing.has(p.key)).map((p) => ({ ...p, user_id: user.id, enabled: true }));
+    const rows = PRESETS.filter((p) => !existing.has(p.key)).map((p) => ({
+      ...p,
+      config: applyTargetToSourceConfig(p.key, p.config, target),
+      user_id: user.id,
+      enabled: true,
+    }));
     if (rows.length === 0) { toast.info("All presets already added"); return; }
     const { error } = await supabase.from("sources").insert(rows as never);
     if (error) toast.error(error.message); else { toast.success(`Seeded ${rows.length} sources`); load(); }
   };
+
+  const applyTarget = async () => {
+    if (!user) return;
+    if (target.titles.length === 0) { toast.error("Add at least one title/keyword"); return; }
+    setApplyingTarget(true);
+    try {
+      // 1) Persist target on automation_settings
+      const { error: asErr } = await supabase.from("automation_settings").upsert({
+        user_id: user.id,
+        target_titles: target.titles,
+        target_locations: target.locations,
+        target_country: target.country,
+        target_posted_within_hours: target.postedWithinHours,
+        target_exclude_keywords: target.excludeKeywords,
+      } as never, { onConflict: "user_id" });
+      if (asErr) throw asErr;
+
+      // 2) Rewrite every source's config in-place
+      const updates = sources.map((s) => ({
+        id: s.id,
+        config: applyTargetToSourceConfig(s.key, s.config, target),
+      }));
+      for (const u of updates) {
+        await supabase.from("sources").update({ config: u.config } as never).eq("id", u.id);
+      }
+
+      // 3) Update (or create) default filter to match
+      const { data: defaultFilter } = await supabase
+        .from("filters").select("id").eq("is_default", true).maybeSingle();
+      const filterPatch = {
+        keywords: target.titles,
+        exclude_keywords: target.excludeKeywords,
+        locations: target.locations,
+        posted_within_hours: target.postedWithinHours,
+        min_score: 35,
+      };
+      if (defaultFilter?.id) {
+        await supabase.from("filters").update(filterPatch as never).eq("id", defaultFilter.id);
+      } else {
+        await supabase.from("filters").insert({
+          ...filterPatch,
+          user_id: user.id,
+          name: findPreset(target.field)?.label ?? "Default",
+          is_default: true,
+          remote_only: false,
+          onsite_ok: true,
+          hybrid_ok: true,
+        } as never);
+      }
+
+      toast.success(`Target applied to ${updates.length} sources + default filter`);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to apply target");
+    } finally {
+      setApplyingTarget(false);
+    }
+  };
+
+
 
   const update = async (id: string, patch: Partial<Source>) => {
     const prev = sources;
@@ -199,6 +306,115 @@ function SourcesPage() {
           </Button>
         }
       />
+
+      {/* Job Target — drives keywords across every source + default filter */}
+      <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/10 via-card to-card p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
+            <Target className="h-5 w-5 text-accent-foreground" />
+          </div>
+          <div>
+            <h3 className="font-heading font-semibold">Job target</h3>
+            <p className="text-xs text-muted-foreground">
+              One place to set what jobs you want — applies to every source's search keywords and your default filter.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Field</Label>
+            <select
+              value={target.field}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "custom") { setTarget((t) => ({ ...t, field: "custom" })); return; }
+                const p = findPreset(v);
+                if (p) setTarget({
+                  field: p.field, titles: p.titles, locations: p.locations,
+                  country: p.country, postedWithinHours: p.postedWithinHours,
+                  excludeKeywords: p.excludeKeywords,
+                });
+              }}
+              className="mt-1.5 w-full rounded-md border border-border/60 bg-surface-2 px-3 py-2 text-sm"
+            >
+              {JOB_TARGET_PRESETS.map((p) => (
+                <option key={p.field} value={p.field}>{p.label}</option>
+              ))}
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div>
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Location</Label>
+            <Input
+              value={target.locations[0] ?? ""}
+              onChange={(e) => setTarget((t) => ({ ...t, locations: [e.target.value], field: "custom" }))}
+              placeholder="United States"
+              className="mt-1.5 bg-surface-2 border-border/60"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Titles / keywords (comma-separated)
+            </Label>
+            <Textarea
+              rows={3}
+              value={target.titles.join(", ")}
+              onChange={(e) => setTarget((t) => ({
+                ...t,
+                field: "custom",
+                titles: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+              }))}
+              placeholder="cybersecurity, SOC analyst, penetration tester, ..."
+              className="mt-1.5 bg-surface-2 border-border/60 text-sm"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Exclude keywords (comma-separated)
+            </Label>
+            <Input
+              value={target.excludeKeywords.join(", ")}
+              onChange={(e) => setTarget((t) => ({
+                ...t,
+                field: "custom",
+                excludeKeywords: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+              }))}
+              placeholder="recruiter, intern, sales, physical security, ..."
+              className="mt-1.5 bg-surface-2 border-border/60"
+            />
+          </div>
+          <div>
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Country code</Label>
+            <Input
+              value={target.country}
+              onChange={(e) => setTarget((t) => ({ ...t, country: e.target.value, field: "custom" }))}
+              placeholder="US"
+              className="mt-1.5 bg-surface-2 border-border/60"
+            />
+          </div>
+          <div>
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Posted within (hours)</Label>
+            <Input
+              type="number"
+              value={target.postedWithinHours}
+              onChange={(e) => setTarget((t) => ({ ...t, postedWithinHours: Number(e.target.value) || 168, field: "custom" }))}
+              className="mt-1.5 bg-surface-2 border-border/60"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground">
+            Applies to all {sources.length} sources + your default filter. Existing jobs already in your feed are not re-scored.
+          </p>
+          <Button onClick={applyTarget} disabled={applyingTarget} className="bg-gradient-emerald gap-1.5">
+            {applyingTarget ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Target className="h-3.5 w-3.5" />}
+            Apply to all sources + filter
+          </Button>
+        </div>
+      </div>
+
 
       {/* Prominent ingestion controls */}
       <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card p-5">

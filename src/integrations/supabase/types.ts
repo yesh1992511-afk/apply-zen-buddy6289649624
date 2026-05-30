@@ -260,6 +260,11 @@ export type Database = {
           parallelism: number
           proxy_provider: string | null
           run_24_7: boolean
+          target_country: string
+          target_exclude_keywords: string[]
+          target_locations: string[]
+          target_posted_within_hours: number
+          target_titles: string[]
           timezone: string | null
           updated_at: string
           user_id: string
@@ -279,6 +284,11 @@ export type Database = {
           parallelism?: number
           proxy_provider?: string | null
           run_24_7?: boolean
+          target_country?: string
+          target_exclude_keywords?: string[]
+          target_locations?: string[]
+          target_posted_within_hours?: number
+          target_titles?: string[]
           timezone?: string | null
           updated_at?: string
           user_id: string
@@ -298,6 +308,11 @@ export type Database = {
           parallelism?: number
           proxy_provider?: string | null
           run_24_7?: boolean
+          target_country?: string
+          target_exclude_keywords?: string[]
+          target_locations?: string[]
+          target_posted_within_hours?: number
+          target_titles?: string[]
           timezone?: string | null
           updated_at?: string
           user_id?: string
