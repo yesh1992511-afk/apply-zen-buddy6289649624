@@ -320,6 +320,85 @@ function SwitchRow({ label, checked, onChange }: { label: string; checked: boole
   );
 }
 
+function SelectField({
+  label, value, onChange, options, allowCustom, className,
+}: { label: string; value: string; onChange: (v: string) => void; options: string[]; allowCustom?: boolean; className?: string }) {
+  const known = options.includes(value);
+  const showCustom = allowCustom && value && !known;
+  return (
+    <div className={className}>
+      <Label>{label}</Label>
+      <Select value={known ? value : (showCustom ? "__custom__" : "")} onValueChange={(v) => { if (v === "__custom__") onChange(""); else onChange(v); }}>
+        <SelectTrigger className="mt-1"><SelectValue placeholder="Select…" /></SelectTrigger>
+        <SelectContent className="max-h-72">
+          {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+          {allowCustom && <SelectItem value="__custom__">Other / custom…</SelectItem>}
+        </SelectContent>
+      </Select>
+      {showCustom && (
+        <Input className="mt-2" placeholder="Type custom value" value={value} onChange={(e) => onChange(e.target.value)} />
+      )}
+    </div>
+  );
+}
+
+function SelectFieldKV({
+  label, value, onChange, options, className,
+}: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; className?: string }) {
+  return (
+    <div className={className}>
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="mt-1"><SelectValue placeholder="Select…" /></SelectTrigger>
+        <SelectContent className="max-h-72">
+          {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function MultiSelectChips({
+  label, values, onChange, options, allowCustom, className,
+}: { label: string; values: string[]; onChange: (v: string[]) => void; options: string[]; allowCustom?: boolean; className?: string }) {
+  const [custom, setCustom] = useState("");
+  const remaining = options.filter((o) => !values.includes(o));
+  return (
+    <div className={className}>
+      <Label>{label}</Label>
+      <div className="mt-1 flex flex-wrap gap-1.5 rounded-md border border-input bg-transparent p-2 min-h-9">
+        {values.length === 0 && <span className="text-xs text-muted-foreground">None selected</span>}
+        {values.map((v) => (
+          <span key={v} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs">
+            {v}
+            <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} className="text-muted-foreground hover:text-foreground">
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Select value="" onValueChange={(v) => { if (v) onChange([...values, v]); }}>
+          <SelectTrigger className="flex-1"><SelectValue placeholder="Add from list…" /></SelectTrigger>
+          <SelectContent className="max-h-72">
+            {remaining.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+            {remaining.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">All added</div>}
+          </SelectContent>
+        </Select>
+        {allowCustom && (
+          <div className="flex gap-1">
+            <Input placeholder="Custom" value={custom} onChange={(e) => setCustom(e.target.value)} className="w-32" />
+            <Button type="button" size="sm" variant="outline" onClick={() => { if (custom.trim() && !values.includes(custom.trim())) { onChange([...values, custom.trim()]); setCustom(""); } }}>
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 const SCREENING_PRESETS: { key: string; label: string }[] = [
   { key: "authorized_to_work", label: "Are you legally authorized to work in this country?" },
   { key: "require_sponsorship", label: "Do you now or in the future require sponsorship?" },
