@@ -1,37 +1,27 @@
-# Publish first, Stripe after
+## Plan
 
-## Step 1 — Publish
+The app itself appears to load, but the LaTeX PDF preview is stuck at **Compiling…** because `compile_resume` is queued while the worker is offline/paused. I’ll make the UI fail gracefully instead of waiting indefinitely.
 
-You click **Publish** in the top-right of the editor. I can't trigger it; the button is yours. While it deploys (~30s) I'll wait.
+## Changes
 
-## Step 2 — Live QA (I drive)
+1. **Stop the stuck loading state**
+   - Update the resume compile flow so `compiling` is always cleared after timeout, failure, or queue errors.
+   - Show a clear message like “Worker offline — compile queued but not processed” instead of leaving the PDF pane on “Compiling…”.
 
-Once the production URL is live I will:
+2. **Detect worker availability before compiling**
+   - Check `worker_heartbeat` before enqueueing compile work.
+   - If the worker heartbeat is stale/missing, warn immediately and avoid presenting it as an active compile.
 
-1. Hit the home page, check title/meta/favicon render.
-2. `curl` each `/api/public/*` endpoint on the stable `project--{id}.lovable.app` host with the anon key to confirm hooks respond 200.
-3. Walk the live site logged in as you: open `/dashboard`, `/sources`, `/jobs`, `/applications`, `/billing`, `/extension`. Capture any console errors or broken loaders.
-4. Confirm `extension.zip` downloads from `/extension`.
-5. Report a short pass/fail list. No fixes mid-walk — I'll batch them.
+3. **Improve command polling feedback**
+   - Keep polling short for preview compiles.
+   - Treat `pending` commands after timeout as queued/offline rather than generic “compile failed: timeout”.
 
-I will **not** sign up new accounts (single-user gate blocks it) and I will **not** click Upgrade (Stripe isn't wired yet).
+4. **Validate the result**
+   - Confirm the Profile resume page no longer stays stuck when the worker is offline.
+   - Confirm successful worker responses still load a signed PDF URL when available.
 
-## Step 3 — Enable Stripe
+## Technical notes
 
-When QA is clean, I run `recommend_payment_provider` then `enable_stripe_payments`. You fill the short form (email, business name). After it returns I:
-
-1. Wire `/billing` Upgrade buttons to a server fn that creates a Stripe checkout session for the selected plan.
-2. Add `/api/public/stripe/webhook` (signature-verified) that upserts `subscriptions` on `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`.
-3. Add a "Manage billing" button → Stripe customer portal session.
-4. Test mode end-to-end with a 4242 card.
-
-## Out of scope this round
-
-- Multi-seat / team billing
-- Stripe Tax beyond calculation
-- Annual pricing toggle
-- Coupons
-
----
-
-Ready when you click Publish. Reply once it's done (or just say "published") and I'll start the live walk.
+- Primary files: `src/routes/_authenticated/profile.tsx`, `src/lib/commands.ts`.
+- No database schema change is needed.
+- This does not start/fix the external worker itself; it fixes the app behavior so the UI accurately reports that the worker is offline/paused instead of hanging.
