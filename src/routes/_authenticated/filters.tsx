@@ -67,14 +67,15 @@ function FiltersPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Filters</h1>
-          <p className="text-sm text-muted-foreground">Only jobs matching at least one enabled filter show up in your feed.</p>
-        </div>
-        <Button onClick={add}><Plus className="mr-1 h-4 w-4" /> New filter</Button>
-      </div>
+    <div className="space-y-6 max-w-5xl">
+      <PageHeader
+        title="Filters"
+        description="Only jobs matching at least one enabled filter show up in your feed."
+        actions={
+          <Button onClick={add} className="bg-gradient-emerald gap-1.5"><Plus className="h-4 w-4" /> New filter</Button>
+        }
+      />
+
 
       {items.map((f) => (
         <Card key={f.id}>
