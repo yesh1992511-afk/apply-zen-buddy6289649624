@@ -252,9 +252,14 @@ function NotificationsPage() {
       {/* Notification toggles */}
       {settings && (
         <Card>
-          <CardHeader>
-            <CardTitle>When to notify me</CardTitle>
-            <CardDescription>Where to send: {settings.recipient_email || "(your account email)"}</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle>When to notify me</CardTitle>
+              <CardDescription>
+                Where to send: {settings.recipient_email || "(your account email)"}
+              </CardDescription>
+            </div>
+            <SavedIndicator state={saveState} />
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -263,9 +268,10 @@ function NotificationsPage() {
                 type="email"
                 value={settings.recipient_email || ""}
                 onChange={(e) => setSettings({ ...settings, recipient_email: e.target.value })}
-                onBlur={() => saveSettingsMutation.mutate({ recipient_email: settings.recipient_email })}
+                onBlur={() => validateAndUpdate({ recipient_email: settings.recipient_email })}
                 placeholder="alerts@example.com"
               />
+              <FieldError message={errors.recipient_email} />
             </div>
 
             <ToggleRow
@@ -280,15 +286,22 @@ function NotificationsPage() {
               checked={settings.notify_high_score}
               onChange={(v) => validateAndUpdate({ notify_high_score: v })}
             >
-              <Input
-                type="number"
-                min={50}
-                max={100}
-                className="w-20"
-                value={settings.high_score_threshold}
-                onChange={(e) => setSettings({ ...settings, high_score_threshold: +e.target.value })}
-                onBlur={() => saveSettingsMutation.mutate({ high_score_threshold: settings.high_score_threshold })}
-              />
+              <div className="flex flex-col items-end">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className="w-20"
+                  value={settings.high_score_threshold}
+                  onChange={(e) =>
+                    setSettings({ ...settings, high_score_threshold: +e.target.value })
+                  }
+                  onBlur={() =>
+                    validateAndUpdate({ high_score_threshold: settings.high_score_threshold })
+                  }
+                />
+                <FieldError message={errors.high_score_threshold} />
+              </div>
             </ToggleRow>
             <ToggleRow
               label="Apply failed (after retries)"
@@ -308,13 +321,20 @@ function NotificationsPage() {
               checked={settings.daily_summary_enabled}
               onChange={(v) => validateAndUpdate({ daily_summary_enabled: v })}
             >
-              <Input
-                type="time"
-                className="w-32"
-                value={(settings.daily_summary_time || "20:00").slice(0, 5)}
-                onChange={(e) => setSettings({ ...settings, daily_summary_time: e.target.value + ":00" })}
-                onBlur={() => saveSettingsMutation.mutate({ daily_summary_time: settings.daily_summary_time })}
-              />
+              <div className="flex flex-col items-end">
+                <Input
+                  type="time"
+                  className="w-32"
+                  value={(settings.daily_summary_time || "20:00").slice(0, 5)}
+                  onChange={(e) =>
+                    setSettings({ ...settings, daily_summary_time: e.target.value + ":00" })
+                  }
+                  onBlur={() =>
+                    validateAndUpdate({ daily_summary_time: settings.daily_summary_time })
+                  }
+                />
+                <FieldError message={errors.daily_summary_time} />
+              </div>
             </ToggleRow>
           </CardContent>
         </Card>
