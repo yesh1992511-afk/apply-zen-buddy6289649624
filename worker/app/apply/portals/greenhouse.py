@@ -4,7 +4,9 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from .base import Portal, ApplyResult
 from ..humanize import pause
+from ..form_walker import autofill_form
 from ...config import settings
+from ...db import db
 
 
 class Greenhouse(Portal):
