@@ -1,93 +1,76 @@
-# Plan — Browser-Extension Capture (Safe Mode)
+## Mac-Level Polish Pass
 
-## Goal
+A systematic visual + interaction upgrade on every authenticated screen, the extension onboarding, the command palette, and all stateful surfaces. No new features — every change is presentation, motion, or state-handling.
 
-Reach ~95–98% job coverage including LinkedIn, Indeed, Glassdoor, ZipRecruiter, Wellfound, Dice — **without** account bans, proxies, or extra server costs.
+### 1. Global design system (foundation)
 
-## Approach
+- Add a `PageHeader` component (title, eyebrow, description, trailing actions) with consistent vertical rhythm so every route shares one header signature.
+- Add a `Section` / `Panel` wrapper using `surface-frost` for top-level cards and `card-glass` for nested ones — kills the inconsistent border/padding mix.
+- New motion tokens in `styles.css`: `--ease-apple-out`, `--ease-apple-spring`, `--dur-fast` (140ms), `--dur-base` (220ms), `--dur-slow` (320ms). Replace ad-hoc durations.
+- Refined focus ring (2px emerald + 2px background offset, Apple-style), hover lift utility (`.lift`), and a `.divider-soft` hairline.
+- Tighten typography scale (display / h1 / h2 / body / caption) with `font-feature-settings` for tabular numerals on every numeric KPI.
 
-A Chrome/Edge extension runs inside **your** logged-in browser. When you visit any supported job board, it silently reads the jobs you're already viewing and POSTs them to the existing `/api/public/sources/ingest-extension` endpoint. They flow into the same dashboard, scoring, and apply pipeline you already have.
-
-**Why this is safe:** the requests come from your real browser, your real IP, your real session cookies, with normal human timing (you scroll, it captures). To LinkedIn it looks identical to you browsing — because it is.
+### 2. Per-screen polish
 
 ```text
-[Your Chrome] --you browse--> linkedin.com/jobs
-      |
-      | extension reads visible job cards
-      v
-[Lovable Cloud] --ingest-extension--> jobs table --> dashboard --> apply worker
+Dashboard      → KPI cards with sparklines, animated counters, live worker dot
+Jobs           → sticky filter bar, score chip with gradient, row-in stagger, density toggle
+Applications   → status pipeline strip, timeline view in detail, screenshot lightbox
+Sources        → grouped (Server / Extension / ATS), per-source last-run sparkline, status dot
+Extension      → install wizard (4 steps with progress), live capture feed, per-portal counters w/ icons
+Setup          → segmented stepper, completion ring, "ready to launch" summary card
+Filters        → side-by-side editor + live match preview count
+Profile        → tabbed sections, completion meter, inline edit affordances
+Notifications  → preview card showing exactly what the email will look like
+Automation     → big primary "Run / Pause" with state morph, schedule visualised on a timeline
+Logs           → virtualised list, level pill colors, sticky time gutter
 ```
 
-## What gets built
+### 3. Empty / loading / error states (every screen)
 
-### 1. Extension package (`extension/` folder, downloadable ZIP)
+- Shared `EmptyState` component: icon-in-gradient-puck + headline + one-line + single primary CTA.
+- Shared skeletons matched to each layout (not generic gray boxes — same shape as the real content).
+- `ErrorBoundary` per route with retry button that calls `router.invalidate()`.
+- Toast styling: refined corner radius, blur, accent stripe by intent.
 
-- `manifest.json` (MV3) — permissions for the 6 portal domains only
-- `content-linkedin.js` — parses `/jobs/search` and `/jobs/view/:id` pages
-- `content-indeed.js` — parses Indeed result lists + job detail panes
-- `content-glassdoor.js` — parses Glassdoor job listings
-- `content-ziprecruiter.js` — parses ZipRecruiter cards
-- `content-wellfound.js` — parses Wellfound (AngelList) listings
-- `content-dice.js` — parses Dice search results
-- `background.js` — batches captures (max 1 POST every 10s) and forwards to backend
-- `popup.html` — shows: paired account email, today's capture count, on/off toggle, pause button
-- `options.html` — paste pairing code from app → stores user token in `chrome.storage.local`
+### 4. Command palette upgrade
 
-**Safety guardrails built in:**
-- **No automated navigation, scrolling, or clicking** — extension only reads what you naturally view
-- **Per-domain throttle:** max 1 outbound POST every 10s, capture buffer flushed in batches
-- **Random 200–800ms jitter** on every read so it doesn't look mechanical
-- **Domain allowlist** — extension cannot touch any site outside the 6 portals
-- **Read-only** — never fills forms, never submits applications, never clicks "Apply" for you
-- **Off switch** in popup, kill-switch on backend if a portal changes their TOS
+- Grouped sections (Navigate / Actions / Recent), shortcut hints rendered as Mac-style key caps (`⌘K`, `⇧⌘P`).
+- Recent + frequent ordering (localStorage), fuzzy match highlights, blurred backdrop.
+- Per-page contextual actions ("Run source", "Pause automation", "New filter").
 
-### 2. Backend (extends existing pipeline)
+### 5. Extension onboarding flow
 
-- New route `src/routes/api/public/sources/ingest-extension.ts` — validates Bearer token, dedupes by `(source, external_id)`, inserts into existing `jobs` table, triggers `match_job_to_filters`
-- New table `extension_tokens` (user_id, token, label, last_seen_at, captures_today) — RLS scoped to owner, token is the pairing secret
-- Daily counter resets via a tiny pg_cron entry
+- New `/extension` becomes a 4-step wizard: Generate token → Download → Install in Chrome → Paste token. Each step animates in, with copy-to-clipboard feedback and a "test connection" pulse when the first capture arrives.
+- Live feed strip showing the last 5 captured jobs (animated entry).
+- Per-portal status grid with last-seen timestamp and capture-today count.
 
-### 3. UI additions (existing app)
+### 6. Keyboard / a11y polish
 
-- New page `/extension` — "Pair your browser" with copy-able token, install instructions, live capture feed, per-portal counts (last 24h), revoke button
-- Download button → fetches `/extension.zip` from `public/`
-- Sources page gets 6 new rows (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Wellfound, Dice) showing `via extension` badge + last-seen timestamp
+- Global shortcuts: `⌘K` palette, `g j` jobs, `g a` applications, `g s` sources, `?` shortcut help sheet.
+- Focus rings everywhere, `aria-label` on every icon button, single `<main>` per route already correct — audit and fix any gaps.
+- Reduced-motion respected via `@media (prefers-reduced-motion: reduce)`.
 
-## Coverage after this ships
+### 7. Misc
 
-| Source | Before | After |
-|---|---|---|
-| Greenhouse/Lever/Ashby/Workable/SmartRecruiter | ✅ | ✅ |
-| RemoteOK/Remotive/Arbeitnow/Himalayas/Adzuna/Jooble | ✅ | ✅ |
-| LinkedIn | ❌ | ✅ via extension |
-| Indeed | ❌ | ✅ via extension |
-| Glassdoor | ❌ | ✅ via extension |
-| ZipRecruiter | ❌ | ✅ via extension |
-| Wellfound | ❌ | ✅ via extension |
-| Dice | ❌ | ✅ via extension |
-| **Total realistic coverage** | **~80%** | **~97%** |
+- Favicon + app-icon refresh to match emerald/gold palette.
+- 404 + not-authorized pages styled to match.
+- Sidebar: active-item gradient pill, group labels in small caps, collapsed state shows tooltips.
 
-## Honest trade-offs
+### Scope guardrails
 
-- Only captures while your browser is open and you're on those sites. Open LinkedIn once a day, scroll the feed — that's enough to keep it fed.
-- First-time setup = unzip + load unpacked extension in `chrome://extensions` (4 clicks). Not one-click; Chrome Web Store publishing is a separate later step.
-- If a portal redesigns their HTML, that one parser breaks until updated. Other 5 keep working.
-- No "auto-apply" on these 6 portals — that's where bans happen. The existing ATS auto-apply (Greenhouse/Lever/etc.) is unaffected.
+- No new backend logic, no schema changes, no new server functions.
+- No new dependencies beyond what's already installed (uses lucide, cmdk, shadcn, Motion already in tree).
+- Existing scraping / extension / auto-apply behaviour untouched.
 
-## Out of scope
+### Order of execution
 
-- Storing your portal passwords on the server
-- Residential proxies, headless browsers, captcha solvers
-- Auto-clicking "Easy Apply" on LinkedIn (high ban risk — kept manual; extension surfaces the job, you click apply yourself in the same tab)
-- Chrome Web Store publication (can be a follow-up)
+1. Foundation tokens + `PageHeader` / `Section` / `EmptyState` / skeletons (30 min)
+2. Sidebar + command palette + global shortcuts (30 min)
+3. Dashboard + Jobs + Applications (60 min)
+4. Sources + Extension wizard (45 min)
+5. Setup + Profile + Filters + Automation + Notifications + Logs (60 min)
+6. Error boundaries, 404, a11y sweep, reduced-motion (20 min)
+7. Visual QA at 1280 / 1440 / 1920 via browser screenshots (15 min)
 
-## Order of work
-
-1. Backend route + `extension_tokens` table + migration (15 min)
-2. `/extension` pairing page in app (20 min)
-3. Extension skeleton + manifest + background batcher (20 min)
-4. 6 content scripts, one per portal (45 min)
-5. Package to `public/extension.zip` + download button (10 min)
-6. Sources page — add 6 extension rows with last-seen indicator (10 min)
-
-~2 hours end-to-end. Approve and I'll build it.
+Total ≈ 4 hours.
