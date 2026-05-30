@@ -53,11 +53,41 @@ function SourcesPage() {
   const { user } = useUser();
   const [sources, setSources] = useState<Source[]>([]);
   const [testing, setTesting] = useState<Record<string, boolean>>({});
+  const [ingestionEnabled, setIngestionEnabled] = useState(false);
+  const [runningNow, setRunningNow] = useState(false);
+  const [lastIngestResult, setLastIngestResult] = useState<string | null>(null);
 
   const load = () => {
     supabase.from("sources").select("*").order("display_name").then(({ data }) => setSources((data ?? []) as Source[]));
+    supabase.from("automation_settings").select("enabled").maybeSingle().then(({ data }) => setIngestionEnabled(!!data?.enabled));
   };
   useEffect(() => { load(); }, []);
+
+  const toggleIngestion = async (v: boolean) => {
+    if (!user) return;
+    setIngestionEnabled(v);
+    const { error } = await supabase.from("automation_settings").update({ enabled: v }).eq("user_id", user.id);
+    if (error) { toast.error(error.message); setIngestionEnabled(!v); return; }
+    toast.success(v ? "Job ingestion enabled — first batch incoming" : "Ingestion paused");
+    if (v) runNow();
+  };
+
+  const runNow = async () => {
+    setRunningNow(true);
+    setLastIngestResult(null);
+    try {
+      const res = await fetch("/api/public/sources/run-tier?tier=hot");
+      const json = await res.json() as { ok?: boolean; summary?: Record<string, { fetched: number; inserted: number }> };
+      if (!json.ok) { toast.error("Run failed"); return; }
+      const totals = Object.values(json.summary ?? {}).reduce((a, b) => ({ fetched: a.fetched + b.fetched, inserted: a.inserted + b.inserted }), { fetched: 0, inserted: 0 });
+      setLastIngestResult(`Fetched ${totals.fetched} jobs · ${totals.inserted} new`);
+      toast.success(`Fetched ${totals.fetched} jobs · ${totals.inserted} new`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Run failed");
+    } finally {
+      setRunningNow(false);
+    }
+  };
 
   const seed = async () => {
     if (!user) return;
@@ -103,13 +133,45 @@ function SourcesPage() {
     <div className="space-y-6 max-w-6xl">
       <PageHeader
         title="Sources"
-        description={`${enabledCount} of ${sources.length} active · Where the worker scrapes jobs from`}
+        description={`${enabledCount} of ${sources.length} active · Where jobs are scraped from`}
         actions={
           <Button onClick={seed} variant="outline" className="gap-1.5">
             <Plus className="h-4 w-4" /> Add presets
           </Button>
         }
       />
+
+      {/* Prominent ingestion controls */}
+      <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className={`h-10 w-10 rounded-full flex items-center justify-center ${ingestionEnabled ? "bg-success/20" : "bg-surface-2"}`}>
+              {ingestionEnabled ? <CheckCircle2 className="h-5 w-5 text-success" /> : <Database className="h-5 w-5 text-muted-foreground" />}
+            </div>
+            <div>
+              <h3 className="font-heading font-semibold">Auto job ingestion</h3>
+              <p className="text-xs text-muted-foreground">
+                {ingestionEnabled
+                  ? "Pulling from 6 aggregators every 15 min + 25+ career pages hourly"
+                  : "Enable to start receiving jobs in your dashboard automatically"}
+              </p>
+              {lastIngestResult && <p className="text-xs text-primary mt-0.5">{lastIngestResult}</p>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={runNow} disabled={runningNow} variant="outline" className="gap-1.5">
+              {runningNow ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+              {runningNow ? "Running…" : "Run now"}
+            </Button>
+            <div className="flex items-center gap-2 rounded-full bg-surface-2 px-3 py-1.5">
+              <span className={`text-[10px] font-semibold uppercase tracking-wider ${ingestionEnabled ? "text-success" : "text-muted-foreground"}`}>
+                {ingestionEnabled ? "ON" : "OFF"}
+              </span>
+              <Switch checked={ingestionEnabled} onCheckedChange={toggleIngestion} />
+            </div>
+          </div>
+        </div>
+      </div>
 
       {sources.length === 0 ? (
         <EmptyState
