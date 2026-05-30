@@ -47,8 +47,10 @@ const profile = [
 const system = [
   { title: "Notifications", to: "/notifications", icon: Bell },
   { title: "Logs", to: "/logs", icon: ScrollText },
-  { title: "Worker", to: "/setup", icon: Server },
+  { title: "Worker", to: "/worker", icon: Server },
+  { title: "Worker setup", to: "/setup", icon: Server },
 ];
+
 
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });

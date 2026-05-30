@@ -187,6 +187,34 @@ async def _do_notify_daily_summary(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "applied": applied, "jobs_in": jobs_in}
 
 
+async def _do_refresh_sources(_payload: dict[str, Any]) -> dict[str, Any]:
+    """Force a sources re-read on the next tick (used by realtime UI toggles)."""
+    from .sources.registry import run_due_sources
+    await run_due_sources(force=False)
+    return {"ok": True}
+
+
+async def _do_run_due_sources(_payload: dict[str, Any]) -> dict[str, Any]:
+    from .sources.registry import run_due_sources
+    await run_due_sources(force=True)
+    return {"ok": True}
+
+
+async def _do_drain_apply_queue(_payload: dict[str, Any]) -> dict[str, Any]:
+    from .apply.runner import process_queue
+    await process_queue(limit=20)
+    return {"ok": True}
+
+
+async def _do_test_apply(_payload: dict[str, Any]) -> dict[str, Any]:
+    """Diagnostic: confirm the apply pipeline boots a browser context."""
+    from .apply.browser import new_browser
+    async with new_browser("default", headless=True) as (page, _ctx):
+        await page.goto("https://httpbin.org/ip", wait_until="domcontentloaded")
+        body = await page.text_content("body") or ""
+    return {"ok": True, "browser_ok": True, "ip_probe": body[:200]}
+
+
 HANDLERS = {
     "scrape": _do_scrape,
     "apply": _do_apply,
@@ -197,7 +225,12 @@ HANDLERS = {
     "notify_test": _do_notify_test,
     "notify_offline": _do_notify_offline,
     "notify_daily_summary": _do_notify_daily_summary,
+    "refresh_sources": _do_refresh_sources,
+    "run_due_sources": _do_run_due_sources,
+    "drain_apply_queue": _do_drain_apply_queue,
+    "test_apply": _do_test_apply,
 }
+
 
 
 async def tick_commands() -> None:
