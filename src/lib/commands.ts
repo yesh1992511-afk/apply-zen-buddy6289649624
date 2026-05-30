@@ -5,7 +5,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-type Kind = "scrape" | "apply" | "tailor";
+type Kind = "scrape" | "apply" | "tailor" | "tailor_resume" | "compile_resume" | "test_source" | "notify_test";
 
 async function enqueue(kind: Kind, payload: Record<string, unknown>): Promise<string | null> {
   const { data: u } = await supabase.auth.getUser();
