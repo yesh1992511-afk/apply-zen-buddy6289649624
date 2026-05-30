@@ -6,15 +6,19 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock } from "lucide-react";
+import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { QueryErrorState } from "@/components/QueryErrorState";
 import { JobDescriptionDialog, type JobDialogJob } from "@/components/JobDescriptionDialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
-import { jobsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies } from "@/lib/queries/jobs";
+import { jobsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies, useClearAllJobs } from "@/lib/queries/jobs";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
   head: () => ({ meta: [{ title: "Jobs — JobPilot" }] }),
@@ -53,6 +57,7 @@ function JobsPage() {
   const filtersQuery = useQuery(savedFiltersQueryOptions());
   const applyMutation = useApplyToJob();
   const bulkQueue = useBulkQueueApplies();
+  const clearAll = useClearAllJobs();
 
   const jobs = jobsQuery.data ?? [];
   const savedFilters = filtersQuery.data ?? [];
@@ -101,10 +106,34 @@ function JobsPage() {
         title="Jobs"
         description={`${filtered.length} matched · sorted by relevance score`}
         actions={
-          <Button onClick={queueApply} disabled={selected.size === 0} className="bg-gradient-emerald gap-1.5 shadow-glow disabled:shadow-none">
-            <Send className="h-4 w-4" />
-            Queue {selected.size > 0 ? selected.size : ""} apply
-          </Button>
+          <div className="flex items-center gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive" disabled={clearAll.isPending}>
+                  <Trash2 className="h-4 w-4" />
+                  {clearAll.isPending ? "Clearing…" : "Clear all"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear all scraped jobs?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This permanently deletes every scraped job on your account, along with any queued applications and job-tied logs. New scrapes will use your current filters.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => clearAll.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Delete everything
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <Button onClick={queueApply} disabled={selected.size === 0} className="bg-gradient-emerald gap-1.5 shadow-glow disabled:shadow-none">
+              <Send className="h-4 w-4" />
+              Queue {selected.size > 0 ? selected.size : ""} apply
+            </Button>
+          </div>
         }
       />
 
