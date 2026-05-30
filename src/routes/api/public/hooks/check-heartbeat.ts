@@ -14,11 +14,15 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { hasValidApiKey } from "@/lib/api-auth.server";
 
 export const Route = createFileRoute("/api/public/hooks/check-heartbeat")({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }) => {
+        if (!hasValidApiKey(request)) {
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Invalid apikey" } }), { status: 401, headers: { "Content-Type": "application/json" } });
+        }
         const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
         const debounceCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
