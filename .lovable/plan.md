@@ -1,84 +1,122 @@
-# Finish JobPilot: remaining gaps + phases
+# JobPilot — Remaining phases to fully wire the idea
 
-## Phase A — Close gaps from the Gmail/notifications work just shipped
+Phase A (Gmail/OTP/notifications) is done. Below is everything left from the original idea, organized so we can knock it out and then run one end-to-end test.
 
-These items were referenced but not fully wired in the last batch.
+The **resume LaTeX→PDF flow** is the biggest piece — designed exactly as you asked: LaTeX lives in the DB and is edited/tailored in the background, the UI only ever shows a PDF. No AI is used for conversion (free TeX engine on the worker).
 
-1. **Worker command handlers for notifications**
-   - `worker/app/commands.py`: add handlers for the new command kinds the cron hooks enqueue:
-     - `notify_offline` → call `gmail.send_and_log("worker_offline", ...)` with last_seen from payload.
-     - `notify_daily_summary` → query last 24h: jobs scraped, jobs matched, applications queued/applied/failed, top 5 by score, manual-review count. Send a single summary email.
-   - Without this, the cron hooks enqueue commands that the worker never executes.
+---
 
-2. **OTP wiring in portal adapters**
-   - `worker/app/apply/gmail_otp.py` exists; confirm `wait_for_otp(portal_host)` is the public helper.
-   - `indeed.py`, `linkedin.py`, `workday.py`, `lever.py`: detect OTP/2FA input fields (`input[type=tel]`, `input[name*=code]`, `input[autocomplete=one-time-code]`) and call the helper before falling back to manual review.
-   - Falls back to `notify.manual_review(...)` after timeout (60–120s).
+## Phase C — Resume: LaTeX in background, PDF on frontend
 
-3. **pg_cron registration**
-   - The two hook routes exist (`check-heartbeat`, `daily-summary`) but the cron jobs that call them must be registered.
-   - Use `supabase--insert` (not migration) to schedule:
-     - `*/5 * * * *` → POST `/api/public/hooks/check-heartbeat`
-     - `*/15 * * * *` → POST `/api/public/hooks/daily-summary`
-   - Both with `apikey: <anon>` header, empty `{}` body.
+### How it works (no AI in the conversion path)
+```text
+profile/job  ──► worker tailors .tex (existing ai/resume_pipeline.py)
+                         │
+                         ▼
+              tectonic (free, bundled in worker Docker image)
+                         │   .tex → .pdf
+                         ▼
+         Supabase Storage  resumes/{user_id}/{resume_id}.pdf
+                         │
+                         ▼
+       resumes.pdf_storage_path  (already in schema)
+                         │
+                         ▼
+         Frontend: signed URL → <iframe>/<object> PDF preview
+```
 
-4. **Recipient fallback**
-   - `worker/app/notify.py`: when `recipient_email` is empty, fall back to `gmail_credentials.email` (the user's own Gmail) instead of failing silently.
+Tectonic is already used in `worker/app/latex/compile.py`. It's free, deterministic, no API cost. Server functions never compile — they only enqueue a `worker_commands` row of kind `compile_resume` (or `tailor_resume`) and poll `pdf_storage_path` for the result.
 
-5. **`notification_log` retention**
-   - Keep only last 200 rows per user (worker cleanup at end of daily summary), so the "Recent notifications" card stays useful.
+### C1. Server functions + worker command
+- New server fns in `src/lib/resume.functions.ts`:
+  - `listResumes()` — list user's resumes (template + tailored).
+  - `getResumePdfUrl(resumeId)` — signed URL from `resumes` bucket (5 min TTL).
+  - `saveResumeTex(resumeId, tex)` — update `tex_content`, enqueue `compile_resume`.
+  - `createTailoredPreview(jobId)` — enqueue `tailor_resume` for highest-score job or specified job.
+  - `getCommandStatus(commandId)` — poll for `done`/`error`.
+- New worker handlers in `worker/app/commands.py`:
+  - `compile_resume`: load `resumes.tex_content`, run tectonic, upload PDF to `resumes` bucket, update `pdf_storage_path`.
+  - `tailor_resume`: run existing `ai/resume_pipeline.py` to produce tailored `.tex`, insert new row (`kind=tailored`), then compile.
+- Also wire `notify_offline` + `notify_daily_summary` handlers (still missing from Phase A).
 
-## Phase B — Remaining JobPilot phases (post-Gmail)
+### C2. `/profile` → Resume tab redesign
+Replace the current upload-only UI with three sub-tabs:
+1. **Templates** — list of `kind=template` resumes; "Edit LaTeX" opens a Monaco editor (LaTeX mode) in a side panel; "Save & compile" triggers C1; PDF preview iframe on the right auto-refreshes when status flips to `done`.
+2. **Upload .tex** — drag-drop a `.tex` file, stored as a new template, auto-compiled.
+3. **Tailored preview** — "Generate preview for top job" button → calls `createTailoredPreview` → shows tailored PDF + AI cover letter draft side-by-side. Lets you sanity-check tone before the bot applies.
 
-These are the broader pieces still needed to run the bot autonomously end-to-end.
+User never sees raw LaTeX unless they explicitly open the editor. Default view is always the PDF.
 
-### B1. Apify source credentials & connection test
-- `/sources` page: per Apify source (`apify_linkedin`, `apify_indeed`, `apify_glassdoor`, etc.), surface a "Test fetch" button that runs a single small fetch and reports count + errors. Right now the user has no way to validate a source is configured correctly without waiting for cron.
+---
 
-### B2. Resume + cover-letter quick-check
-- `/profile` already has resume upload. Add a "Preview tailored output" panel that takes one job from `jobs` (highest score) and renders:
-  - LaTeX→PDF preview of tailored resume.
-  - AI-generated cover letter draft.
-- Lets the user verify AI tone before bot starts applying.
+## Phase D — Dashboard upgrade & kill-switch (B3 + B4)
 
-### B3. Dashboard upgrade
-- Replace current dashboard with live counters: scraped 24h, matched, queued, applied today vs. `max_applies_per_day` budget, worker heartbeat freshness, last 10 events feed.
+Single `/dashboard` page with:
+- **Big red/green "Automation: ON / PAUSED"** toggle (writes `automation_settings.enabled`).
+- 24h counters: scraped, matched, queued, applied today vs `max_applies_per_day` (progress bar), failed.
+- Worker heartbeat freshness badge (green <2 min, amber 2–10, red >10).
+- Per-portal rate-limit chips ("Indeed 4/10 last hour").
+- Live event feed: last 10 rows from `logs` (auto-refresh every 15 s).
+- Top 5 unapplied jobs by score with "Apply now" button.
 
-### B4. Kill-switch + safety
-- Global "Pause automation" toggle on dashboard (sets `automation_settings.enabled=false`) — already exists in DB; just needs a prominent button.
-- Per-portal rate-limit display ("Indeed: 4/10 last hour").
+---
 
-### B5. Worker deployment
-- Bundle: `scp -r worker root@147.93.47.24:/root/jobpilot/ && ssh root@147.93.47.24 'cd /root/jobpilot/worker && docker compose build && docker compose up -d'`
-- Add `worker/VERSION` bump so heartbeat shows it.
+## Phase E — Sources page polish (B1)
 
-### B6. End-to-end smoke test
-- Manual checklist run after deploy:
-  1. Save Gmail App Password → click "Send test" → email arrives.
-  2. Enable one Apify source → wait one cycle → jobs appear.
-  3. Plant a fake high-score job (SQL update score=99) → notification email arrives.
-  4. Disable network on worker for 15 min → offline alert email arrives.
-  5. Wait until `daily_summary_time` → summary email arrives with non-zero counts.
+`/sources`: per-source "Test fetch" button enqueues a `test_source` worker command that runs one small fetch and writes count + errors back to `worker_commands.result`. UI shows the result inline. No more waiting on cron to know if Apify token is right.
+
+---
+
+## Phase F — Cron registration (Phase A3 leftover)
+
+Register via `supabase--insert` (data, not migration):
+- `*/5 * * * *` → `/api/public/hooks/check-heartbeat`
+- `*/15 * * * *` → `/api/public/hooks/daily-summary`
+- `*/10 * * * *` → new `/api/public/hooks/dispatch-sources` (triggers worker to pick up due `sources` rows; harmless if already polling).
+
+---
+
+## Phase G — Deploy + end-to-end smoke test
+
+### G1. Worker bundle
+```bash
+scp -r worker root@147.93.47.24:/root/jobpilot/
+ssh root@147.93.47.24 'cd /root/jobpilot/worker && docker compose build && docker compose up -d'
+```
+Bump `worker/VERSION` so the heartbeat shows the new build.
+
+### G2. Manual checklist (you run after deploy)
+1. `/notifications` → Save Gmail App Password → "Send test" → email arrives.
+2. `/profile` Resume tab → upload `.tex` template → PDF preview appears within ~30 s.
+3. "Generate preview for top job" → tailored PDF + cover letter render.
+4. `/sources` → "Test fetch" on one Apify source → count > 0.
+5. Plant fake high-score job (`update jobs set score=99 where id=…`) → notification email arrives.
+6. Stop worker for 15 min → offline alert arrives.
+7. Wait for `daily_summary_time` → daily summary email arrives.
+8. Toggle "Automation: PAUSED" on dashboard → confirm no new applies queue.
+
+---
 
 ## Order of execution
 
-1. Phase A1 (worker command handlers) — without it, A3 cron is dead weight.
-2. Phase A2 (OTP wiring polish) + A4/A5.
-3. Phase A3 (register cron jobs via supabase--insert).
-4. Phase B1 (source test button) → B2 (preview) → B3 (dashboard) → B4 (kill-switch).
-5. Phase B5 (deploy) → B6 (smoke test).
+1. **C** (resume LaTeX↔PDF) — biggest piece, isolated.
+2. **D** (dashboard + kill-switch) — builds on existing tables.
+3. **E** (sources test button) — small.
+4. **F** (cron registration) — one SQL call.
+5. **G** (deploy + smoke test) — final.
+
+---
 
 ## Technical notes
 
-- All new server fns continue to use `requireSupabaseAuth`; cron hooks remain under `/api/public/*`.
-- No new secrets needed — Gmail App Password already covers send + read.
-- Worker writes its handler results into `worker_commands.result` so the UI can show "✓ summary sent at 20:01".
-- No schema changes required beyond what already shipped.
+- All new compile/tailor work runs on the VPS worker (tectonic is Node/Cloudflare-Worker incompatible — confirmed in our runtime rules).
+- Frontend never touches LaTeX engines; only renders PDFs from signed Supabase Storage URLs.
+- No new tables needed — `resumes.tex_content`, `resumes.pdf_storage_path`, and `worker_commands` already exist.
+- No new secrets needed.
+- Cover-letter draft in C2 uses Lovable AI Gateway (free for us) via the existing `ai/cover_letter.py`.
+
+---
 
 ## What I need from you
 
-Just **Approve** and pick one:
-- **(a) Do everything A→B in one go** (will take several batched edits + one deploy).
-- **(b) Do Phase A only now**, then we test, then I tackle Phase B.
-
-I recommend (b) — verify notifications work end-to-end before stacking dashboard work on top.
+Just **Approve** and I'll execute C → D → E → F in batched edits, then you redeploy the worker and we run the G2 checklist together.
