@@ -25,10 +25,16 @@ function phaseIcon(status: string | null) {
   return Loader2;
 }
 
-export function ApplicationTimeline({ events }: { events: ApplicationEvent[] }) {
+export function ApplicationTimeline({
+  events,
+  lastError,
+}: {
+  events: ApplicationEvent[];
+  lastError?: string | null;
+}) {
   const [lightbox, setLightbox] = useState<string | null>(null);
 
-  if (events.length === 0) {
+  if (events.length === 0 && !lastError) {
     return (
       <div className="rounded-xl border border-border/60 bg-card p-8 text-center text-sm text-muted-foreground">
         No timeline events yet — the worker hasn't started this application.
@@ -44,7 +50,19 @@ export function ApplicationTimeline({ events }: { events: ApplicationEvent[] }) 
           {events.length} event{events.length === 1 ? "" : "s"}
         </p>
       </div>
+      {lastError && (
+        <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2.5">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Last error</div>
+              <div className="mt-0.5 text-xs text-destructive/90 leading-relaxed break-words">{lastError}</div>
+            </div>
+          </div>
+        </div>
+      )}
       <ol className="relative space-y-1 p-4">
+
         {events.map((e, i) => {
           const Icon = phaseIcon(e.status);
           return (

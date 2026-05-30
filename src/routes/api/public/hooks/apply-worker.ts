@@ -13,22 +13,23 @@ import { writeLog } from '@/lib/apply/log.server';
 import { generateTailoredResume, generateCoverLetter, type ProfileSnapshot, type JobSnapshot } from '@/lib/apply/ai.server';
 import { detectPortal } from '@/lib/apply/portal.server';
 import { hasValidApiKey, claimIdempotency } from '@/lib/api-auth.server';
+import { appError, withErrorBoundary } from '@/lib/errors';
 
 const MAX_PER_RUN = 3; // process up to N queued apps per cron tick
 
 export const Route = createFileRoute('/api/public/hooks/apply-worker')({
   server: {
     handlers: {
-      POST: async ({ request }) => handle(request),
-      GET: async ({ request }) => handle(request),
+      POST: withErrorBoundary(({ request }) => handle(request)),
+      GET: withErrorBoundary(({ request }) => handle(request)),
     },
   },
 });
 
-async function handle(request: Request) {
-  if (!hasValidApiKey(request)) {
-    return Response.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or missing apikey header' } }, { status: 401 });
-  }
+async function handle(request: Request): Promise<Response> {
+  const t0 = Date.now();
+  if (!hasValidApiKey(request)) throw appError('UNAUTHORIZED', 'Invalid or missing apikey header');
+
   const url = new URL(request.url);
   const onlyAppId = url.searchParams.get('application_id');
 
@@ -41,12 +42,14 @@ async function handle(request: Request) {
   if (onlyAppId) q.eq('id', onlyAppId);
 
   const { data: apps, error } = await q;
-  if (error) return Response.json({ error: error.message }, { status: 500 });
-  if (!apps?.length) return Response.json({ ok: true, processed: 0 });
+  if (error) throw appError('INTERNAL', error.message);
+  if (!apps?.length) {
+    console.log(JSON.stringify({ evt: 'apply-worker', processed: 0, ms: Date.now() - t0 }));
+    return Response.json({ ok: true, processed: 0, results: [] });
+  }
 
   const results: Array<{ id: string; status: string; error?: string; skipped?: boolean }> = [];
   for (const app of apps) {
-    // 24h idempotency per application+attempt so a duplicate cron tick can't double-process
     const claimed = await claimIdempotency({
       supabaseAdmin,
       key: `apply-worker:${app.id}:${(app.attempts ?? 0) + 1}`,
@@ -75,7 +78,9 @@ async function handle(request: Request) {
       results.push({ id: app.id, status: giveUp ? 'failed' : 'requeued', error: message });
     }
   }
-  return Response.json({ ok: true, processed: results.length, results });
+  const counts = results.reduce<Record<string, number>>((acc, r) => { acc[r.status] = (acc[r.status] ?? 0) + 1; return acc; }, {});
+  console.log(JSON.stringify({ evt: 'apply-worker', processed: results.length, counts, ms: Date.now() - t0 }));
+  return Response.json({ ok: true, processed: results.length, results, counts });
 }
 
 async function processOne(applicationId: string, userId: string, jobId: string, attempts: number) {
