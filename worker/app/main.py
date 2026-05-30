@@ -84,6 +84,24 @@ async def wake_loop():
 
 
 async def main():
+    # Fail fast with a single clear message if Supabase credentials are bad,
+    # instead of flooding logs with 401s every 5 seconds.
+    s = settings()
+    if not s.SUPABASE_URL.startswith("https://") or not s.SUPABASE_SERVICE_ROLE_KEY or len(s.SUPABASE_SERVICE_ROLE_KEY) < 40:
+        log.error("invalid_supabase_config",
+                  hint="Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in worker/.env")
+        raise SystemExit(2)
+    try:
+        db().table("worker_heartbeat").select("user_id").limit(1).execute()
+    except Exception as e:
+        msg = str(e)
+        if "Invalid API key" in msg or "401" in msg:
+            log.error("supabase_auth_failed",
+                      hint="SUPABASE_SERVICE_ROLE_KEY in worker/.env is invalid. "
+                           "Copy the service_role key (NOT anon) from Lovable Cloud → Backend → Settings → API.")
+            raise SystemExit(2)
+        log.warning("startup_db_check_failed", error=msg[:300])
+
     db_log("info", f"worker starting v{settings().WORKER_VERSION}", scope="boot")
     sched = AsyncIOScheduler()
     sched.add_job(tick_heartbeat, IntervalTrigger(seconds=30), id="heartbeat", max_instances=1)
@@ -92,8 +110,6 @@ async def main():
     sched.add_job(tick_apply, IntervalTrigger(seconds=45), id="apply", max_instances=1)
     sched.start()
     beat()
-    asyncio.create_task(realtime_sources_listener())
-    asyncio.create_task(wake_loop())
     db_log("info", "scheduler started", scope="boot")
     while True:
         await asyncio.sleep(3600)
