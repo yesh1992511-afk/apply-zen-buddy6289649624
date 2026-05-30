@@ -140,12 +140,22 @@ function AuthLayout() {
                 <Switch checked={automation.enabled} onCheckedChange={toggleAutomation} />
               </div>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Keyboard shortcuts"
+              className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+              onClick={showHelp}
+            >
+              <Keyboard className="h-4 w-4" />
+            </Button>
           </div>
         </header>
         <main className="flex-1 px-4 py-6 md:px-6 md:py-8">
           <Outlet />
         </main>
-        <CommandPalette />
+        <CommandPalette onShowHelp={showHelp} />
+        <ShortcutHelp open={helpOpen} onOpenChange={setHelpOpen} />
       </SidebarInset>
     </SidebarProvider>
   );
