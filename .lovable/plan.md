@@ -1,22 +1,16 @@
-## Why it's still showing
-
-Your logged-in account has all three roles in `user_roles`: `owner`, `admin`, **and `super_admin`**. The sidebar gate is `{isSuperAdmin && renderGroup("Admin", admin)}` — it's working correctly, but since *you* are a super_admin it still renders for you on the user-side cockpit.
-
-The intent (per your previous direction) is that admin lives **only** in the separate `/admin` console reached via `/admin-login` — never inside the regular user sidebar, regardless of role.
+Fix the Visa status dropdown reset bug in `src/routes/_authenticated/profile.tsx`.
 
 ## Change
+Replace the stale-state `set` helper with a functional updater so chained calls in the same handler compose correctly:
 
-In `src/components/AppSidebar.tsx`:
+```ts
+const set = (k: string, v: unknown) =>
+  setP((prev) => (prev ? { ...prev, [k]: v } : prev));
+```
 
-1. Remove the `admin` nav array (lines 64–70).
-2. Remove the `{isSuperAdmin && renderGroup("Admin", admin)}` line from `SidebarContent`.
-3. Remove the now-unused `useRoles` import and `const { isSuperAdmin } = useRoles()` call.
-4. Drop unused icon imports (`Shield`, `Filter` if only used by that array — verify).
+## Why
+The current `set` reads `p` from closure. When the visa onChange calls `set("visa_status", v)` and `set("work_authorization", v)` back-to-back, both see the same stale `p` and the second call overwrites the first — dropping `visa_status`. Same bug affects the sponsorship dropdown (`needs_visa_future` + `requires_sponsorship`).
 
-No other files touched. The `/admin/*` routes themselves remain fully functional and still gated by the `super_admin` check in `src/routes/admin.tsx` `beforeLoad`. Super-admins continue to access them by going to `/admin-login`.
-
-## Verify after build
-
-- Reload `/dashboard` while logged in as your super_admin account → the "Admin" group no longer appears in the left sidebar.
-- Navigate to `/admin-login` → sign in → `/admin/observability` still loads (separate console UI).
-- Regular owner-only accounts see no change (they never saw it anyway).
+## Scope
+- One-line change in `src/routes/_authenticated/profile.tsx`
+- No schema, API, or other component changes
