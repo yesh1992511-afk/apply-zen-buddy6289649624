@@ -1,58 +1,74 @@
-## Phase 2c — Settings autosave, validation & mobile polish
+## Phase 3 — Backend Hardening
 
-Bring the remaining settings surfaces up to the Phase 2a/2b bar: per-section autosave, Zod validation with inline errors, unified skeletons/empty states, and a mobile pass across the app shell.
+Tighten the server-side surface that Phases 2a–2c rely on. No new user-facing features; this is correctness, security, and performance.
 
-### 1. Shared form primitives
+### 1. Server-side Zod validation
 
-- `src/lib/validation/` — Zod schemas per settings domain:
-  - `automation.ts` (aggressiveness 1–5, parallelism 1–10, max_applies_per_day 1–500, daily_start < daily_end when not 24/7, timezone string).
-  - `notifications.ts` (recipient_email, high_score_threshold 0–100, daily_summary_time).
-  - `filters.ts` (name required, min_score 0–100, posted_within_hours ≥ 1, salary_min ≥ 0).
-  - `gmail.ts` (email, app_password length, host/port shape).
-  - `profile-sections.ts` (extend Phase 2a coverage to phone, URLs, salary numerics).
-- `src/components/FieldError.tsx` — inline error chip, used under inputs.
-- `src/components/SectionCard.tsx` — wraps each settings block with title, description, `<SavedIndicator>`.
-- Reuse `useDebouncedCallback` + `SavedIndicator` from Phase 2a. New helper `useAutosaveSection<T>(schema, mutationFn)` returning `{ values, setField, status, errors, flush }`.
+Every `createServerFn` that takes input gets an `.inputValidator(schema.parse)` using the schemas already defined in `src/lib/validation/settings.ts` (reuse, don't duplicate). Targets:
 
-### 2. Query/mutation layer
+- `src/lib/profile.functions.ts` — profile section updates
+- `src/lib/queries/*.functions.ts` companions for automation, notifications, filters, gmail, extension tokens
+- `src/lib/apply-worker.functions.ts` (or equivalent) — retry / requeue payloads
+- Any server route under `src/routes/api/public/*` — validate JSON body + headers with Zod, return 400 on failure
 
-Add under `src/lib/queries/`:
-- `automation.ts` — `automationQueryOptions`, `useUpdateAutomation` (patch).
-- `notifications.ts` — `notificationsQueryOptions`, `useUpdateNotifications`.
-- `filters.ts` — extend existing or add `useUpsertFilter`, `useDeleteFilter`, `useSetActiveFilter`.
-- `gmail.ts` — `gmailCredsQueryOptions`, `useUpsertGmailCreds`, `useVerifyGmailCreds` (calls existing verify path).
-- `extension.ts` — `extensionTokensQueryOptions`, `useCreateToken`, `useRevokeToken`.
+Add a shared `src/lib/validation/server.ts` with `parseBody(schema, request)` and `parseQuery(schema, url)` helpers for server routes.
 
-All mutations invalidate their keys + emit `toastSaved`/`toastError`.
+### 2. RLS + GRANT audit
 
-### 3. Route refactors (autosave + validation)
+Run linter + manual review across all `public.*` tables. For each table confirm:
 
-For each, replace manual `useState` + Save button with section-scoped autosave:
+- RLS enabled
+- Policies scope to `auth.uid()` (or `has_role(...)` for admin-only)
+- GRANTs present for `authenticated` + `service_role`; `anon` only where intentionally public
+- No policy uses `USING (true)` for writes
+- `user_roles` writes are blocked from `authenticated` (only service_role / triggers can grant roles)
 
-- `/automation` — split into "Schedule", "Throughput", "AI models", "Exclusions" cards; each section autosaves on blur with 800ms debounce. Inline errors via Zod.
-- `/notifications` — sections: "Recipient", "Triggers", "Daily summary". Time picker validated.
-- `/filters` — autosave per filter row; "New filter" mutation; "Set active" radio; delete confirm via AlertDialog. Keyword chips with add/remove.
-- `/setup` (Gmail credentials) — autosave creds; explicit "Verify connection" button (mutation) showing last verified timestamp + `last_error`.
-- `/extension` — list tokens with copy-to-clipboard, revoke, last-seen badge; create token via mutation.
-- `/privacy` — request/cancel account deletion via mutation; show `purge_after` countdown.
-- `/profile` — extend Phase 2a engine to remaining fields (location, URLs, salary range, work auth toggles) with the same per-field autosave.
+Migration created per-table only where gaps are found. Document accepted public reads in security memory.
 
-### 4. Cross-cutting polish
+### 3. Database indexes
 
-- `src/components/Skeletons.tsx` — `<CardSkeleton>`, `<RowSkeleton>`, `<FormSkeleton>` for unified loading.
-- `src/components/EmptyState.tsx` — icon + title + description + optional CTA; reuse on jobs/applications/sources/logs empty results.
-- Mobile pass: audit `_authenticated` shell sidebar → ensure drawer on `<md`; tables on jobs/applications switch to card list under `md`; settings cards stack with full-width inputs.
-- Replace remaining ad-hoc `toast(...)` calls with `toastSaved`/`toastError`/`toastQueued`.
-- Wire `useRealtimeInvalidate` (Phase 2b) to settings tables (`automation_settings`, `notification_settings`, `filters`, `gmail_credentials`, `extension_tokens`) so multi-tab edits stay in sync.
+Add covering indexes for the hot query paths surfaced in Phase 2:
 
-### Out of scope (Phase 3)
+- `jobs (user_id, status, posted_at DESC)` — jobs list
+- `jobs (user_id, matched, score DESC)` — matched feed
+- `applications (user_id, created_at DESC)` — apps list
+- `applications (user_id, status)` — status filter
+- `application_events (application_id, created_at)` — timeline
+- `usage_events (user_id, created_at DESC)` — already partly covered by `usage_mtd_by_provider`; verify
+- `sources (user_id, last_run_at)` — staleness query
+- Partial index on `applications (user_id) WHERE status IN ('failed','dlq')` — retry surface
 
-- Server-side Zod on serverFns, RLS audit, DB indexes, worker queue hardening, extension token rotation policy, billing/Stripe surfaces.
+### 4. Worker / queue hardening
 
-Reply **go** to execute Phase 2c end-to-end, or **phase 3** to skip to backend hardening.
+`/api/public/hooks/apply-worker` and any cron-driven endpoints:
 
-## Phase 2c — DONE
+- HMAC signature verification using `WORKER_SHARED_SECRET` (add via `add_secret` if missing) with `timingSafeEqual`
+- Idempotency key check (table `worker_invocations(idempotency_key PK, created_at)`, 24h dedupe)
+- Per-user concurrency cap honoring `automation_settings.parallelism`
+- Bounded retry: increment `retry_count`, move to `dlq` after N attempts, set `last_error`
+- Structured logging via `console.log(JSON.stringify({...}))` for ClickHouse parsing
 
-Delivered: shared autosave (`useAutosaveSection`), Zod validation schemas, `SectionCard`, `FieldError`. Refactored `/automation`, `/notifications`, `/filters`, `/extension`, `/privacy` to TanStack Query mutations + autosave + inline errors + AlertDialog confirms + realtime invalidate.
+### 5. Auth + session correctness
 
-Next: Phase 3 (server-side Zod, RLS audit, indexes, worker hardening).
+- Verify `attachSupabaseAuth` is registered in `src/start.ts` `functionMiddleware`
+- Confirm `_authenticated` layout's `beforeLoad` redirects unauthenticated users before any protected loader runs
+- Audit serverFns called from public-route loaders (must be none)
+- Ensure `block_extra_signups` trigger still active (single-user app invariant)
+
+### 6. Error envelope + observability
+
+- Standard error shape from server fns: `throw new Error(JSON.stringify({ code, message, hint? }))` consumed by `toastError` to surface `hint`
+- Add `src/lib/errors.ts` with `AppError` class + `toAppError(unknown)` normalizer
+- Wire server route handlers through a `withErrorBoundary` wrapper that returns `{ error: { code, message } }` with correct HTTP status
+
+### Out of scope
+
+- New UI
+- Billing / Stripe
+- Extension token rotation policy
+- Multi-tenant features
+- Migration of inherited edge functions (left as-is)
+
+### Deliverable
+
+Reply **"go"** to execute Phase 3, or call out sections to drop/reorder.
