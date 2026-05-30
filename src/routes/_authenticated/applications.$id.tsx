@@ -284,8 +284,9 @@ function ApplicationDetailPage() {
               <FormFillTable rows={fillRows} isActive={isActive} />
             </TabsContent>
             <TabsContent value="timeline" className="mt-0">
-              <ApplicationTimeline events={eventsQuery.data ?? []} />
+              <ApplicationTimeline events={eventsQuery.data ?? []} lastError={app.last_error} />
             </TabsContent>
+
             <TabsContent value="resume" className="mt-0">
               <PdfViewer url={resumeUrl} title={resume?.name ?? "Tailored resume"} isGenerating={isActive && !resumeUrl} />
             </TabsContent>

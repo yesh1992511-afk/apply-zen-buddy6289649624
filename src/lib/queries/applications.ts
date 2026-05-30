@@ -46,15 +46,23 @@ export function useRetryApplication() {
         })
         .eq("id", id);
       if (error) throw new Error(error.message);
-      // Best-effort kick
-      fetch(`/api/public/hooks/apply-worker?application_id=${id}`, {
+      // Best-effort kick; read counts so we can surface skipped/requeued
+      const summary = await fetch(`/api/public/hooks/apply-worker?application_id=${id}`, {
         method: "POST",
         headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string },
-      }).catch(() => {});
-      return id;
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+      return { id, summary } as { id: string; summary: { counts?: Record<string, number> } | null };
     },
-    onSuccess: (id) => {
-      toastSaved("Retry queued");
+    onSuccess: ({ id, summary }) => {
+      const c = summary?.counts ?? {};
+      const parts: string[] = [];
+      if (c.ok) parts.push(`${c.ok} ok`);
+      if (c.requeued) parts.push(`${c.requeued} requeued`);
+      if (c.skipped) parts.push(`${c.skipped} skipped (already running)`);
+      if (c.failed) parts.push(`${c.failed} failed`);
+      toastSaved(parts.length ? `Retry: ${parts.join(", ")}` : "Retry queued");
       queryClient.invalidateQueries({ queryKey: ["application", id] });
       queryClient.invalidateQueries({ queryKey: ["applications"] });
     },
