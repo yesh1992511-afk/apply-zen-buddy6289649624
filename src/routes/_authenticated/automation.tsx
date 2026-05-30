@@ -11,7 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { Check, Loader2, Save } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/automation")({
   head: () => ({ meta: [{ title: "Automation — JobPilot" }] }),
