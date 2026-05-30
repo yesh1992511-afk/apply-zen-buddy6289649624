@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Shield, Activity, Flag, ScrollText, CreditCard, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/_admin")({
+export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex,nofollow" }] }),
   beforeLoad: async () => {
     if (typeof window === "undefined") return;

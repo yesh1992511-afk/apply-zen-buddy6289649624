@@ -3,7 +3,7 @@ import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/_admin/plans")({
+export const Route = createFileRoute("/admin/plans")({
   head: () => ({ meta: [{ title: "Plans — Admin" }] }),
   component: BillingOpsPage,
   errorComponent: ErrorBoundaryRoute,
