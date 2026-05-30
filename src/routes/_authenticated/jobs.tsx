@@ -43,42 +43,21 @@ function scoreChip(s: number) {
 
 function JobsPage() {
   const navigate = useNavigate();
-  const [jobs, setJobs] = useState<Job[]>([]);
   const [hours, setHours] = useState(24);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
   const [dialogJob, setDialogJob] = useState<JobDialogJob | null>(null);
-  const [applyingId, setApplyingId] = useState<string | null>(null);
-  const [savedFilters, setSavedFilters] = useState<Array<{ id: string; name: string; keywords: string[] }>>([]);
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    let q = supabase
-      .from("jobs")
-      .select("*")
-      .eq("matched", true)
-      .order("score", { ascending: false })
-      .order("posted_at", { ascending: false, nullsFirst: false })
-      .limit(200);
-    if (hours > 0) {
-      const since = new Date(Date.now() - hours * 3600_000).toISOString();
-      q = q.gte("scraped_at", since);
-    }
-    const { data, error } = await q;
-    if (error) toast.error(error.message);
-    setJobs((data ?? []) as Job[]);
-    setLoading(false);
-  };
+  const jobsQuery = useQuery(jobsQueryOptions({ hours }));
+  const filtersQuery = useQuery(savedFiltersQueryOptions());
+  const applyMutation = useApplyToJob();
+  const bulkQueue = useBulkQueueApplies();
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [hours]);
-  useEffect(() => {
-    supabase.from("filters").select("id, name, keywords").order("created_at").then(({ data }) => {
-      setSavedFilters((data ?? []) as Array<{ id: string; name: string; keywords: string[] }>);
-    });
-  }, []);
-
+  const jobs = jobsQuery.data ?? [];
+  const savedFilters = filtersQuery.data ?? [];
+  const loading = jobsQuery.isLoading;
+  const applyingId = applyMutation.isPending ? applyMutation.variables ?? null : null;
 
   const filtered = useMemo(() => {
     if (!search) return jobs;
@@ -98,51 +77,22 @@ function JobsPage() {
     });
   };
 
-  const queueApply = async () => {
+  const queueApply = () => {
     if (selected.size === 0) return;
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
-    const rows = [...selected].map((job_id) => ({ job_id, user_id: u.user!.id, status: "queued" as const }));
-    const { error } = await supabase.from("applications").insert(rows);
-    if (error) toast.error(error.message);
-    else {
-      toast.success(`Queued ${rows.length} job${rows.length > 1 ? "s" : ""} for the worker.`);
-      setSelected(new Set());
-    }
+    bulkQueue.mutate([...selected], {
+      onSuccess: () => setSelected(new Set()),
+    });
   };
 
-  const applyOne = async (job: { id: string }) => {
-    setApplyingId(job.id);
-    try {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) return;
-      const { data: existing } = await supabase
-        .from("applications")
-        .select("id")
-        .eq("job_id", job.id)
-        .eq("user_id", u.user.id)
-        .maybeSingle();
-      let appId = existing?.id;
-      if (!appId) {
-        const { data, error } = await supabase
-          .from("applications")
-          .insert({ job_id: job.id, user_id: u.user.id, status: "queued" })
-          .select("id")
-          .single();
-        if (error) { toast.error(error.message); return; }
-        appId = data.id;
-        toast.success("Application queued — worker starting");
-      } else {
-        toast.message("Already queued — opening application");
-      }
-      setDialogJob(null);
-      // Kick the worker immediately so user sees activity right away (don't wait for the 1-min cron)
-      fetch(`/api/public/hooks/apply-worker?application_id=${appId}`, { method: "POST" }).catch(() => {});
-      navigate({ to: "/applications/$id", params: { id: appId } });
-    } finally {
-      setApplyingId(null);
-    }
+  const applyOne = (job: { id: string }) => {
+    applyMutation.mutate(job.id, {
+      onSuccess: ({ id }) => {
+        setDialogJob(null);
+        navigate({ to: "/applications/$id", params: { id } });
+      },
+    });
   };
+
 
 
   return (
