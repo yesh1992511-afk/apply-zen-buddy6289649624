@@ -208,6 +208,7 @@ function NotificationsPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
+              <FieldError message={credsErrors.email} />
             </div>
             <div>
               <Label>App Password (16 chars)</Label>
@@ -217,6 +218,7 @@ function NotificationsPage() {
                 value={appPassword}
                 onChange={(e) => setAppPassword(e.target.value)}
               />
+              <FieldError message={credsErrors.app_password} />
             </div>
           </div>
           {creds?.last_error && (
@@ -224,7 +226,7 @@ function NotificationsPage() {
           )}
           <div className="flex gap-2">
             <Button
-              onClick={() => saveCredsMutation.mutate()}
+              onClick={handleSaveCreds}
               disabled={!email || !appPassword || saveCredsMutation.isPending}
             >
               {saveCredsMutation.isPending ? "Saving…" : creds ? "Update" : "Save"}
