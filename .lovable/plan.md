@@ -1,16 +1,19 @@
-Fix the Visa status dropdown reset bug in `src/routes/_authenticated/profile.tsx`.
+## Plan
 
-## Change
-Replace the stale-state `set` helper with a functional updater so chained calls in the same handler compose correctly:
+1. Verify the recent profile bug fix did not introduce a compile issue.
+   - Check the profile route for syntax/state errors around the changed setter and save flow.
+   - Inspect recent dev-server output for the actual timeout/blank-screen cause.
 
-```ts
-const set = (k: string, v: unknown) =>
-  setP((prev) => (prev ? { ...prev, [k]: v } : prev));
-```
+2. Fix the compile timeout root cause with the smallest safe change.
+   - If the app is stuck because the dev server/compiler wedged after the previous edit, restart the preview server.
+   - If logs show a real code error, patch only the affected file.
+   - If the timeout is caused by the recent database constraint migration still not being applied, confirm backend status and prepare the missing migration/action.
 
-## Why
-The current `set` reads `p` from closure. When the visa onChange calls `set("visa_status", v)` and `set("work_authorization", v)` back-to-back, both see the same stale `p` and the second call overwrites the first — dropping `visa_status`. Same bug affects the sponsorship dropdown (`needs_visa_future` + `requires_sponsorship`).
+3. Validate the user flow.
+   - Open the profile page, confirm it loads instead of a blank page.
+   - Confirm selecting “F1 OPT” stays selected.
+   - Confirm Save changes returns a success/error toast without leaving the app stuck compiling.
 
-## Scope
-- One-line change in `src/routes/_authenticated/profile.tsx`
-- No schema, API, or other component changes
+## Expected result
+
+The profile page should load normally, the visa status selection should persist locally and after save, and the preview should stop timing out during compilation.
