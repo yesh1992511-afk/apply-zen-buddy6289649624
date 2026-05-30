@@ -57,6 +57,7 @@ function JobsPage() {
   const filtersQuery = useQuery(savedFiltersQueryOptions());
   const applyMutation = useApplyToJob();
   const bulkQueue = useBulkQueueApplies();
+  const clearAll = useClearAllJobs();
 
   const jobs = jobsQuery.data ?? [];
   const savedFilters = filtersQuery.data ?? [];
