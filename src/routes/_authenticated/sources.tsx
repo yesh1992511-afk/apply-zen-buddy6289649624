@@ -333,6 +333,7 @@ function SourcesPage() {
                   )}
                 </div>
               </div>
+              </BusyOverlay>
             );
           })}
         </div>
