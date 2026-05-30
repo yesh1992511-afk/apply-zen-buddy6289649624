@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useRouter, notFound } from "@tanstack/react-router";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -8,8 +9,10 @@ import { ApplyStepper, deriveStep } from "@/components/ApplyStepper";
 import { LiveActivityPanel, type LogRow } from "@/components/LiveActivityPanel";
 import { FormFillTable, type FillRow } from "@/components/FormFillTable";
 import { PortalBadge } from "@/components/PortalBadge";
+import { ApplicationTimeline } from "@/components/ApplicationTimeline";
+import { applicationEventsQueryOptions, useRetryApplication } from "@/lib/queries/applications";
 import { timeAgo } from "@/lib/timeAgo";
-import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2, RefreshCw, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
