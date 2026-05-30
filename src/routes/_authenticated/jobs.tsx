@@ -223,7 +223,7 @@ function JobsPage() {
                     </div>
                     <h3 className="mt-1.5 line-clamp-2 font-heading text-[15px] font-semibold leading-snug">{j.title}</h3>
                   </div>
-                  <div className={cn("shrink-0 rounded-full px-2.5 py-1 font-mono text-xs font-bold tabular-nums", scoreColor(j.score))}>
+                  <div className={cn("shrink-0 rounded-full px-2.5 py-1 font-mono text-xs font-bold tabular-nums", scoreChip(j.score))}>
                     {j.score}
                   </div>
                 </div>
