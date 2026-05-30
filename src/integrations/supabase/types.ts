@@ -14,19 +14,84 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_deletion_requests: {
+        Row: {
+          cancelled_at: string | null
+          purge_after: string
+          reason: string | null
+          requested_at: string
+          user_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          purge_after?: string
+          reason?: string | null
+          requested_at?: string
+          user_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          purge_after?: string
+          reason?: string | null
+          requested_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      application_events: {
+        Row: {
+          application_id: string
+          id: number
+          message: string | null
+          payload: Json
+          phase: Database["public"]["Enums"]["application_phase"]
+          screenshot_path: string | null
+          status: string | null
+          ts: string
+          user_id: string
+        }
+        Insert: {
+          application_id: string
+          id?: number
+          message?: string | null
+          payload?: Json
+          phase: Database["public"]["Enums"]["application_phase"]
+          screenshot_path?: string | null
+          status?: string | null
+          ts?: string
+          user_id: string
+        }
+        Update: {
+          application_id?: string
+          id?: number
+          message?: string | null
+          payload?: Json
+          phase?: Database["public"]["Enums"]["application_phase"]
+          screenshot_path?: string | null
+          status?: string | null
+          ts?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       applications: {
         Row: {
           applied_at: string | null
           attempts: number | null
           cover_letter_id: string | null
           created_at: string
+          dlq_reason: string | null
           finished_at: string | null
           id: string
+          idempotency_key: string | null
           job_id: string
           last_error: string | null
+          next_retry_at: string | null
           notes: string | null
+          phase: Database["public"]["Enums"]["application_phase"]
           queued_at: string
           resume_id: string | null
+          retry_count: number
           screenshots: string[] | null
           started_at: string | null
           status: Database["public"]["Enums"]["application_status"]
@@ -38,13 +103,18 @@ export type Database = {
           attempts?: number | null
           cover_letter_id?: string | null
           created_at?: string
+          dlq_reason?: string | null
           finished_at?: string | null
           id?: string
+          idempotency_key?: string | null
           job_id: string
           last_error?: string | null
+          next_retry_at?: string | null
           notes?: string | null
+          phase?: Database["public"]["Enums"]["application_phase"]
           queued_at?: string
           resume_id?: string | null
+          retry_count?: number
           screenshots?: string[] | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["application_status"]
@@ -56,13 +126,18 @@ export type Database = {
           attempts?: number | null
           cover_letter_id?: string | null
           created_at?: string
+          dlq_reason?: string | null
           finished_at?: string | null
           id?: string
+          idempotency_key?: string | null
           job_id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           notes?: string | null
+          phase?: Database["public"]["Enums"]["application_phase"]
           queued_at?: string
           resume_id?: string | null
+          retry_count?: number
           screenshots?: string[] | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["application_status"]
@@ -78,6 +153,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      audit_log: {
+        Row: {
+          action: string
+          actor_role: string | null
+          after: Json | null
+          before: Json | null
+          entity_id: string | null
+          entity_type: string
+          id: number
+          ip: string | null
+          metadata: Json
+          request_id: string | null
+          ts: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_role?: string | null
+          after?: Json | null
+          before?: Json | null
+          entity_id?: string | null
+          entity_type: string
+          id?: number
+          ip?: string | null
+          metadata?: Json
+          request_id?: string | null
+          ts?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_role?: string | null
+          after?: Json | null
+          before?: Json | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: number
+          ip?: string | null
+          metadata?: Json
+          request_id?: string | null
+          ts?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       automation_runs: {
         Row: {
@@ -262,6 +385,51 @@ export type Database = {
         }
         Relationships: []
       }
+      error_events: {
+        Row: {
+          count: number
+          fingerprint: string
+          first_seen: string
+          id: string
+          last_seen: string
+          message: string
+          metadata: Json
+          resolved: boolean
+          route: string | null
+          source: string
+          stack: string | null
+          user_id: string
+        }
+        Insert: {
+          count?: number
+          fingerprint: string
+          first_seen?: string
+          id?: string
+          last_seen?: string
+          message: string
+          metadata?: Json
+          resolved?: boolean
+          route?: string | null
+          source: string
+          stack?: string | null
+          user_id: string
+        }
+        Update: {
+          count?: number
+          fingerprint?: string
+          first_seen?: string
+          id?: string
+          last_seen?: string
+          message?: string
+          metadata?: Json
+          resolved?: boolean
+          route?: string | null
+          source?: string
+          stack?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       experiences: {
         Row: {
           bullets: string[] | null
@@ -319,6 +487,7 @@ export type Database = {
           label: string
           last_reset_date: string
           last_seen_at: string | null
+          revoked_at: string | null
           token: string
           user_id: string
         }
@@ -330,6 +499,7 @@ export type Database = {
           label?: string
           last_reset_date?: string
           last_seen_at?: string | null
+          revoked_at?: string | null
           token: string
           user_id: string
         }
@@ -341,8 +511,36 @@ export type Database = {
           label?: string
           last_reset_date?: string
           last_seen_at?: string | null
+          revoked_at?: string | null
           token?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      feature_flags: {
+        Row: {
+          description: string | null
+          enabled: boolean
+          key: string
+          payload: Json
+          rollout_pct: number
+          updated_at: string
+        }
+        Insert: {
+          description?: string | null
+          enabled?: boolean
+          key: string
+          payload?: Json
+          rollout_pct?: number
+          updated_at?: string
+        }
+        Update: {
+          description?: string | null
+          enabled?: boolean
+          key?: string
+          payload?: Json
+          rollout_pct?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -649,6 +847,7 @@ export type Database = {
           body: string | null
           created_at: string
           id: string
+          idempotency_key: string | null
           job_id: string | null
           kind: string
           last_error: string | null
@@ -663,6 +862,7 @@ export type Database = {
           body?: string | null
           created_at?: string
           id?: string
+          idempotency_key?: string | null
           job_id?: string | null
           kind: string
           last_error?: string | null
@@ -677,6 +877,7 @@ export type Database = {
           body?: string | null
           created_at?: string
           id?: string
+          idempotency_key?: string | null
           job_id?: string | null
           kind?: string
           last_error?: string | null
@@ -736,6 +937,45 @@ export type Database = {
         }
         Relationships: []
       }
+      plans: {
+        Row: {
+          active: boolean
+          admin_console: boolean
+          cookie_sync: boolean
+          currency: string
+          key: string
+          max_applies_per_day: number
+          max_sources: number
+          name: string
+          price_cents: number
+          sort_order: number
+        }
+        Insert: {
+          active?: boolean
+          admin_console?: boolean
+          cookie_sync?: boolean
+          currency?: string
+          key: string
+          max_applies_per_day?: number
+          max_sources?: number
+          name: string
+          price_cents?: number
+          sort_order?: number
+        }
+        Update: {
+          active?: boolean
+          admin_console?: boolean
+          cookie_sync?: boolean
+          currency?: string
+          key?: string
+          max_applies_per_day?: number
+          max_sources?: number
+          name?: string
+          price_cents?: number
+          sort_order?: number
+        }
+        Relationships: []
+      }
       profile: {
         Row: {
           address_line_2: string | null
@@ -775,6 +1015,7 @@ export type Database = {
           needs_visa_future: boolean | null
           needs_visa_now: boolean | null
           notice_period_weeks: number | null
+          onboarding_state: Json
           open_to_contract: boolean | null
           open_to_fulltime: boolean | null
           open_to_internship: boolean | null
@@ -852,6 +1093,7 @@ export type Database = {
           needs_visa_future?: boolean | null
           needs_visa_now?: boolean | null
           notice_period_weeks?: number | null
+          onboarding_state?: Json
           open_to_contract?: boolean | null
           open_to_fulltime?: boolean | null
           open_to_internship?: boolean | null
@@ -929,6 +1171,7 @@ export type Database = {
           needs_visa_future?: boolean | null
           needs_visa_now?: boolean | null
           notice_period_weeks?: number | null
+          onboarding_state?: Json
           open_to_contract?: boolean | null
           open_to_fulltime?: boolean | null
           open_to_internship?: boolean | null
@@ -1121,30 +1364,36 @@ export type Database = {
         Row: {
           ciphertext: string
           created_at: string
+          decrypt_failures: number
           expires_at: string | null
           host: string
           id: string
           iv: string
+          last_used_at: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           ciphertext: string
           created_at?: string
+          decrypt_failures?: number
           expires_at?: string | null
           host: string
           id?: string
           iv: string
+          last_used_at?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           ciphertext?: string
           created_at?: string
+          decrypt_failures?: number
           expires_at?: string | null
           host?: string
           id?: string
           iv?: string
+          last_used_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1234,6 +1483,53 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          cancel_at: string | null
+          created_at: string
+          current_period_end: string | null
+          plan_key: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          trial_ends_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancel_at?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          plan_key: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_ends_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancel_at?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          plan_key?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_ends_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_key_fkey"
+            columns: ["plan_key"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
       usage_events: {
         Row: {
           cost_usd: number
@@ -1263,6 +1559,30 @@ export type Database = {
           metadata?: Json | null
           provider?: string
           units?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      usage_quotas: {
+        Row: {
+          ai_tokens: number
+          applies_count: number
+          captures_count: number
+          day: string
+          user_id: string
+        }
+        Insert: {
+          ai_tokens?: number
+          applies_count?: number
+          captures_count?: number
+          day: string
+          user_id: string
+        }
+        Update: {
+          ai_tokens?: number
+          applies_count?: number
+          captures_count?: number
+          day?: string
           user_id?: string
         }
         Relationships: []
@@ -1372,7 +1692,21 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "owner"
+      app_role: "owner" | "admin" | "viewer"
+      application_phase:
+        | "discovered"
+        | "scored"
+        | "tailored"
+        | "queued"
+        | "applying"
+        | "submitted"
+        | "needs_review"
+        | "failed"
+        | "follow_up_sent"
+        | "replied"
+        | "interview"
+        | "offer"
+        | "rejected"
       application_status:
         | "queued"
         | "applying"
@@ -1510,7 +1844,22 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["owner"],
+      app_role: ["owner", "admin", "viewer"],
+      application_phase: [
+        "discovered",
+        "scored",
+        "tailored",
+        "queued",
+        "applying",
+        "submitted",
+        "needs_review",
+        "failed",
+        "follow_up_sent",
+        "replied",
+        "interview",
+        "offer",
+        "rejected",
+      ],
       application_status: [
         "queued",
         "applying",
