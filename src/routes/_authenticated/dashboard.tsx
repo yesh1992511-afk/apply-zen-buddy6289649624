@@ -65,7 +65,7 @@ function Dashboard() {
         total: t.count ?? 0,
       });
       setHeartbeat(hb.data?.last_seen ?? null);
-      setVersion((hb.data as { version?: string } | null)?.version ?? null);
+      setVersion(hb.data?.version ?? null);
       setAutomation(auto.data ?? null);
       setRecent((lg.data ?? []) as LogRow[]);
       const counts: Record<string, number> = {};
