@@ -66,34 +66,14 @@ async def tick_heartbeat():
 
 
 async def realtime_sources_listener():
-    """Subscribe to postgres_changes on sources for our user and wake the loop.
-    Reconnects on failure. Falls back silently — cadence tick still runs."""
-    uid = user_id()
-    while True:
-        try:
-            from supabase import create_client
-            client = create_client(settings().SUPABASE_URL, settings().SUPABASE_SERVICE_ROLE_KEY)
-
-            def _on_change(payload):
-                db_log("info", "sources changed (realtime) — forcing tick", scope="scheduler")
-                _wake.set()
-
-            channel = client.channel(f"worker-sources-{uid}")
-            channel.on_postgres_changes(
-                event="*", schema="public", table="sources",
-                filter=f"user_id=eq.{uid}", callback=_on_change,
-            ).subscribe()
-            db_log("info", "realtime sources listener subscribed", scope="boot")
-            # Keep the channel alive; supabase-py runs realtime in a background thread.
-            while True:
-                await asyncio.sleep(60)
-        except Exception as e:
-            log.warning("realtime_listener_failed", error=str(e))
-            await asyncio.sleep(15)  # reconnect backoff
+    """Disabled: the sync supabase-py client does not support realtime.
+    The 2-minute scheduler tick still picks up source changes."""
+    log.info("realtime_listener_disabled", reason="sync client unsupported")
+    return
 
 
 async def wake_loop():
-    """When _wake is set, force-run sources immediately."""
+    """When _wake is set, force-run sources immediately. Unused while realtime is disabled."""
     while True:
         await _wake.wait()
         _wake.clear()
@@ -104,6 +84,24 @@ async def wake_loop():
 
 
 async def main():
+    # Fail fast with a single clear message if Supabase credentials are bad,
+    # instead of flooding logs with 401s every 5 seconds.
+    s = settings()
+    if not s.SUPABASE_URL.startswith("https://") or not s.SUPABASE_SERVICE_ROLE_KEY or len(s.SUPABASE_SERVICE_ROLE_KEY) < 40:
+        log.error("invalid_supabase_config",
+                  hint="Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in worker/.env")
+        raise SystemExit(2)
+    try:
+        db().table("worker_heartbeat").select("user_id").limit(1).execute()
+    except Exception as e:
+        msg = str(e)
+        if "Invalid API key" in msg or "401" in msg:
+            log.error("supabase_auth_failed",
+                      hint="SUPABASE_SERVICE_ROLE_KEY in worker/.env is invalid. "
+                           "Copy the service_role key (NOT anon) from Lovable Cloud → Backend → Settings → API.")
+            raise SystemExit(2)
+        log.warning("startup_db_check_failed", error=msg[:300])
+
     db_log("info", f"worker starting v{settings().WORKER_VERSION}", scope="boot")
     sched = AsyncIOScheduler()
     sched.add_job(tick_heartbeat, IntervalTrigger(seconds=30), id="heartbeat", max_instances=1)
@@ -112,8 +110,6 @@ async def main():
     sched.add_job(tick_apply, IntervalTrigger(seconds=45), id="apply", max_instances=1)
     sched.start()
     beat()
-    asyncio.create_task(realtime_sources_listener())
-    asyncio.create_task(wake_loop())
     db_log("info", "scheduler started", scope="boot")
     while True:
         await asyncio.sleep(3600)

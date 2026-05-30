@@ -1,28 +1,66 @@
+## What the logs show
+
+The worker is now starting successfully, but every database request is failing with:
+
+```text
+401 Unauthorized: Invalid API key
+```
+
+This means the Docker worker is using a wrong, expired, or copied-truncated `SUPABASE_SERVICE_ROLE_KEY` in `worker/.env`. The worker code is reading `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` correctly, but the value on the server is not accepted by the backend.
+
+There is also a secondary warning:
+
+```text
+This feature isn't available in the sync client. You can use the realtime feature in the async client only.
+```
+
+That realtime warning is not the main blocker, but it will keep repeating in logs.
+
 ## Plan
 
-1. **Make the worker import resilient**
-   - Update `worker/app/apply/browser.py` so the worker does not crash at startup if `playwright-stealth` changes its export shape again.
-   - Keep stealth enabled when available, but make it optional/fail-safe so browser startup can continue.
+1. Add safer worker startup validation
+   - Validate that `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `JOBPILOT_USER_ID` look valid before the scheduler starts.
+   - Run a small backend health/query check at boot.
+   - If the key is invalid, log one clear message and stop instead of flooding logs every 5 seconds.
 
-2. **Keep dependency fix permanent**
-   - Keep `setuptools>=68` in `worker/pyproject.toml` because `playwright-stealth` 1.x imports `pkg_resources`, which comes from setuptools on Python 3.12.
-   - Keep `playwright-stealth>=1.0.6,<2` to avoid the 2.x API mismatch that removed `stealth_async`.
+2. Make scheduled command polling resilient
+   - Wrap `tick_commands()` database polling in a try/except so API failures do not produce repeated APScheduler tracebacks.
+   - Log a concise `commands_poll_failed` warning.
 
-3. **Add a simple import compatibility path**
-   - Support both common forms:
-     - `from playwright_stealth import stealth_async`
-     - fallback to `from playwright_stealth.stealth import stealth_async`
-   - If neither works, set stealth to `None` and skip only that optional stealth call.
+3. Remove or disable the broken sync realtime listener
+   - Since the current sync Python client cannot use realtime, disable that listener path.
+   - Keep the normal 2-minute scheduler polling, so sources still run without realtime.
 
-4. **Server commands after code is updated**
-   - On your server, pull the new code and recreate the worker:
+4. Update server instructions
+   - Add exact safe commands for checking `.env` without printing secrets.
+   - Tell you which key must be replaced on the VPS: `SUPABASE_SERVICE_ROLE_KEY`.
+   - Then rebuild/recreate the worker.
+
+## What you will need to do on the server after this code change
+
+You will still need to update the secret in `~/jobpilot/worker/.env`; code cannot fix an invalid key stored on the VPS.
+
+The important check is:
 
 ```bash
 cd ~/jobpilot/worker
-git pull
+nano .env
+```
+
+Make sure:
+
+```text
+SUPABASE_URL=https://iarfebnnnoswymgfvnel.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<real service role key, not anon key>
+JOBPILOT_USER_ID=6143b580-35ac-4204-9807-1cf07f6fcff7
+```
+
+Then run:
+
+```bash
 docker compose build worker
 docker compose up -d --force-recreate worker
 docker compose logs -f worker
 ```
 
-Expected result: no `stealth_async` import error, no `pkg_resources` error, and the worker stays running instead of restarting.
+Expected result: no `Invalid API key` messages, heartbeat succeeds, and the worker keeps running cleanly.
