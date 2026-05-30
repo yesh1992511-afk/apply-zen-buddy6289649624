@@ -12,12 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePickerField } from "@/components/DatePickerField";
 import {
-  COUNTRIES, US_STATES, US_METROS, WORK_AUTH_US, YES_NO_PREFER,
+  COUNTRIES, US_STATES, US_METROS, WORK_AUTH_US,
   GENDER, PRONOUNS, ETHNICITY_EEOC, VETERAN_STATUS, DISABILITY_STATUS, LGBTQ_STATUS,
-  REMOTE_PREFERENCE, EMPLOYMENT_TYPES, SENIORITY, INDUSTRIES, SALARY_PERIOD, CURRENCIES,
+  REMOTE_PREFERENCE, INDUSTRIES, SALARY_PERIOD, CURRENCIES,
   NOTICE_PERIOD_WEEKS, TRAVEL_WILLINGNESS, SHIFT_PREFERENCE, SECURITY_CLEARANCE,
   PROFICIENCY_LANGUAGE, PROFICIENCY_SKILL, DEGREE, COVER_LETTER_TONE, SCREENING_OPTIONS,
 } from "@/lib/profile-options";
+
 
 import { toast } from "sonner";
 import { useUser } from "@/lib/useAuth";
