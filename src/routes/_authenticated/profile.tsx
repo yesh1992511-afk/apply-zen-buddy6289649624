@@ -138,7 +138,7 @@ function ProfilePage() {
         <TabsContent value="projects"><ListSection table="projects" /></TabsContent>
         <TabsContent value="skills"><ListSection table="skills" /></TabsContent>
         <TabsContent value="educations"><ListSection table="educations" /></TabsContent>
-        <TabsContent value="resume"><ResumeUploader /></TabsContent>
+        <TabsContent value="resume"><ResumeStudio /></TabsContent>
       </Tabs>
     </div>
   );
