@@ -144,7 +144,12 @@ function SourcesPage() {
         } as never);
       }
       if ((srcCount ?? 0) === 0) {
-        const rows = PRESETS.map((p) => ({ ...p, user_id: user.id, enabled: true }));
+        const rows = PRESETS.map((p) => ({
+          ...p,
+          config: applyTargetToSourceConfig(p.key, p.config, target),
+          user_id: user.id,
+          enabled: true,
+        }));
         await supabase.from("sources").insert(rows as never);
         toast.success(`Seeded ${rows.length} sources — enabled by default`);
         load();
