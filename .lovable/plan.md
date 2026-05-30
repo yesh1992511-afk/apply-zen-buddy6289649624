@@ -1,67 +1,54 @@
-## Goal
+# Goal
 
-Make `/admin` a real, separate **super-admin** area — not visible to regular users or even the workspace **owner**. Fix the clumsy layout and the "The app encountered an error" toast on Audit log.
+Replace the thin one-paragraph system prompt in `src/lib/apply/ai.server.ts` (`generateTailoredResume`) with a rigorous ATS-strict prompt distilled from your uploaded `example prompt.docx`, so every tailored resume the worker generates follows your role-mapping, bullet-anatomy, anti-repetition, keyword-bolding, and validation rules.
 
-## 1. Backend — new `super_admin` role
+Scope: prompt content + a small wrapper around it. No DB changes, no UI changes, no new tables, no new routes.
 
-Migration:
-- Add `'super_admin'` to the `app_role` enum.
-- Seed your account (`6143b580-…fff7`) with `super_admin` so you keep access.
-- Update every RLS policy that currently grants admin pages to `owner`/`admin` so they require `has_role(auth.uid(), 'super_admin')` instead (audit_log, feature_flags, plans, system tables, observability views).
-- Keep `owner`/`admin` for the normal app — they just lose `/admin` access.
+## What I'll change
 
-No new table needed; `user_roles` already supports it.
+### 1. `src/lib/apply/ai.server.ts` — rewrite `generateTailoredResume`
 
-## 2. Route gating — only super-admin
+Keep the function signature (`profile`, `job` → markdown string) so the worker call sites don't change. Internally:
 
-`src/routes/admin.tsx` `beforeLoad`:
-- If not logged in → `redirect /admin/login` (new dedicated login).
-- If logged in but not `super_admin` → `redirect /` with a toast "Admin area is restricted".
-- Hide the "Admin" link in the main sidebar unless the current user has `super_admin`.
+- New `SYSTEM_PROMPT` constant ≈ 70 lines, encoding the rules from your doc:
+  - **Role**: ATS-strict resume optimizer; preserve candidate truth (no invented employers/dates/credentials).
+  - **Title normalization**: most-recent role title rewritten to match JD target role (industry-standard equivalent, not copy-paste); prior roles one/two levels below where appropriate.
+  - **Summary**: rephrased in candidate voice, 4–6 high-signal JD keywords wrapped in `**bold**`, no copying JD sentences.
+  - **Experience**: exactly 7 bullets per role, each 25–35 words, one sentence, ≤2 commas / ≤1 "and" / ≤2 tool mentions, no parens/em-dashes, ≥1 numeric metric per bullet, first bullet describes system/team/goal/role.
+  - **Bullet anatomy**: `[Action verb] + [initiative + scope] + [tools] + [core action] + [risk addressed] + [quantified impact]`.
+  - **Coverage lenses** (rotate across bullets in a role): latency/scale, data quality, platform/IaC, modeling/marts, streaming, orchestration/observability, security/governance.
+  - **Anti-repetition**: unique first verb + two-word opener per bullet within a role; no repeated tri-grams; banned scaffolds ("Integrated data from…", "Set up, deployed, and configured…", "Provided management reporting…", "Created innovative solutions…") allowed at most once per role.
+  - **Action verb bank** embedded verbatim from doc.
+  - **Skills**: keep existing; append JD-required tools; group by category; no duplicates; no proprietary tools.
+  - **Projects**: reframe rather than replace when partially aligned; descriptive original names; never copy JD product names.
+  - **Keyword bolding**: wrap each exact JD term in `**…**` on first appearance in each section; cap at 3–4 repetitions resume-wide; never bold soft skills/generic verbs.
+  - **Realism guardrails**: don't invent tools/certs/clearances; preserve years of experience; flag visa/clearance/geo conflicts inline at top with `<!-- GUARDRAIL: … -->` instead of silently proceeding.
+  - **Validation pass** the model must self-run before emitting: bullet counts, word range, unique openers, no tri-gram repeats, ≥1 metric + ≥1 JD tool per bullet, ≥6 quantified achievements total, all high-priority JD keywords bolded ≥once.
+  - **Output**: Markdown only, name as H1, no commentary, no code fences around the whole resume.
 
-## 3. Separate super-admin login
+- Keep the user message as today (target job block + JSON profile dump), with the JD slice raised from 4000 → 6000 chars so keyword coverage is fairer.
 
-New route `src/routes/admin/login.tsx`:
-- Standalone page (no app shell), dark "console" styling, shield icon, "Super-admin access only".
-- Email + password sign-in via Supabase, then verifies `super_admin` role; signs the user out and shows an error if they lack it.
-- Robots noindex/nofollow.
-- No "sign up" / "forgot password to create account" — recovery only.
+- Model: keep `google/gemini-2.5-pro` for tailored resumes; it handles the long rule set best.
 
-## 4. UI polish for `/admin/*`
+### 2. Leave `generateCoverLetter` alone
 
-Rebuild `admin.tsx` shell:
-- Proper console layout: fixed left rail with sections (Observability, System, Audit log, Feature flags, Plans), top bar with current super-admin email + "Exit admin" button, content area with breadcrumbs.
-- Replace the cramped underline tab row with the side rail (matches the screenshot's "console" intent and removes the empty black void below content).
-- Consistent card framing for empty states ("No audit entries yet" inside a centered illustration block, not a stretched empty rectangle).
-- Tighten spacing, use design tokens only.
+Your doc is resume-specific; cover-letter prompt stays as-is.
 
-## 5. Fix the runtime error on Audit log
+### 3. No call-site changes
 
-The red "The app encountered an error" card in your screenshot comes from `ErrorBoundaryRoute` on `/admin/audit`. Root cause: the page calls `supabase.from("audit_log").select(...)` directly from the browser, but `audit_log` RLS will reject it once policies are tightened, and the `.then()` chain doesn't handle the error → boundary triggers.
+`apply-worker.ts` and anywhere else that calls `generateTailoredResume(profile, job)` keep working unchanged.
 
-Fix:
-- Move all admin data reads (audit_log, feature_flags, system stats, plans, observability) behind `createServerFn` + `requireSupabaseAuth` middleware that additionally asserts `has_role(userId, 'super_admin')`, and use the admin Supabase client so RLS doesn't bite.
-- Convert the page to TanStack Query (`useQuery` + `useServerFn`) so errors surface inline ("Failed to load audit log — Retry") instead of crashing the route.
-- Apply the same pattern to the other admin tabs.
+## Out of scope (ask if you want these next)
 
-## 6. Verify
+- LaTeX path: your doc references `.tex` preamble preservation. Current worker generates **Markdown** resumes (then renders to PDF elsewhere). Adding a LaTeX-preserving path would need a new function + a stored LaTeX template per user. I can add that as a follow-up if you want.
+- "remember this structure" command: would need a `resume_templates` table to store the verbatim LaTeX. Follow-up.
+- A UI control to preview/regenerate with the new prompt — current admin "test_apply" worker command already covers this once shipped.
 
-- Log in as your owner account → `/admin` redirects to `/admin/login`.
-- Log in at `/admin/login` with same account (now also `super_admin`) → console loads, Audit log renders without the error card.
-- Create a second test user with only `owner` role → `/admin` redirects away, sidebar hides Admin link.
+## Verification after build
 
-## Out of scope
+1. From `/admin` → System → Command Center, dispatch `test_apply` against a known job.
+2. Open the generated resume in `/applications/:id` and confirm: 7-bullet roles, bolded JD terms, numeric metric per bullet, no banned scaffolds.
 
-- Separate super-admin user database (we reuse Supabase auth + role table; safer than a parallel auth system).
-- Email/2FA hardening for super-admin (can add TOTP later if you want).
-- Visual redesign of non-admin pages.
+## Files touched
 
-## Technical notes
-
-Files touched:
-- new migration: add enum value + seed + tighten RLS
-- `src/routes/admin.tsx` — new shell + strict gate
-- `src/routes/admin/login.tsx` — new
-- `src/routes/admin/{audit,observability,system,flags,plans}.tsx` — switch to server fns + useQuery
-- `src/lib/admin.functions.ts` — new server fns with `super_admin` guard
-- `src/components/AppSidebar.tsx` (or wherever the admin link lives) — conditional render
+- `src/lib/apply/ai.server.ts` (only `generateTailoredResume` body + new prompt constant)
