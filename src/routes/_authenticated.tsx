@@ -44,6 +44,9 @@ function AuthLayout() {
   const [ready, setReady] = useState(false);
   const [heartbeat, setHeartbeat] = useState<string | null>(null);
   const [automation, setAutomation] = useState<{ enabled: boolean } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const showHelp = useCallback(() => setHelpOpen(true), []);
+  useGlobalShortcuts(showHelp);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
