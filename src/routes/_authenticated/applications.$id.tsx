@@ -276,11 +276,15 @@ function ApplicationDetailPage() {
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="hidden">
               <TabsTrigger value="form">Form</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="resume">Resume</TabsTrigger>
               <TabsTrigger value="cover">Cover</TabsTrigger>
             </TabsList>
             <TabsContent value="form" className="mt-0">
               <FormFillTable rows={fillRows} isActive={isActive} />
+            </TabsContent>
+            <TabsContent value="timeline" className="mt-0">
+              <ApplicationTimeline events={eventsQuery.data ?? []} />
             </TabsContent>
             <TabsContent value="resume" className="mt-0">
               <PdfViewer url={resumeUrl} title={resume?.name ?? "Tailored resume"} isGenerating={isActive && !resumeUrl} />
@@ -289,6 +293,7 @@ function ApplicationDetailPage() {
               <PdfViewer url={coverUrl} title={coverLetter?.name ?? "Cover letter"} isGenerating={isActive && !coverUrl} />
             </TabsContent>
           </Tabs>
+
         </div>
       </div>
     </div>
