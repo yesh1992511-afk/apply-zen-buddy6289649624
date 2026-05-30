@@ -1117,6 +1117,39 @@ export type Database = {
         }
         Relationships: []
       }
+      session_cookies: {
+        Row: {
+          ciphertext: string
+          created_at: string
+          expires_at: string | null
+          host: string
+          id: string
+          iv: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ciphertext: string
+          created_at?: string
+          expires_at?: string | null
+          host: string
+          id?: string
+          iv: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ciphertext?: string
+          created_at?: string
+          expires_at?: string | null
+          host?: string
+          id?: string
+          iv?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       skills: {
         Row: {
           category: string | null

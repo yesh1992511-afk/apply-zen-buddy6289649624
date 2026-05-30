@@ -11,6 +11,9 @@ import { StatusDot } from "@/components/StatusDot";
 import { EmptyState } from "@/components/EmptyState";
 import { CountUp } from "@/components/CountUp";
 import { CardSkeleton } from "@/components/skeletons";
+import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+import { LiveDot } from "@/components/LiveDot";
+
 
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -91,9 +94,15 @@ function Dashboard() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 15_000);
+    const t = setInterval(load, 30_000);
     return () => clearInterval(t);
   }, []);
+  // Realtime nervous system: refresh on any relevant table change.
+  useRealtimeInvalidate({ table: "jobs", onChange: load });
+  useRealtimeInvalidate({ table: "applications", onChange: load });
+  useRealtimeInvalidate({ table: "worker_heartbeat", onChange: load });
+  useRealtimeInvalidate({ table: "logs", onChange: load });
+
 
   const workerOk = heartbeat && Date.now() - new Date(heartbeat).getTime() < 5 * 60_000;
   const workerStatus: "online" | "warning" | "offline" = !heartbeat
@@ -142,11 +151,14 @@ function Dashboard() {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-3 float-in">
         <div>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">Welcome back</h1>
+          <h1 className="font-heading text-3xl font-semibold tracking-tight flex items-center gap-3">
+            <LiveDot /> Welcome back
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Live snapshot of your job hunt autopilot.
           </p>
         </div>
+
         <Link
           to="/jobs"
           className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-2 px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-ring"

@@ -13,6 +13,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedWorkerRouteImport } from './routes/_authenticated/worker'
 import { Route as AuthenticatedSourcesRouteImport } from './routes/_authenticated/sources'
 import { Route as AuthenticatedSetupRouteImport } from './routes/_authenticated/setup'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
@@ -25,7 +26,10 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
 import { Route as AuthenticatedApplicationsIdRouteImport } from './routes/_authenticated/applications.$id'
+import { Route as ApiPublicSourcesWorkerStatusRouteImport } from './routes/api/public/sources/worker-status'
+import { Route as ApiPublicSourcesUploadCookiesRouteImport } from './routes/api/public/sources/upload-cookies'
 import { Route as ApiPublicSourcesRunTierRouteImport } from './routes/api/public/sources/run-tier'
+import { Route as ApiPublicSourcesQueueApplyRouteImport } from './routes/api/public/sources/queue-apply'
 import { Route as ApiPublicSourcesIngestExtensionRouteImport } from './routes/api/public/sources/ingest-extension'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
@@ -49,6 +53,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedWorkerRoute = AuthenticatedWorkerRouteImport.update({
+  id: '/worker',
+  path: '/worker',
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedSourcesRoute = AuthenticatedSourcesRouteImport.update({
   id: '/sources',
@@ -113,11 +122,29 @@ const AuthenticatedApplicationsIdRoute =
     path: '/$id',
     getParentRoute: () => AuthenticatedApplicationsRoute,
   } as any)
+const ApiPublicSourcesWorkerStatusRoute =
+  ApiPublicSourcesWorkerStatusRouteImport.update({
+    id: '/api/public/sources/worker-status',
+    path: '/api/public/sources/worker-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicSourcesUploadCookiesRoute =
+  ApiPublicSourcesUploadCookiesRouteImport.update({
+    id: '/api/public/sources/upload-cookies',
+    path: '/api/public/sources/upload-cookies',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicSourcesRunTierRoute = ApiPublicSourcesRunTierRouteImport.update({
   id: '/api/public/sources/run-tier',
   path: '/api/public/sources/run-tier',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSourcesQueueApplyRoute =
+  ApiPublicSourcesQueueApplyRouteImport.update({
+    id: '/api/public/sources/queue-apply',
+    path: '/api/public/sources/queue-apply',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicSourcesIngestExtensionRoute =
   ApiPublicSourcesIngestExtensionRouteImport.update({
     id: '/api/public/sources/ingest-extension',
@@ -158,12 +185,16 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
+  '/worker': typeof AuthenticatedWorkerRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
+  '/api/public/sources/queue-apply': typeof ApiPublicSourcesQueueApplyRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
+  '/api/public/sources/upload-cookies': typeof ApiPublicSourcesUploadCookiesRoute
+  '/api/public/sources/worker-status': typeof ApiPublicSourcesWorkerStatusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -180,12 +211,16 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
+  '/worker': typeof AuthenticatedWorkerRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
+  '/api/public/sources/queue-apply': typeof ApiPublicSourcesQueueApplyRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
+  '/api/public/sources/upload-cookies': typeof ApiPublicSourcesUploadCookiesRoute
+  '/api/public/sources/worker-status': typeof ApiPublicSourcesWorkerStatusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -204,12 +239,16 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/sources': typeof AuthenticatedSourcesRoute
+  '/_authenticated/worker': typeof AuthenticatedWorkerRoute
   '/_authenticated/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
+  '/api/public/sources/queue-apply': typeof ApiPublicSourcesQueueApplyRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
+  '/api/public/sources/upload-cookies': typeof ApiPublicSourcesUploadCookiesRoute
+  '/api/public/sources/worker-status': typeof ApiPublicSourcesWorkerStatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -228,12 +267,16 @@ export interface FileRouteTypes {
     | '/profile'
     | '/setup'
     | '/sources'
+    | '/worker'
     | '/applications/$id'
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/ingest-extension'
+    | '/api/public/sources/queue-apply'
     | '/api/public/sources/run-tier'
+    | '/api/public/sources/upload-cookies'
+    | '/api/public/sources/worker-status'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -250,12 +293,16 @@ export interface FileRouteTypes {
     | '/profile'
     | '/setup'
     | '/sources'
+    | '/worker'
     | '/applications/$id'
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/ingest-extension'
+    | '/api/public/sources/queue-apply'
     | '/api/public/sources/run-tier'
+    | '/api/public/sources/upload-cookies'
+    | '/api/public/sources/worker-status'
   id:
     | '__root__'
     | '/'
@@ -273,12 +320,16 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/setup'
     | '/_authenticated/sources'
+    | '/_authenticated/worker'
     | '/_authenticated/applications/$id'
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/ingest-extension'
+    | '/api/public/sources/queue-apply'
     | '/api/public/sources/run-tier'
+    | '/api/public/sources/upload-cookies'
+    | '/api/public/sources/worker-status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -290,7 +341,10 @@ export interface RootRouteChildren {
   ApiPublicHooksCheckHeartbeatRoute: typeof ApiPublicHooksCheckHeartbeatRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
   ApiPublicSourcesIngestExtensionRoute: typeof ApiPublicSourcesIngestExtensionRoute
+  ApiPublicSourcesQueueApplyRoute: typeof ApiPublicSourcesQueueApplyRoute
   ApiPublicSourcesRunTierRoute: typeof ApiPublicSourcesRunTierRoute
+  ApiPublicSourcesUploadCookiesRoute: typeof ApiPublicSourcesUploadCookiesRoute
+  ApiPublicSourcesWorkerStatusRoute: typeof ApiPublicSourcesWorkerStatusRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -322,6 +376,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/worker': {
+      id: '/_authenticated/worker'
+      path: '/worker'
+      fullPath: '/worker'
+      preLoaderRoute: typeof AuthenticatedWorkerRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/sources': {
       id: '/_authenticated/sources'
@@ -407,11 +468,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApplicationsIdRouteImport
       parentRoute: typeof AuthenticatedApplicationsRoute
     }
+    '/api/public/sources/worker-status': {
+      id: '/api/public/sources/worker-status'
+      path: '/api/public/sources/worker-status'
+      fullPath: '/api/public/sources/worker-status'
+      preLoaderRoute: typeof ApiPublicSourcesWorkerStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sources/upload-cookies': {
+      id: '/api/public/sources/upload-cookies'
+      path: '/api/public/sources/upload-cookies'
+      fullPath: '/api/public/sources/upload-cookies'
+      preLoaderRoute: typeof ApiPublicSourcesUploadCookiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/sources/run-tier': {
       id: '/api/public/sources/run-tier'
       path: '/api/public/sources/run-tier'
       fullPath: '/api/public/sources/run-tier'
       preLoaderRoute: typeof ApiPublicSourcesRunTierRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sources/queue-apply': {
+      id: '/api/public/sources/queue-apply'
+      path: '/api/public/sources/queue-apply'
+      fullPath: '/api/public/sources/queue-apply'
+      preLoaderRoute: typeof ApiPublicSourcesQueueApplyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/sources/ingest-extension': {
@@ -471,6 +553,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSetupRoute: typeof AuthenticatedSetupRoute
   AuthenticatedSourcesRoute: typeof AuthenticatedSourcesRoute
+  AuthenticatedWorkerRoute: typeof AuthenticatedWorkerRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -485,6 +568,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSetupRoute: AuthenticatedSetupRoute,
   AuthenticatedSourcesRoute: AuthenticatedSourcesRoute,
+  AuthenticatedWorkerRoute: AuthenticatedWorkerRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
@@ -500,7 +584,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksCheckHeartbeatRoute: ApiPublicHooksCheckHeartbeatRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
   ApiPublicSourcesIngestExtensionRoute: ApiPublicSourcesIngestExtensionRoute,
+  ApiPublicSourcesQueueApplyRoute: ApiPublicSourcesQueueApplyRoute,
   ApiPublicSourcesRunTierRoute: ApiPublicSourcesRunTierRoute,
+  ApiPublicSourcesUploadCookiesRoute: ApiPublicSourcesUploadCookiesRoute,
+  ApiPublicSourcesWorkerStatusRoute: ApiPublicSourcesWorkerStatusRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     APPLY_EMAIL: str = ""
     APPLY_PASSWORD: str = ""
     APPLY_DEFAULT_PHONE: str = ""
+    # Cookie pipe — must match the extension's Options-page passphrase
+    COOKIE_PIPE_PASSPHRASE: str = ""
+
 
     # Misc
     ALERT_WEBHOOK_URL: str = ""

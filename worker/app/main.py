@@ -1,4 +1,9 @@
-"""Worker entrypoint: APScheduler runs scraping + apply loops, plus heartbeat."""
+"""Worker entrypoint: APScheduler runs scraping + apply loops, plus heartbeat.
+
+Also listens to Supabase realtime on the `sources` table so the worker wakes
+up the moment the user toggles a source in the dashboard, instead of waiting
+for the next 2-minute tick.
+"""
 import asyncio
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
@@ -33,6 +38,11 @@ def in_active_window() -> bool:
     return start <= now <= end
 
 
+# Wake event raised by the realtime listener; tick_sources awaits it so the
+# worker reacts immediately to source toggles.
+_wake = asyncio.Event()
+
+
 async def tick_sources():
     if not in_active_window():
         return
@@ -55,6 +65,39 @@ async def tick_heartbeat():
     beat()
 
 
+async def realtime_sources_listener():
+    """Subscribe to postgres_changes on sources for our user and wake the loop.
+    Falls back silently if realtime is unavailable so the cadence tick still runs."""
+    try:
+        from supabase import create_client
+        client = create_client(settings().SUPABASE_URL, settings().SUPABASE_SERVICE_ROLE_KEY)
+        uid = user_id()
+
+        def _on_change(payload):
+            db_log("info", "sources changed (realtime) — forcing tick", scope="scheduler")
+            _wake.set()
+
+        channel = client.channel(f"worker-sources-{uid}")
+        channel.on_postgres_changes(
+            event="*", schema="public", table="sources",
+            filter=f"user_id=eq.{uid}", callback=_on_change,
+        ).subscribe()
+        db_log("info", "realtime sources listener subscribed", scope="boot")
+    except Exception as e:
+        log.warning("realtime_listener_failed", error=str(e))
+
+
+async def wake_loop():
+    """When _wake is set, force-run sources immediately."""
+    while True:
+        await _wake.wait()
+        _wake.clear()
+        try:
+            await run_due_sources(force=True)
+        except Exception as e:
+            db_log("error", f"forced sources run failed: {e}", scope="scheduler")
+
+
 async def main():
     db_log("info", f"worker starting v{settings().WORKER_VERSION}", scope="boot")
     sched = AsyncIOScheduler()
@@ -64,6 +107,8 @@ async def main():
     sched.add_job(tick_apply, IntervalTrigger(seconds=45), id="apply", max_instances=1)
     sched.start()
     beat()
+    await realtime_sources_listener()
+    asyncio.create_task(wake_loop())
     db_log("info", "scheduler started", scope="boot")
     while True:
         await asyncio.sleep(3600)
@@ -71,3 +116,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

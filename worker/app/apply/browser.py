@@ -89,10 +89,18 @@ async def new_browser(portal_key: str = "default", headless: bool = True, finger
             await stealth_async(page)
         except Exception:
             pass
+        # Inject session cookies uploaded by the browser extension, if any.
+        # Mapped by host so LinkedIn cookies only land on the LinkedIn portal.
+        try:
+            from .. import sessions as _sessions
+            await _sessions.inject_cookies(ctx, f"https://{portal_key}.com")
+        except Exception:
+            pass
         try:
             yield page, ctx
         finally:
             await ctx.close()
+
 
 
 # ---------------------------------------------------------------------------
