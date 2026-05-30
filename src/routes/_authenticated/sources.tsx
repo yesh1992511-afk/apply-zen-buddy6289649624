@@ -183,11 +183,76 @@ function SourcesPage() {
   const seed = async () => {
     if (!user) return;
     const existing = new Set(sources.map((s) => s.key));
-    const rows = PRESETS.filter((p) => !existing.has(p.key)).map((p) => ({ ...p, user_id: user.id, enabled: true }));
+    const rows = PRESETS.filter((p) => !existing.has(p.key)).map((p) => ({
+      ...p,
+      config: applyTargetToSourceConfig(p.key, p.config, target),
+      user_id: user.id,
+      enabled: true,
+    }));
     if (rows.length === 0) { toast.info("All presets already added"); return; }
     const { error } = await supabase.from("sources").insert(rows as never);
     if (error) toast.error(error.message); else { toast.success(`Seeded ${rows.length} sources`); load(); }
   };
+
+  const applyTarget = async () => {
+    if (!user) return;
+    if (target.titles.length === 0) { toast.error("Add at least one title/keyword"); return; }
+    setApplyingTarget(true);
+    try {
+      // 1) Persist target on automation_settings
+      const { error: asErr } = await supabase.from("automation_settings").upsert({
+        user_id: user.id,
+        target_titles: target.titles,
+        target_locations: target.locations,
+        target_country: target.country,
+        target_posted_within_hours: target.postedWithinHours,
+        target_exclude_keywords: target.excludeKeywords,
+      } as never, { onConflict: "user_id" });
+      if (asErr) throw asErr;
+
+      // 2) Rewrite every source's config in-place
+      const updates = sources.map((s) => ({
+        id: s.id,
+        config: applyTargetToSourceConfig(s.key, s.config, target),
+      }));
+      for (const u of updates) {
+        await supabase.from("sources").update({ config: u.config } as never).eq("id", u.id);
+      }
+
+      // 3) Update (or create) default filter to match
+      const { data: defaultFilter } = await supabase
+        .from("filters").select("id").eq("is_default", true).maybeSingle();
+      const filterPatch = {
+        keywords: target.titles,
+        exclude_keywords: target.excludeKeywords,
+        locations: target.locations,
+        posted_within_hours: target.postedWithinHours,
+        min_score: 35,
+      };
+      if (defaultFilter?.id) {
+        await supabase.from("filters").update(filterPatch as never).eq("id", defaultFilter.id);
+      } else {
+        await supabase.from("filters").insert({
+          ...filterPatch,
+          user_id: user.id,
+          name: findPreset(target.field)?.label ?? "Default",
+          is_default: true,
+          remote_only: false,
+          onsite_ok: true,
+          hybrid_ok: true,
+        } as never);
+      }
+
+      toast.success(`Target applied to ${updates.length} sources + default filter`);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to apply target");
+    } finally {
+      setApplyingTarget(false);
+    }
+  };
+
+
 
   const update = async (id: string, patch: Partial<Source>) => {
     const prev = sources;
