@@ -181,6 +181,45 @@ export type Database = {
         }
         Relationships: []
       }
+      certifications: {
+        Row: {
+          created_at: string
+          credential_id: string | null
+          expiry_date: string | null
+          id: string
+          issued_date: string | null
+          issuer: string | null
+          name: string
+          sort_order: number | null
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credential_id?: string | null
+          expiry_date?: string | null
+          id?: string
+          issued_date?: string | null
+          issuer?: string | null
+          name: string
+          sort_order?: number | null
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credential_id?: string | null
+          expiry_date?: string | null
+          id?: string
+          issued_date?: string | null
+          issuer?: string | null
+          name?: string
+          sort_order?: number | null
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       educations: {
         Row: {
           created_at: string
@@ -463,6 +502,33 @@ export type Database = {
         }
         Relationships: []
       }
+      languages: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          proficiency: string | null
+          sort_order: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          proficiency?: string | null
+          sort_order?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          proficiency?: string | null
+          sort_order?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       logs: {
         Row: {
           application_id: string | null
@@ -597,83 +663,233 @@ export type Database = {
       }
       profile: {
         Row: {
+          address_line_2: string | null
           apply_email: string | null
           apply_password_set: boolean | null
+          authorized_countries: string[] | null
+          available_hours_per_week: number | null
+          behance_url: string | null
+          city: string | null
+          country: string | null
           cover_letter_tone: string | null
           created_at: string
+          current_salary: number | null
+          date_of_birth: string | null
+          desired_industries: string[] | null
+          desired_salary: number | null
+          desired_titles: string[] | null
+          disability_status: string | null
+          dribbble_url: string | null
+          drivers_license: boolean | null
+          earliest_start_date: string | null
           email: string | null
+          ethnicity: string | null
+          excluded_industries: string[] | null
           full_name: string | null
+          gender: string | null
           github_url: string | null
+          has_own_transport: boolean | null
+          has_passport: boolean | null
           headline: string | null
+          lgbtq_status: string | null
           linkedin_url: string | null
+          linkedin_username: string | null
           location: string | null
+          medium_url: string | null
+          nationality: string | null
+          needs_visa_future: boolean | null
+          needs_visa_now: boolean | null
+          notice_period_weeks: number | null
+          open_to_contract: boolean | null
+          open_to_fulltime: boolean | null
+          open_to_internship: boolean | null
+          open_to_parttime: boolean | null
+          passport_country: string | null
+          personal_website: string | null
           phone: string | null
           portfolio_url: string | null
+          postal_code: string | null
           preferred_locations: string[] | null
+          preferred_name: string | null
+          pronouns: string | null
           remote_preference: string | null
           requires_sponsorship: boolean | null
           salary_currency: string | null
           salary_max: number | null
           salary_min: number | null
+          salary_period: string | null
+          screening_answers: Json | null
+          security_clearance: string | null
+          share_demographics: boolean | null
+          shift_preference: string | null
+          stackoverflow_url: string | null
+          state_region: string | null
+          street_address: string | null
           summary: string | null
           timezone: string | null
+          travel_willingness: string | null
+          twitter_url: string | null
           updated_at: string
           user_id: string
+          veteran_status: string | null
+          visa_expiry: string | null
+          visa_status: string | null
           willing_to_relocate: boolean | null
+          work_auth_country: string | null
           work_authorization: string | null
           years_experience: number | null
         }
         Insert: {
+          address_line_2?: string | null
           apply_email?: string | null
           apply_password_set?: boolean | null
+          authorized_countries?: string[] | null
+          available_hours_per_week?: number | null
+          behance_url?: string | null
+          city?: string | null
+          country?: string | null
           cover_letter_tone?: string | null
           created_at?: string
+          current_salary?: number | null
+          date_of_birth?: string | null
+          desired_industries?: string[] | null
+          desired_salary?: number | null
+          desired_titles?: string[] | null
+          disability_status?: string | null
+          dribbble_url?: string | null
+          drivers_license?: boolean | null
+          earliest_start_date?: string | null
           email?: string | null
+          ethnicity?: string | null
+          excluded_industries?: string[] | null
           full_name?: string | null
+          gender?: string | null
           github_url?: string | null
+          has_own_transport?: boolean | null
+          has_passport?: boolean | null
           headline?: string | null
+          lgbtq_status?: string | null
           linkedin_url?: string | null
+          linkedin_username?: string | null
           location?: string | null
+          medium_url?: string | null
+          nationality?: string | null
+          needs_visa_future?: boolean | null
+          needs_visa_now?: boolean | null
+          notice_period_weeks?: number | null
+          open_to_contract?: boolean | null
+          open_to_fulltime?: boolean | null
+          open_to_internship?: boolean | null
+          open_to_parttime?: boolean | null
+          passport_country?: string | null
+          personal_website?: string | null
           phone?: string | null
           portfolio_url?: string | null
+          postal_code?: string | null
           preferred_locations?: string[] | null
+          preferred_name?: string | null
+          pronouns?: string | null
           remote_preference?: string | null
           requires_sponsorship?: boolean | null
           salary_currency?: string | null
           salary_max?: number | null
           salary_min?: number | null
+          salary_period?: string | null
+          screening_answers?: Json | null
+          security_clearance?: string | null
+          share_demographics?: boolean | null
+          shift_preference?: string | null
+          stackoverflow_url?: string | null
+          state_region?: string | null
+          street_address?: string | null
           summary?: string | null
           timezone?: string | null
+          travel_willingness?: string | null
+          twitter_url?: string | null
           updated_at?: string
           user_id: string
+          veteran_status?: string | null
+          visa_expiry?: string | null
+          visa_status?: string | null
           willing_to_relocate?: boolean | null
+          work_auth_country?: string | null
           work_authorization?: string | null
           years_experience?: number | null
         }
         Update: {
+          address_line_2?: string | null
           apply_email?: string | null
           apply_password_set?: boolean | null
+          authorized_countries?: string[] | null
+          available_hours_per_week?: number | null
+          behance_url?: string | null
+          city?: string | null
+          country?: string | null
           cover_letter_tone?: string | null
           created_at?: string
+          current_salary?: number | null
+          date_of_birth?: string | null
+          desired_industries?: string[] | null
+          desired_salary?: number | null
+          desired_titles?: string[] | null
+          disability_status?: string | null
+          dribbble_url?: string | null
+          drivers_license?: boolean | null
+          earliest_start_date?: string | null
           email?: string | null
+          ethnicity?: string | null
+          excluded_industries?: string[] | null
           full_name?: string | null
+          gender?: string | null
           github_url?: string | null
+          has_own_transport?: boolean | null
+          has_passport?: boolean | null
           headline?: string | null
+          lgbtq_status?: string | null
           linkedin_url?: string | null
+          linkedin_username?: string | null
           location?: string | null
+          medium_url?: string | null
+          nationality?: string | null
+          needs_visa_future?: boolean | null
+          needs_visa_now?: boolean | null
+          notice_period_weeks?: number | null
+          open_to_contract?: boolean | null
+          open_to_fulltime?: boolean | null
+          open_to_internship?: boolean | null
+          open_to_parttime?: boolean | null
+          passport_country?: string | null
+          personal_website?: string | null
           phone?: string | null
           portfolio_url?: string | null
+          postal_code?: string | null
           preferred_locations?: string[] | null
+          preferred_name?: string | null
+          pronouns?: string | null
           remote_preference?: string | null
           requires_sponsorship?: boolean | null
           salary_currency?: string | null
           salary_max?: number | null
           salary_min?: number | null
+          salary_period?: string | null
+          screening_answers?: Json | null
+          security_clearance?: string | null
+          share_demographics?: boolean | null
+          shift_preference?: string | null
+          stackoverflow_url?: string | null
+          state_region?: string | null
+          street_address?: string | null
           summary?: string | null
           timezone?: string | null
+          travel_willingness?: string | null
+          twitter_url?: string | null
           updated_at?: string
           user_id?: string
+          veteran_status?: string | null
+          visa_expiry?: string | null
+          visa_status?: string | null
           willing_to_relocate?: boolean | null
+          work_auth_country?: string | null
           work_authorization?: string | null
           years_experience?: number | null
         }
@@ -714,6 +930,42 @@ export type Database = {
           tech?: string[] | null
           updated_at?: string
           url?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      references_list: {
+        Row: {
+          company: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          relationship: string | null
+          sort_order: number | null
+          user_id: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          relationship?: string | null
+          sort_order?: number | null
+          user_id: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          relationship?: string | null
+          sort_order?: number | null
           user_id?: string
         }
         Relationships: []

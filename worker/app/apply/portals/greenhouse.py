@@ -4,7 +4,9 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from .base import Portal, ApplyResult
 from ..humanize import pause
+from ..form_walker import autofill_form
 from ...config import settings
+from ...db import db
 
 
 class Greenhouse(Portal):
@@ -39,6 +41,12 @@ class Greenhouse(Portal):
                     cl = page.locator("textarea[name*='cover'], textarea[id*='cover']")
                     if await cl.count():
                         await cl.first.fill(cover_letter_text)
+                # Walk the rest of the form and auto-answer any custom questions
+                try:
+                    lists = _load_lists(profile.get("user_id"))
+                    await autofill_form(page, profile, lists)
+                except Exception:
+                    pass
                 await pause(0.5, 1.5)
                 submit = page.locator("input[type='submit'], button[type='submit']").first
                 await submit.click()
@@ -62,3 +70,17 @@ def _save_shot(job_id: str, png: bytes) -> str:
     path = f"{user_id()}/{job_id}/{int(time.time())}.png"
     db().storage.from_("screenshots").upload(path, png, {"content-type": "image/png"})
     return path
+
+
+def _load_lists(user_id: str | None) -> dict:
+    """Fetch related rows (experiences/educations/languages/...) the mapper may need."""
+    if not user_id:
+        return {}
+    out: dict = {}
+    for tbl in ("experiences", "educations", "languages", "certifications", "skills", "projects"):
+        try:
+            res = db().table(tbl).select("*").eq("user_id", user_id).execute()
+            out[tbl] = res.data or []
+        except Exception:
+            out[tbl] = []
+    return out
