@@ -1,58 +1,62 @@
-# Whole-System Upgrade — Phased Plan
+# Phase 2 — Frontend User-Side Upgrade
 
-Goal: premium look, zero broken states, production-safe backend, reliable worker + extension. We ship **one phase per turn** so each lands clean and you can verify before the next.
+Goal: profile, jobs, applications, sources, settings feel premium and **never break**. Replace the ad-hoc `useEffect + supabase.from()` pattern with TanStack Query for caching, loading, and refetching — across 12 routes.
 
----
+## What changes
 
-## Phase 1 — Foundation: design system + global UX safety net
-*The base everything else sits on. Do this first or polish keeps drifting.*
+### 1. Data layer (foundation for the rest)
+- Add shared `queryOptions` factories in `src/lib/queries/` per domain: `profile`, `jobs`, `applications`, `sources`, `automation`, `notifications`, `filters`, `worker`, `logs`.
+- Each wraps `supabase.from(...)` calls (or existing server fns) with stable query keys.
+- Mutations become `useMutation` + `queryClient.invalidateQueries` — no more "save then reload page".
+- Add a small `useDirtyGuard()` hook for unsaved-changes warning.
 
-- Audit `src/styles.css` tokens — lock semantic colors (background, surface, primary, muted, destructive, success, warning), spacing scale, radius, shadows, gradients. Remove any hardcoded `text-white` / `bg-black` in components.
-- Global primitives: consistent `<PageHeader>`, `<EmptyState>`, `<LoadingSkeleton>`, `<ErrorState>`, `<ConfirmDialog>`, toast patterns.
-- Add a top-level **ErrorBoundary** + per-route `errorComponent` + `notFoundComponent` on every authenticated route (today most are missing).
-- Replace ad-hoc spinners with skeletons that match final layout.
-- Mobile pass on sidebar + profile + jobs + applications.
-- Accessibility: focus rings, aria-labels on icon buttons, form labels, color-contrast check.
+### 2. Profile (`/profile`, 890 lines → split)
+- Break the mega-form into a tabbed layout: **Personal · Address · Work Auth · Preferences · Demographics · Links · Screening**.
+- Zod schema **per section** with inline field errors.
+- **Autosave per section** (debounced 800 ms) with a "Saved · just now" indicator; remove the giant single Save button. Manual "Save now" still available per section.
+- Dirty-state guard on tab switch + browser unload.
+- Fixes the visa-status bug class permanently (each field is a controlled `useMutation`, no shared state-merge race).
 
-## Phase 2 — Frontend user side (profile, jobs, applications, sources, settings)
-- **Profile**: split mega-form into tabbed sections (Personal · Work Auth · Preferences · Demographics · Links · Screening). Zod validation per section, dirty-state tracking, "unsaved changes" guard, autosave per section instead of one giant save.
-- **Jobs**: filter chips, score badge, virtualized list, bulk actions (discard, queue apply), keyboard shortcuts.
-- **Applications**: timeline view per app with `application_events`, retry button (calls server fn), screenshots lightbox, status filters.
-- **Sources**: connection health badge, last-run summary, test-run button, clear error surfacing.
-- **Settings**: automation, notifications, secrets, Gmail credentials — all with inline validation + verify buttons.
-- TanStack Query everywhere with `queryOptions` + suspense; remove `useEffect`+`fetch` patterns.
+### 3. Jobs (`/jobs`)
+- Filter chip bar (matched / discarded / new / status) above list.
+- Score badge with color from token (`success` / `warning` / `destructive`).
+- Empty state when no matches.
+- Bulk actions: select rows → "Queue apply" / "Discard".
+- Keyboard: `j/k` navigate, `a` apply, `d` discard, `/` focus search.
+- Virtualized list (`@tanstack/react-virtual`) so 1000+ rows stay smooth.
 
-## Phase 3 — Backend hardening (DB + server functions)
-- **RLS audit** on all 30+ tables (already mostly owner-scoped — verify nothing leaks via joins).
-- **Zod input validators** on every `createServerFn` (currently many are unchecked).
-- **Indexes** on hot paths: `jobs(user_id, status, created_at)`, `applications(user_id, status, queued_at)`, `application_events(application_id, ts)`, `logs(user_id, ts)`, `worker_commands(user_id, status)`.
-- **Idempotency** on applications insert + worker_commands (key already on table — enforce in code).
-- **Retry policy** on `applications`: exponential backoff via `next_retry_at`, max attempts, move to DLQ status with reason.
-- **Audit log** writes on every mutation (profile changes, settings, source toggles, manual apply).
-- **Rate limits** per user on apply queue + AI calls using `usage_quotas`.
-- **Validation triggers** (not CHECK) for new business rules.
+### 4. Applications (`/applications` + `/applications/$id`)
+- List: status filter chips, retry button per row for failed/DLQ rows.
+- Detail page: **timeline view** built from `application_events` (phase + ts + message).
+- Screenshots gallery → click for lightbox.
+- "Retry now" button that mutates `applications.next_retry_at = now()` and invalidates the query.
 
-## Phase 4 — Server side / observability
-- Centralized error middleware on all server fns → write to `error_events` with fingerprint dedupe.
-- Structured logging helper → `logs` table with scope/level/metadata.
-- Health endpoint at `/api/public/health` (DB ping + worker heartbeat freshness).
-- Webhook signature verification pattern for any inbound `/api/public/*`.
-- Background job: nightly cleanup of old `logs`, `application_events`, expired `extension_tokens`.
-- Daily summary email job (table already exists, wire it).
-- Worker heartbeat staleness alert → notification when `last_seen` > N minutes.
+### 5. Sources (`/sources`)
+- Connection health badge per row (green if `last_run_status='ok'` and `last_run_at` < cadence, amber if stale, red if `last_error`).
+- Inline "Test run" button (writes to `worker_commands` kind=`test_source`).
+- Expandable error panel showing `last_error` with copy-to-clipboard.
 
-## Phase 5 — Chrome extension + worker reliability
-- Extension token rotation UI + revoke button; per-token capture quota enforcement.
-- Capture flow: retry with backoff, dedupe via `dedupe_hash`, surface errors to user dashboard.
-- Worker command queue: heartbeat + claim/lease pattern so a crashed worker doesn't strand `started` commands; auto-requeue stale ones.
-- Cookie sync (`session_cookies`): encrypted at rest already — add decrypt-failure counter alerting + rotation prompt.
-- Install/setup wizard page that walks user through: install extension → link token → verify capture → first apply.
-- Extension manifest v3 review, packaging script, download button on settings page.
+### 6. Settings cluster (automation / notifications / filters / gmail credentials)
+- Zod-validated forms with inline errors (currently most are silent on bad input).
+- "Verify" button on Gmail credentials → server fn that attempts SMTP login and updates `verified_at` / `last_error`.
+- Notification settings: live preview of the daily-summary recipient row.
 
----
+### 7. Global UX polish (cross-cutting)
+- Replace all spinner placeholders with skeletons that match the final layout (use existing `skeletons.tsx`).
+- Mobile pass: sidebar collapses on `< md`, forms stack, tables become cards.
+- Toast pattern unified (`sonner`): one helper `toast.success/error` with consistent copy ("Saved", "Couldn't save — try again").
 
-## How we proceed
+## Technical notes (for the technical reader)
 
-You approve this plan → I execute **Phase 1** end-to-end and stop for you to review. Then you say "next phase" and I do Phase 2. This keeps each diff reviewable and avoids a 50-file blast.
+- `defaultPreloadStaleTime: 0` already set — verify in `src/router.tsx`; add if missing.
+- Query keys: `["profile", userId]`, `["jobs", { status, filter }]`, `["application", id]`, etc.
+- For RLS-scoped reads we keep using the browser `supabase` client (already user-scoped). No new server fns required for Phase 2 reads — mutations stay as-is.
+- Auto-save debounce uses `useDebouncedCallback` (lodash already a transitive dep, or inline 8-line hook).
 
-Tell me to start Phase 1, or reorder phases if something is more urgent (e.g. "extension first").
+## What's NOT in this phase
+- Backend hardening (Zod on server fns, retry policy, indexes) → Phase 3.
+- Worker queue claim/lease, extension token rotation → Phase 5.
+
+## Approval
+
+Reply **"go"** and I'll execute Phase 2 end-to-end. Order: data layer → profile (biggest win) → jobs → applications → sources → settings → polish.
