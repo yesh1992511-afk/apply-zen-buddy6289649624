@@ -17,6 +17,7 @@ import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { BusyOverlay, SourceRowSkeleton } from "@/components/skeletons";
 import { timeAgo } from "@/lib/timeAgo";
 
 export const Route = createFileRoute("/_authenticated/sources")({
@@ -238,6 +239,13 @@ function SourcesPage() {
         />
       ) : (
         <div className="space-y-3">
+          {runningNow && (
+            <div className="space-y-3" aria-live="polite" aria-label="Fetching jobs from sources">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <SourceRowSkeleton key={`run-skel-${i}`} />
+              ))}
+            </div>
+          )}
           {sources.map((s) => {
             const statusOk = s.last_run_status === "ok" || s.last_run_status === "success";
             const statusPartial = s.last_run_status === "partial";
@@ -252,7 +260,8 @@ function SourcesPage() {
                     ? "bg-surface-3 text-muted-foreground"
                     : "bg-destructive/15 text-destructive ring-1 ring-destructive/30";
             return (
-              <div key={s.id} className="overflow-hidden rounded-xl border border-border/60 bg-card transition-shadow hover:shadow-elegant lift">
+              <BusyOverlay key={s.id} busy={!!testing[s.id]} label="Testing…" className="rounded-xl">
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-card transition-shadow hover:shadow-elegant lift">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/40 bg-surface-1 p-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -331,6 +340,7 @@ function SourcesPage() {
                   )}
                 </div>
               </div>
+              </BusyOverlay>
             );
           })}
         </div>

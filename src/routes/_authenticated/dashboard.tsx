@@ -10,10 +10,12 @@ import { MetricTile } from "@/components/MetricTile";
 import { StatusDot } from "@/components/StatusDot";
 import { EmptyState } from "@/components/EmptyState";
 import { CountUp } from "@/components/CountUp";
-import { CardSkeleton } from "@/components/skeletons";
+import { CardSkeleton, Skeleton } from "@/components/skeletons";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { LiveDot } from "@/components/LiveDot";
 import { SyncHealthCard } from "@/components/SyncHealthCard";
+import { useIsFetching, useIsMutating } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 
 
 
@@ -147,6 +149,11 @@ function Dashboard() {
   const startMin = automation?.run_24_7 ? 0 : parseTime(automation?.daily_start ?? null) ?? 9 * 60;
   const endMin = automation?.run_24_7 ? 24 * 60 : parseTime(automation?.daily_end ?? null) ?? 18 * 60;
 
+  // Reflect any background activity: sync-health refetch, scrape, or apply mutations.
+  const fetchingSync = useIsFetching({ queryKey: ["sync-health"] });
+  const mutating = useIsMutating();
+  const isSyncing = fetchingSync > 0 || mutating > 0;
+
   return (
     <div className="space-y-5 max-w-[1400px]">
       {/* Header */}
@@ -168,6 +175,24 @@ function Dashboard() {
           <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
+
+      {isSyncing && (
+        <div
+          aria-live="polite"
+          className="relative overflow-hidden rounded-xl border border-primary/30 bg-card px-4 py-2.5 flex items-center gap-3"
+        >
+          <RefreshCw className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
+          <span className="text-xs font-medium text-muted-foreground">
+            Syncing latest activity…
+          </span>
+          <div className="flex-1 flex items-center gap-2 ml-2">
+            <Skeleton className="h-2 flex-1 max-w-[120px]" />
+            <Skeleton className="h-2 flex-1 max-w-[80px]" />
+            <Skeleton className="h-2 flex-1 max-w-[100px]" />
+          </div>
+          <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent shimmer" />
+        </div>
+      )}
 
       <SyncHealthCard />
 

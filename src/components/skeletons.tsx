@@ -1,4 +1,58 @@
 import { cn } from "@/lib/utils";
+import type { ReactNode } from "react";
+
+/** Overlay a shimmer + reduced opacity on children while `busy` is true. */
+export function BusyOverlay({
+  busy,
+  label,
+  children,
+  className,
+}: {
+  busy: boolean;
+  label?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("relative", className)} aria-busy={busy || undefined}>
+      <div className={cn("transition-opacity duration-200", busy && "opacity-50 pointer-events-none select-none")}>
+        {children}
+      </div>
+      {busy && (
+        <div className="absolute inset-0 flex items-center justify-center rounded-[inherit] bg-background/30 backdrop-blur-[1px]">
+          <div className="shimmer absolute inset-0 rounded-[inherit] opacity-40" />
+          {label && (
+            <span className="relative z-10 rounded-full border border-border/60 bg-card/90 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">
+              {label}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Slim shimmer row used as a skeleton placeholder for incoming list items. */
+export function SourceRowSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn("rounded-xl border border-border/60 bg-card overflow-hidden", className)}>
+      <div className="flex items-center justify-between gap-3 border-b border-border/40 bg-surface-1 p-4">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <Skeleton className="h-6 w-6 rounded-md" />
+          <div className="space-y-2 flex-1 min-w-0">
+            <Skeleton className="h-3.5 w-40" />
+            <Skeleton className="h-2.5 w-28" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-7 w-16 rounded-md" />
+          <Skeleton className="h-7 w-20 rounded-md" />
+          <Skeleton className="h-7 w-12 rounded-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("shimmer rounded-md", className)} />;
