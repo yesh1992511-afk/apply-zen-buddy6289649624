@@ -31,15 +31,15 @@ export function useRealtimeInvalidate({
     const channel = supabase
       .channel(channelName)
       .on(
-        // @ts-expect-error supabase-js channel typing is loose here
-        "postgres_changes",
-        { event, schema: "public", table, ...(filter ? { filter } : {}) },
+        "postgres_changes" as never,
+        { event, schema: "public", table, ...(filter ? { filter } : {}) } as never,
         (payload: unknown) => {
           if (queryKey) qc.invalidateQueries({ queryKey });
           onChange?.(payload);
         },
       )
       .subscribe();
+
 
     return () => {
       supabase.removeChannel(channel);
