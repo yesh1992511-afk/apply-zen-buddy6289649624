@@ -95,7 +95,12 @@ function ApplicationsPage() {
                   <p className="px-2 py-6 text-center text-[11px] italic text-muted-foreground/60">Empty</p>
                 ) : (
                   items.map((a) => (
-                    <div key={a.id} className="group rounded-lg border border-border/40 bg-surface-1 p-2.5 text-xs transition-colors hover:border-border hover:bg-surface-2">
+                    <Link
+                      to="/applications/$id"
+                      params={{ id: a.id }}
+                      key={a.id}
+                      className="block group rounded-lg border border-border/40 bg-surface-1 p-2.5 text-xs transition-all hover:border-primary/50 hover:bg-surface-2 hover:shadow-elegant"
+                    >
                       <div className="line-clamp-2 font-medium leading-snug">{a.job?.title ?? "Job"}</div>
                       <div className="mt-0.5 truncate text-muted-foreground">{a.job?.company}</div>
                       <div className="mt-1.5 flex items-center justify-between">
@@ -104,9 +109,9 @@ function ApplicationsPage() {
                           <span>{new Date(a.queued_at).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
                         </div>
                         {a.job?.url && (
-                          <a href={a.job.url} target="_blank" rel="noreferrer" className="opacity-0 transition-opacity group-hover:opacity-100 text-muted-foreground hover:text-foreground">
+                          <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(a.job!.url, "_blank"); }} className="opacity-0 transition-opacity group-hover:opacity-100 text-muted-foreground hover:text-foreground cursor-pointer">
                             <ExternalLink className="h-3 w-3" />
-                          </a>
+                          </span>
                         )}
                       </div>
                       {a.last_error && (
@@ -114,7 +119,7 @@ function ApplicationsPage() {
                           {a.last_error}
                         </div>
                       )}
-                    </div>
+                    </Link>
                   ))
                 )}
               </div>
