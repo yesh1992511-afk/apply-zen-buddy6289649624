@@ -127,11 +127,12 @@ function WorkerPage() {
                 <span
                   className={
                     "inline-block h-1.5 w-1.5 rounded-full " +
-                    (c.status === "completed" ? "bg-emerald-500" :
+                    (c.status === "done" ? "bg-emerald-500" :
                      c.status === "failed" ? "bg-red-500" :
                      c.status === "running" ? "bg-amber-500 animate-pulse" : "bg-zinc-500")
                   }
                 />
+
                 <span className="font-mono text-[11px] text-muted-foreground tabular-nums w-32 shrink-0">
                   {new Date(c.created_at).toLocaleTimeString()}
                 </span>
