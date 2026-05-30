@@ -1,15 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
-import { ExternalLink, MapPin, Building2, Search, Sparkles, Send, Briefcase, Plus, Check } from "lucide-react";
-import { triggerApply, triggerTailor } from "@/lib/commands";
+import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { JobDescriptionDialog, type JobDialogJob } from "@/components/JobDescriptionDialog";
+import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
@@ -31,7 +32,10 @@ type Job = {
   salary_min: number | null;
   salary_max: number | null;
   salary_currency: string | null;
+  employment_type: string | null;
+  seniority: string | null;
   description: string | null;
+  description_html: string | null;
   status: string;
 };
 
@@ -50,11 +54,14 @@ function scoreColor(s: number) {
 }
 
 function JobsPage() {
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [hours, setHours] = useState(24);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [dialogJob, setDialogJob] = useState<JobDialogJob | null>(null);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -108,6 +115,39 @@ function JobsPage() {
     }
   };
 
+  const applyOne = async (job: { id: string }) => {
+    setApplyingId(job.id);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      // Check for existing application
+      const { data: existing } = await supabase
+        .from("applications")
+        .select("id")
+        .eq("job_id", job.id)
+        .eq("user_id", u.user.id)
+        .maybeSingle();
+      let appId = existing?.id;
+      if (!appId) {
+        const { data, error } = await supabase
+          .from("applications")
+          .insert({ job_id: job.id, user_id: u.user.id, status: "queued" })
+          .select("id")
+          .single();
+        if (error) { toast.error(error.message); return; }
+        appId = data.id;
+        toast.success("Application queued");
+      } else {
+        toast.message("Already queued — opening application");
+      }
+      setDialogJob(null);
+      navigate({ to: "/applications/$id", params: { id: appId } });
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+
   return (
     <div className="space-y-6 max-w-[1400px]">
       <PageHeader
@@ -151,54 +191,56 @@ function JobsPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((j) => {
             const isSel = selected.has(j.id);
-            const postedDays = j.posted_at
-              ? Math.max(0, Math.round((Date.now() - new Date(j.posted_at).getTime()) / 86_400_000))
-              : null;
             return (
               <div
                 key={j.id}
                 className={cn(
-                  "group relative overflow-hidden rounded-xl border bg-card p-4 transition-all hover:shadow-elegant",
+                  "group relative flex flex-col overflow-hidden rounded-xl border bg-card p-4 transition-all hover:shadow-elegant",
                   isSel ? "border-primary ring-1 ring-primary/40 bg-primary/5" : "border-border/60",
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <h3 className="line-clamp-2 font-heading text-[15px] font-semibold leading-snug">{j.title}</h3>
-                    <div className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <Building2 className="h-3.5 w-3.5" />
-                      <span className="truncate">{j.company}</span>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Building2 className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate font-medium text-foreground/80">{j.company}</span>
+                      <span>·</span>
+                      <span className="inline-flex items-center gap-1 tabular-nums">
+                        <Clock className="h-3 w-3" />{timeAgo(j.posted_at ?? j.scraped_at)}
+                      </span>
                     </div>
+                    <h3 className="mt-1.5 line-clamp-2 font-heading text-[15px] font-semibold leading-snug">{j.title}</h3>
                   </div>
                   <div className={cn("shrink-0 rounded-full px-2.5 py-1 font-mono text-xs font-bold tabular-nums", scoreColor(j.score))}>
                     {j.score}
                   </div>
                 </div>
-                {j.location && (
-                  <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <MapPin className="h-3 w-3" />
-                    <span className="truncate">{j.location}{j.remote ? ` · ${j.remote}` : ""}</span>
-                  </div>
-                )}
+
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  {j.location && (
+                    <span className="inline-flex items-center gap-1 truncate">
+                      <MapPin className="h-3 w-3" />{j.location}{j.remote ? ` · ${j.remote}` : ""}
+                    </span>
+                  )}
+                  {j.seniority && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-foreground/80">{j.seniority}</span>}
+                  {j.employment_type && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-foreground/80">{j.employment_type}</span>}
+                </div>
                 {(j.salary_min || j.salary_max) && (
-                  <div className="mt-2 inline-flex items-center rounded bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-foreground tabular-nums">
+                  <div className="mt-2 inline-flex w-fit items-center rounded bg-gold/10 text-gold px-2 py-0.5 text-[11px] font-medium tabular-nums">
                     {j.salary_currency ?? "$"}{j.salary_min ?? "?"}–{j.salary_max ?? "?"}
                   </div>
                 )}
 
-                <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
+                <div className="mt-auto pt-3 flex items-center justify-between border-t border-border/50 mt-3">
                   <div className="flex items-center gap-2">
                     <PortalBadge source={j.source_key} size="sm" />
-                    {postedDays !== null && (
-                      <span className="text-[10px] text-muted-foreground tabular-nums">{postedDays}d ago</span>
-                    )}
                   </div>
-                  <div className="flex gap-0.5">
-                    <Button size="sm" variant="ghost" title="Tailor resume" onClick={() => triggerTailor(j.id)} className="h-8 w-8 p-0">
-                      <Sparkles className="h-3.5 w-3.5" />
+                  <div className="flex items-center gap-1.5">
+                    <Button size="sm" variant="outline" onClick={() => setDialogJob(j as JobDialogJob)} className="h-8 gap-1.5 text-xs">
+                      <FileText className="h-3.5 w-3.5" />Description
                     </Button>
-                    <Button size="sm" variant="ghost" title="Apply now" onClick={() => triggerApply(j.id)} className="h-8 w-8 p-0">
-                      <Send className="h-3.5 w-3.5" />
+                    <Button size="sm" onClick={() => applyOne(j)} disabled={applyingId === j.id} className="h-8 gap-1.5 text-xs bg-gradient-emerald shadow-glow">
+                      <Send className="h-3.5 w-3.5" />{applyingId === j.id ? "…" : "Apply"}
                     </Button>
                     <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0">
                       <a href={j.url} target="_blank" rel="noreferrer" title="Open job">
@@ -207,9 +249,10 @@ function JobsPage() {
                     </Button>
                     <Button
                       size="sm"
-                      variant={isSel ? "default" : "outline"}
+                      variant={isSel ? "default" : "ghost"}
                       onClick={() => toggle(j.id)}
-                      className={cn("h-8 w-8 p-0 ml-1", isSel && "bg-primary")}
+                      title={isSel ? "Selected" : "Add to batch"}
+                      className={cn("h-8 w-8 p-0", isSel && "bg-primary")}
                     >
                       {isSel ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                     </Button>
@@ -220,6 +263,14 @@ function JobsPage() {
           })}
         </div>
       )}
+
+      <JobDescriptionDialog
+        job={dialogJob}
+        open={!!dialogJob}
+        onOpenChange={(v) => !v && setDialogJob(null)}
+        onApply={applyOne}
+        applying={!!applyingId}
+      />
     </div>
   );
 }

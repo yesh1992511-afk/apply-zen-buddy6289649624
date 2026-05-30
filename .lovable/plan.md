@@ -1,97 +1,123 @@
-# JobPilot — UI/UX Overhaul Plan
+## Goal
 
-## Design direction (locked)
+Make the job → apply → review flow feel alive and informative:
 
-- **Palette (Emerald Prestige):**
-  - `--background` deep ink `#0a1410` / surface `#0f1f1a`
-  - `--primary` emerald `#0d7a5f`, accent `#10b981`
-  - `--accent-gold` `#c9a84c` (used sparingly for "premium" states: ready, success, daily-cap met)
-  - `--foreground` warm cream `#f5f0e0`, muted `#a8b5a8`
-  - Borders: hairline `#1f2f28` at 1px
-- **Typography:** Sora (headings, 600/700, tight tracking) + Manrope (body, 400/500). Installed via `@fontsource/sora` and `@fontsource/manrope`.
-- **Structure:** Persistent collapsible left sidebar (shadcn `Sidebar`, icon-collapse) + bento-grid dashboard. Numeric counters use Sora tabular-nums.
-- **Motion:** subtle — 150ms ease for hovers, 250ms for panel mounts, no parallax/glitter.
-- **Density:** compact but breathable — 12px gutter, 16px card padding, 24px section gaps.
+1. Better **job cards** on the Jobs page (company, posted-time, title, experience, score).
+2. A **Job Description modal** with full details + a single **Apply** button.
+3. A **per-application detail page** that mirrors the uploaded reference: a stepper (Optimize → Resume → Generate → Cover Letter → Submit → Done), a left side nav (Form / Resume / Cover letter / View job posting), and a live progress feed showing what's currently happening (e.g. "Generating resume…", "Filling Legal First Name → Yeswanth", "Submitting…").
+4. While anything runs in the background, the right rail shows the **live activity animation** the user described.
 
-## What gets rebuilt (frontend only)
+All changes are frontend; backend already writes the data we need (`applications`, `logs` with `application_id`, `resumes`, `screenshots[]`, `worker_heartbeat`, realtime is on for `applications` and `logs`).
 
-### 1. Design system (`src/styles.css`)
-Replace current tokens with the Emerald Prestige palette in OKLCH. Add semantic tokens: `--surface-1/2/3`, `--success` (emerald), `--warning` (gold), `--danger` (warm red), `--ring`, `--shadow-elegant`. Update both `:root` and `.dark` (default to dark).
+---
 
-### 2. App shell (`src/routes/__root.tsx` + new `src/components/app-sidebar.tsx`)
-Wrap authenticated routes in `SidebarProvider` + persistent `AppSidebar` with sections:
-- **Pilot** — Dashboard, Sources, Filters, Queue, Applications
-- **Profile** — Profile, Resume, Screening
-- **System** — Notifications, Logs, Settings
-Header strip: breadcrumb · global kill-switch toggle · heartbeat dot · user menu.
+## 1. Jobs page card redesign (`src/routes/_authenticated/jobs.tsx`)
 
-### 3. Dashboard (`/dashboard`) — bento redesign
-6-tile bento on desktop, stack on mobile:
-- **Hero tile (2x1):** big "Today" counter (applied / cap), thin progress ring in gold, kill-switch CTA.
-- **Heartbeat tile:** worker status dot, last-seen, version.
-- **Active window tile:** mini timeline showing in/out of window for today.
-- **Funnel tile:** Discovered → Scored → Queued → Applied bar.
-- **Recent activity tile (2x1):** scrollable log feed with portal favicons.
-- **Per-portal tile:** small stacked bars (Greenhouse, LinkedIn, Lever, Workday, Indeed).
+Each job rendered as a bento-style card:
 
-### 4. Profile (`/profile`) — visual polish, same 15 tabs
-- Vertical tab rail on desktop (left), horizontal scroll on mobile.
-- Readiness becomes a top sticky band: emerald fill, gold pip at 100%, per-tab dots showing completeness.
-- Form fields: consistent shadcn `Input`/`Select`/`Textarea` with floating labels, inline help, and a "Why we ask" tooltip on sensitive fields.
-- Screening tab: each preset card with portal-tag chips ("LinkedIn · Greenhouse").
+```
+[Logo/initials]  Company · posted "3h ago"        [score chip]
+Job Title (Sora 600)                              [portal badge]
+Location · Remote · Employment type · Seniority (experience)
+[ View description ]  [ Apply ]
+```
 
-### 5. Resume tab — split view
-Left: LaTeX editor (Monaco-like, mono font, collapsed by default).
-Right: PDF iframe with skeleton + "Recompile" button + version timestamp.
+- "Posted Xh / Xd ago" derived from `posted_at ?? scraped_at` using a small `timeAgo()` helper.
+- "Experience" = `seniority` (fallback to parsed years if present in `raw`).
+- **View description** opens a shadcn `Dialog` (`JobDescriptionDialog`) showing: title, company, location, salary, posted time, full `description_html` (sanitized) or `description` text, "View original posting" external link, and an **Apply** button.
+- **Apply** button (in card and in dialog): inserts a row into `applications` with `status='queued'` for that `job_id`, toasts "Queued", and navigates to `/applications/$id`. If an application already exists, it just navigates.
 
-### 6. Sources / Filters / Queue / Applications
-Convert to consistent `DataTable` (shadcn table + tanstack-table-style header): sortable, filter chip row, row actions menu, empty state with illustration. "Test fetch" becomes inline pill with live spinner.
+## 2. New route: Application detail (`src/routes/_authenticated/applications.$id.tsx`)
 
-### 7. Auth (`/login`)
-Split-screen: left = brand panel with emerald gradient + tagline + small animated heartbeat dot. Right = login form, Google button up top, email/password below.
+Layout mirrors the uploaded screenshot, using the existing Emerald Prestige tokens:
 
-### 8. Notifications & Settings
-Card-grouped sections. Toggle rows with secondary description. Time pickers for active window.
+```
+Company · Job title                        [ View job posting ↗ ]
+────────────────────────────────────────────────────────────────
+┌─ Left rail (320px) ──────────┐  ┌─ Right pane ──────────────┐
+│ [status pill]                │  │ Tab content (Form/Resume/  │
+│ Stepper:                     │  │ Cover letter)              │
+│  ● Optimize                  │  │                            │
+│  ● Resume                    │  │ + Live activity panel      │
+│  ● Generate                  │  │   (sticky, top-right):     │
+│  ● Cover Letter              │  │   animated dot + current   │
+│  ● Submit                    │  │   step + recent log lines  │
+│  ● Done                      │  │                            │
+│ ──                           │  │                            │
+│ [✓] Application completed    │  │                            │
+│     Submitted to {company}   │  │                            │
+│ VIEW                         │  │                            │
+│ • Form                       │  │                            │
+│ • Resume                     │  │                            │
+│ • Cover letter               │  │                            │
+│ ↗ View job posting           │  │                            │
+└──────────────────────────────┘  └────────────────────────────┘
+```
 
-### 9. Global components
-- `StatusDot` (online/offline/idle)
-- `MetricTile` (label, value, delta, optional gold accent)
-- `EmptyState` (icon, title, hint, CTA)
-- `PortalBadge` (favicon + name pill)
-- `KillSwitch` (large toggle with confirm-on-enable)
+### Data fetched (TanStack Query + Supabase)
+- `applications` row by `id` (with embedded `jobs(*)`, `resumes(*)`, cover-letter resume row).
+- `logs` where `application_id = id` ordered by `ts` (realtime subscribed → appended live).
+- Supabase realtime channels for `applications:id=eq.$id` and `logs:application_id=eq.$id`.
 
-### 10. Responsive + a11y pass
-- Sidebar collapses to icon strip <1024px, sheet drawer <768px.
-- All interactive elements: focus ring (`--ring`), aria-labels, keyboard nav on tabs/menus.
-- Color contrast WCAG AA against `#0a1410`.
+### Stepper logic
+Phase derived from `application.status` + most recent `logs.scope`:
+- `queued` → Optimize active
+- `optimizing` / scope `resume.optimize` → Resume active
+- `generating_resume` → Generate active
+- `generating_cover` → Cover Letter active
+- `submitting` / `filling_form` → Submit active
+- `applied` / `submitted` → Done complete
 
-## Bug / consistency sweep (while in there)
+Each step renders the existing `StatusDot` style: green filled for completed, emerald-ringed pulse for active, muted for pending.
 
-- Standardize all toasts to `sonner` (drop any `useToast` leftovers).
-- Replace ad-hoc color classes (`text-white`, `bg-zinc-…`) with tokens everywhere.
-- Fix any `<Link to="…/">` trailing slashes (TanStack strict).
-- Verify every protected route under `_authenticated/` has `errorComponent` + `notFoundComponent`.
-- Loading skeletons replace "Loading…" text everywhere.
-- Empty-state for every list view (sources, queue, applications, logs).
+### Tabs (right pane)
+- **Form** — table of `field → value` pairs. Source: parse `logs` where `scope = 'form.fill'` and `metadata = { field, value }`. Each new realtime log row animates in with a fade+slide (`framer-motion`), and the currently-filling row gets a shimmering left border until the next log arrives. Empty state before applying: "Form fields will appear here as we fill them."
+- **Resume** — embedded PDF (iframe) for `resumes.pdf_url` when ready; skeleton + "Generating resume…" with shimmer when not.
+- **Cover letter** — same pattern using the cover-letter resume record (or `applications.cover_letter_id`).
 
-## Out of scope (explicit)
+### Live activity panel (right rail, sticky top of right pane)
+Always visible while `status ∉ {applied, failed}`:
+- Animated emerald pulse dot.
+- Current action headline derived from latest log scope: "Generating resume", "Writing cover letter", "Filling form: Legal First Name", "Submitting application".
+- Last 5 log lines, monospace, color-coded by level (matches Logs page).
+- Auto-scrolls; collapses to a slim status pill once `status='applied'`.
 
-- No backend / worker changes.
-- No new tables or RLS edits.
-- No new features — purely visual + structural frontend rework.
+## 3. Worker-side log conventions (no code changes required for the plan, but documented)
+
+The UI reads what the worker already writes. We rely on these `logs.scope` values; any missing ones are filled with sane fallbacks in the UI:
+- `resume.optimize`, `resume.generate`, `cover.generate`
+- `form.fill` with `metadata: { field, value, portal }`
+- `apply.submit`, `apply.submitted`, `apply.failed`
+
+If a scope isn't emitted yet, the stepper still advances on `applications.status` transitions, so the UI degrades gracefully.
+
+## 4. Applications list → detail wiring
+
+In `applications.tsx`, make each row/card a `<Link to="/applications/$id" params={{ id }}>`. Keep the existing 5-lane pipeline; just make cards clickable.
+
+## 5. Shared components (new, in `src/components/`)
+- `JobCard.tsx` — the card used in Jobs page (and reusable on Dashboard recent jobs).
+- `JobDescriptionDialog.tsx` — modal with description + Apply.
+- `ApplyStepper.tsx` — vertical 6-step stepper with active pulse.
+- `LiveActivityPanel.tsx` — animated headline + recent logs list (uses framer-motion already in deps; if not, fall back to CSS transitions).
+- `FormFillTable.tsx` — animated table of filled fields.
+- `timeAgo.ts` util in `src/lib/`.
+
+## 6. Files touched
+
+- New: `src/routes/_authenticated/applications.$id.tsx`, the 5 components above, `src/lib/timeAgo.ts`.
+- Edited: `src/routes/_authenticated/jobs.tsx` (card + dialog + apply), `src/routes/_authenticated/applications.tsx` (link rows to detail), `src/components/AppSidebar.tsx` (no nav change; just verify breadcrumb works for `/applications/$id`).
 
 ## Technical notes
 
-- Install: `bun add @fontsource/sora @fontsource/manrope`, import in `src/main.tsx`.
-- Update `src/styles.css` `@theme` block with the new OKLCH tokens + Sora/Manrope family vars.
-- New files: `src/components/app-sidebar.tsx`, `src/components/metric-tile.tsx`, `src/components/status-dot.tsx`, `src/components/portal-badge.tsx`, `src/components/empty-state.tsx`, `src/components/kill-switch.tsx`.
-- Touched files (approx 18): `__root.tsx`, `_authenticated.tsx`, `dashboard.tsx`, `profile.tsx`, `sources.tsx`, `filters.tsx`, `queue.tsx`, `applications.tsx`, `notifications.tsx`, `settings.tsx`, `login.tsx`, `signup.tsx`, plus shared UI.
+- TanStack Start file-route name `applications.$id.tsx` → path `/applications/:id`.
+- Use `context.queryClient.ensureQueryData` loader + `useSuspenseQuery` per project convention; add `errorComponent` + `notFoundComponent` (route returns 404 if the application doesn't belong to the user, since RLS will return no rows).
+- Supabase realtime: subscribe in a `useEffect` inside the component, push new logs into the query cache via `queryClient.setQueryData`.
+- Sanitize `description_html` with a tiny allowlist (no new dep — strip `<script>`/`<style>` and `on*` attrs) before `dangerouslySetInnerHTML`.
+- All colors via existing emerald/gold tokens — no raw hex in components.
+- No backend, schema, or worker changes in this plan. If form-fill logs aren't being emitted by the worker yet, the UI shows an empty state and the stepper still works off `applications.status`; emitting them is a separate follow-up.
 
-## Delivery order
+## Out of scope
 
-1. Tokens + fonts + app shell + sidebar (everything else inherits).
-2. Dashboard bento.
-3. Profile + Resume.
-4. Sources / Filters / Queue / Applications tables.
-5. Auth + Notifications + Settings.
-6. A11y + responsive + skeletons + empty states.
+- Modifying the worker / Python portals to emit new log scopes (call out as follow-up if the Form tab is empty in practice).
+- Adding a new "queue" backend mechanism — we reuse `applications` rows with `status='queued'`.

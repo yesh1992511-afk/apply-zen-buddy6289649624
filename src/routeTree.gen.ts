@@ -23,6 +23,7 @@ import { Route as AuthenticatedFiltersRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
+import { Route as AuthenticatedApplicationsIdRouteImport } from './routes/_authenticated/applications.$id'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
 
@@ -97,6 +98,12 @@ const AuthenticatedApplicationsRoute =
     path: '/applications',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedApplicationsIdRoute =
+  AuthenticatedApplicationsIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedApplicationsRoute,
+  } as any)
 const ApiPublicHooksDailySummaryRoute =
   ApiPublicHooksDailySummaryRouteImport.update({
     id: '/api/public/hooks/daily-summary',
@@ -114,7 +121,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/applications': typeof AuthenticatedApplicationsRoute
+  '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/filters': typeof AuthenticatedFiltersRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
+  '/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
 }
@@ -131,7 +139,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/applications': typeof AuthenticatedApplicationsRoute
+  '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/filters': typeof AuthenticatedFiltersRoute
@@ -141,6 +149,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
+  '/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
 }
@@ -150,7 +159,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/_authenticated/applications': typeof AuthenticatedApplicationsRoute
+  '/_authenticated/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/_authenticated/automation': typeof AuthenticatedAutomationRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/filters': typeof AuthenticatedFiltersRoute
@@ -160,6 +169,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/sources': typeof AuthenticatedSourcesRoute
+  '/_authenticated/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
 }
@@ -179,6 +189,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/setup'
     | '/sources'
+    | '/applications/$id'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
   fileRoutesByTo: FileRoutesByTo
@@ -196,6 +207,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/setup'
     | '/sources'
+    | '/applications/$id'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
   id:
@@ -214,6 +226,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/setup'
     | '/_authenticated/sources'
+    | '/_authenticated/applications/$id'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
   fileRoutesById: FileRoutesById
@@ -327,6 +340,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApplicationsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/applications/$id': {
+      id: '/_authenticated/applications/$id'
+      path: '/$id'
+      fullPath: '/applications/$id'
+      preLoaderRoute: typeof AuthenticatedApplicationsIdRouteImport
+      parentRoute: typeof AuthenticatedApplicationsRoute
+    }
     '/api/public/hooks/daily-summary': {
       id: '/api/public/hooks/daily-summary'
       path: '/api/public/hooks/daily-summary'
@@ -344,8 +364,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedApplicationsRouteChildren {
+  AuthenticatedApplicationsIdRoute: typeof AuthenticatedApplicationsIdRoute
+}
+
+const AuthenticatedApplicationsRouteChildren: AuthenticatedApplicationsRouteChildren =
+  {
+    AuthenticatedApplicationsIdRoute: AuthenticatedApplicationsIdRoute,
+  }
+
+const AuthenticatedApplicationsRouteWithChildren =
+  AuthenticatedApplicationsRoute._addFileChildren(
+    AuthenticatedApplicationsRouteChildren,
+  )
+
 interface AuthenticatedRouteChildren {
-  AuthenticatedApplicationsRoute: typeof AuthenticatedApplicationsRoute
+  AuthenticatedApplicationsRoute: typeof AuthenticatedApplicationsRouteWithChildren
   AuthenticatedAutomationRoute: typeof AuthenticatedAutomationRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedFiltersRoute: typeof AuthenticatedFiltersRoute
@@ -358,7 +392,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedApplicationsRoute: AuthenticatedApplicationsRoute,
+  AuthenticatedApplicationsRoute: AuthenticatedApplicationsRouteWithChildren,
   AuthenticatedAutomationRoute: AuthenticatedAutomationRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedFiltersRoute: AuthenticatedFiltersRoute,
