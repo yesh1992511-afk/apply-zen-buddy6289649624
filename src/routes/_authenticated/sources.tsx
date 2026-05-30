@@ -105,6 +105,21 @@ function SourcesPage() {
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={async () => {
+                  const cid = await triggerTestSource(s.key);
+                  if (!cid) return;
+                  const res = await waitForCommand(cid, 90_000);
+                  if (res?.status === "done") {
+                    const r = res.result as { ok?: boolean; fetched?: number; new_jobs?: number; error?: string } | null;
+                    if (r?.ok) toast.success(`Fetched ${r.fetched ?? 0} · ${r.new_jobs ?? 0} new`);
+                    else toast.error(`Test failed: ${r?.error ?? "unknown"}`);
+                  } else {
+                    toast.error(`Test failed: ${res?.last_error ?? "timeout"}`);
+                  }
+                  load();
+                }}>
+                  <FlaskConical className="mr-1 h-3 w-3" /> Test fetch
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => triggerScrape(s.key)}>
                   <Play className="mr-1 h-3 w-3" /> Run now
                 </Button>
