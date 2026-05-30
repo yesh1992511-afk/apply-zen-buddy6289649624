@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, AlertCircle, Copy, Server, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/PageHeader";
 import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/setup")({
