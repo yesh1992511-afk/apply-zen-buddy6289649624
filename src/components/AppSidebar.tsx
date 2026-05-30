@@ -28,11 +28,9 @@ import {
   Sparkles,
   CreditCard,
   ShieldCheck,
-  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { useRoles } from "@/hooks/useRoles";
 
 const onboarding = [
   { title: "Getting started", to: "/onboarding", icon: Sparkles },
