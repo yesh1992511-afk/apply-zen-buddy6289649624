@@ -20,11 +20,13 @@ import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authen
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
 import { Route as AuthenticatedJobsRouteImport } from './routes/_authenticated/jobs'
 import { Route as AuthenticatedFiltersRouteImport } from './routes/_authenticated/filters'
+import { Route as AuthenticatedExtensionRouteImport } from './routes/_authenticated/extension'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
 import { Route as AuthenticatedApplicationsIdRouteImport } from './routes/_authenticated/applications.$id'
 import { Route as ApiPublicSourcesRunTierRouteImport } from './routes/api/public/sources/run-tier'
+import { Route as ApiPublicSourcesIngestExtensionRouteImport } from './routes/api/public/sources/ingest-extension'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
 import { Route as ApiPublicHooksApplyWorkerRouteImport } from './routes/api/public/hooks/apply-worker'
@@ -84,6 +86,11 @@ const AuthenticatedFiltersRoute = AuthenticatedFiltersRouteImport.update({
   path: '/filters',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedExtensionRoute = AuthenticatedExtensionRouteImport.update({
+  id: '/extension',
+  path: '/extension',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -111,6 +118,12 @@ const ApiPublicSourcesRunTierRoute = ApiPublicSourcesRunTierRouteImport.update({
   path: '/api/public/sources/run-tier',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSourcesIngestExtensionRoute =
+  ApiPublicSourcesIngestExtensionRouteImport.update({
+    id: '/api/public/sources/ingest-extension',
+    path: '/api/public/sources/ingest-extension',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksDailySummaryRoute =
   ApiPublicHooksDailySummaryRouteImport.update({
     id: '/api/public/hooks/daily-summary',
@@ -137,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/extension': typeof AuthenticatedExtensionRoute
   '/filters': typeof AuthenticatedFiltersRoute
   '/jobs': typeof AuthenticatedJobsRoute
   '/logs': typeof AuthenticatedLogsRoute
@@ -148,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
 }
 export interface FileRoutesByTo {
@@ -157,6 +172,7 @@ export interface FileRoutesByTo {
   '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/extension': typeof AuthenticatedExtensionRoute
   '/filters': typeof AuthenticatedFiltersRoute
   '/jobs': typeof AuthenticatedJobsRoute
   '/logs': typeof AuthenticatedLogsRoute
@@ -168,6 +184,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
 }
 export interface FileRoutesById {
@@ -179,6 +196,7 @@ export interface FileRoutesById {
   '/_authenticated/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/_authenticated/automation': typeof AuthenticatedAutomationRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/extension': typeof AuthenticatedExtensionRoute
   '/_authenticated/filters': typeof AuthenticatedFiltersRoute
   '/_authenticated/jobs': typeof AuthenticatedJobsRoute
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
@@ -190,6 +208,7 @@ export interface FileRoutesById {
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
 }
 export interface FileRouteTypes {
@@ -201,6 +220,7 @@ export interface FileRouteTypes {
     | '/applications'
     | '/automation'
     | '/dashboard'
+    | '/extension'
     | '/filters'
     | '/jobs'
     | '/logs'
@@ -212,6 +232,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/sources/ingest-extension'
     | '/api/public/sources/run-tier'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -221,6 +242,7 @@ export interface FileRouteTypes {
     | '/applications'
     | '/automation'
     | '/dashboard'
+    | '/extension'
     | '/filters'
     | '/jobs'
     | '/logs'
@@ -232,6 +254,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/sources/ingest-extension'
     | '/api/public/sources/run-tier'
   id:
     | '__root__'
@@ -242,6 +265,7 @@ export interface FileRouteTypes {
     | '/_authenticated/applications'
     | '/_authenticated/automation'
     | '/_authenticated/dashboard'
+    | '/_authenticated/extension'
     | '/_authenticated/filters'
     | '/_authenticated/jobs'
     | '/_authenticated/logs'
@@ -253,6 +277,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/sources/ingest-extension'
     | '/api/public/sources/run-tier'
   fileRoutesById: FileRoutesById
 }
@@ -264,6 +289,7 @@ export interface RootRouteChildren {
   ApiPublicHooksApplyWorkerRoute: typeof ApiPublicHooksApplyWorkerRoute
   ApiPublicHooksCheckHeartbeatRoute: typeof ApiPublicHooksCheckHeartbeatRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
+  ApiPublicSourcesIngestExtensionRoute: typeof ApiPublicSourcesIngestExtensionRoute
   ApiPublicSourcesRunTierRoute: typeof ApiPublicSourcesRunTierRoute
 }
 
@@ -346,6 +372,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFiltersRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/extension': {
+      id: '/_authenticated/extension'
+      path: '/extension'
+      fullPath: '/extension'
+      preLoaderRoute: typeof AuthenticatedExtensionRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -379,6 +412,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/sources/run-tier'
       fullPath: '/api/public/sources/run-tier'
       preLoaderRoute: typeof ApiPublicSourcesRunTierRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sources/ingest-extension': {
+      id: '/api/public/sources/ingest-extension'
+      path: '/api/public/sources/ingest-extension'
+      fullPath: '/api/public/sources/ingest-extension'
+      preLoaderRoute: typeof ApiPublicSourcesIngestExtensionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/daily-summary': {
@@ -423,6 +463,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedApplicationsRoute: typeof AuthenticatedApplicationsRouteWithChildren
   AuthenticatedAutomationRoute: typeof AuthenticatedAutomationRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedExtensionRoute: typeof AuthenticatedExtensionRoute
   AuthenticatedFiltersRoute: typeof AuthenticatedFiltersRoute
   AuthenticatedJobsRoute: typeof AuthenticatedJobsRoute
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
@@ -436,6 +477,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedApplicationsRoute: AuthenticatedApplicationsRouteWithChildren,
   AuthenticatedAutomationRoute: AuthenticatedAutomationRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedExtensionRoute: AuthenticatedExtensionRoute,
   AuthenticatedFiltersRoute: AuthenticatedFiltersRoute,
   AuthenticatedJobsRoute: AuthenticatedJobsRoute,
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,
@@ -457,6 +499,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksApplyWorkerRoute: ApiPublicHooksApplyWorkerRoute,
   ApiPublicHooksCheckHeartbeatRoute: ApiPublicHooksCheckHeartbeatRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
+  ApiPublicSourcesIngestExtensionRoute: ApiPublicSourcesIngestExtensionRoute,
   ApiPublicSourcesRunTierRoute: ApiPublicSourcesRunTierRoute,
 }
 export const routeTree = rootRouteImport

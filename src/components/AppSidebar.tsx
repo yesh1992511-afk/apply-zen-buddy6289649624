@@ -25,6 +25,7 @@ import {
   LogOut,
   Bell,
   FileText,
+  Chrome,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,6 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 const pilot = [
   { title: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { title: "Sources", to: "/sources", icon: Database },
+  { title: "Extension", to: "/extension", icon: Chrome },
   { title: "Filters", to: "/filters", icon: Filter },
   { title: "Jobs", to: "/jobs", icon: Briefcase },
   { title: "Applications", to: "/applications", icon: Send },

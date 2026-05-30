@@ -310,6 +310,42 @@ export type Database = {
         }
         Relationships: []
       }
+      extension_tokens: {
+        Row: {
+          captures_today: number
+          captures_total: number
+          created_at: string
+          id: string
+          label: string
+          last_reset_date: string
+          last_seen_at: string | null
+          token: string
+          user_id: string
+        }
+        Insert: {
+          captures_today?: number
+          captures_total?: number
+          created_at?: string
+          id?: string
+          label?: string
+          last_reset_date?: string
+          last_seen_at?: string | null
+          token: string
+          user_id: string
+        }
+        Update: {
+          captures_today?: number
+          captures_total?: number
+          created_at?: string
+          id?: string
+          label?: string
+          last_reset_date?: string
+          last_seen_at?: string | null
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       filters: {
         Row: {
           created_at: string

@@ -1,70 +1,93 @@
-# Make it professional + actually working
+# Plan — Browser-Extension Capture (Safe Mode)
 
-Current state: backend (sources adapters, run-tier, apply-worker, AI tailoring, log writer, cron, ATS detection) is built — but **the database is empty** (0 sources, 0 jobs, 0 applications, 0 logs). Nothing is flowing because no source rows were ever inserted for your user. The UI also still reads like a prototype in a few places. Plan below fixes both.
+## Goal
 
-## Phase A — Make jobs actually appear (highest priority)
+Reach ~95–98% job coverage including LinkedIn, Indeed, Glassdoor, ZipRecruiter, Wellfound, Dice — **without** account bans, proxies, or extra server costs.
 
-1. **Auto-seed sources on first sign-in.** Add a trigger / server function that, the first time a user lands on `/sources` or `/dashboard`, inserts the full default set (12 aggregators + ~200 high-signal ATS company slugs) as `enabled=true`. No clicking required.
-2. **Run-now on the Sources page**: a prominent "Fetch jobs now" button that calls `/api/public/sources/run-tier?tier=hot&user_id=<me>` and streams a toast per source ("RemoteOK: 47 new, Greenhouse/stripe: 3 new…"). User sees jobs in <30s instead of waiting for cron.
-3. **Verify pg_cron** targets the stable preview URL and is actually firing — surface "Last cron run: 4 min ago • next in 11 min" on the Sources page header so failure is visible.
-4. **Backfill match scoring**: if a user has no `filters` row yet, auto-create a permissive default so incoming jobs aren't all dropped.
+## Approach
 
-## Phase B — Apply pipeline end-to-end test
+A Chrome/Edge extension runs inside **your** logged-in browser. When you visit any supported job board, it silently reads the jobs you're already viewing and POSTs them to the existing `/api/public/sources/ingest-extension` endpoint. They flow into the same dashboard, scoring, and apply pipeline you already have.
 
-5. **One-click "Test the pipeline" on Setup**: queues a fake application against the highest-scoring matched job, runs the worker inline (not via cron), and walks the user through the stepper live so they can see resume → cover → submit/needs_review actually work.
-6. **Apply-worker resilience**: retry with backoff on transient errors, cap attempts at 3, surface `last_error` in the application detail header with a "Retry" button.
-7. **PDF rendering** of tailored resume using `@react-pdf/renderer` (pure-JS, Workers-safe) so `needs_review` jobs have a downloadable PDF, not just markdown.
-8. **Notification on every applied / needs_review** via the existing Gmail path — already wired, just needs the worker to call it on terminal status.
+**Why this is safe:** the requests come from your real browser, your real IP, your real session cookies, with normal human timing (you scroll, it captures). To LinkedIn it looks identical to you browsing — because it is.
 
-## Phase C — Mac-level UI polish
+```text
+[Your Chrome] --you browse--> linkedin.com/jobs
+      |
+      | extension reads visible job cards
+      v
+[Lovable Cloud] --ingest-extension--> jobs table --> dashboard --> apply worker
+```
 
-This is the visible "professional" lift. Applied consistently across all 11 authenticated routes.
+## What gets built
 
-- **Type system**: SF Pro Display for headings, Inter for body, tabular numerals for all counts/timestamps/scores. Tight tracking on large headers (-0.02em), generous leading on body (1.55).
-- **Surface system**: layered translucent surfaces (`bg-card/60 backdrop-blur-xl` + 1px hairline border in `--border/40`), soft inner highlight on top edge — the "frosted glass over a dark canvas" feel of macOS Sonoma/Sequoia.
-- **Motion**: 180ms cubic-bezier(0.2, 0.8, 0.2, 1) on every state change, scale-on-press (0.98) on primary buttons, list rows animate in with a 20ms stagger. No bouncy springs, no long fades.
-- **Density**: 8px grid everywhere, 14px base font in tables, 13px in chips/badges, generous 24–32px section gutters. Remove the prototype-feeling 16px gaps.
-- **Color discipline**: collapse the palette to ~7 semantic tokens (bg, surface, surface-elevated, border, text, text-muted, accent + 4 status colors). Audit and replace any raw `text-white`, `bg-zinc-*`, `bg-black/50` etc. with tokens.
-- **Iconography**: switch to Lucide at a single 16px size in tables and 20px in nav, 1.5px stroke. No emoji as UI.
-- **Empty states**: every page that can be empty (Jobs, Applications, Logs, Sources before seed) gets a real empty state — short headline + one primary action + small illustration in a single accent color.
-- **Job card refinements**: company favicon (via duckduckgo favicon API), salary as `$120k–$160k` tabular, posted time as `2h ago` with hover-tooltip absolute time, match score as a compact ring (not a giant pill), tags truncated to 3 + `+4 more`.
-- **Stepper**: switch from horizontal pills to a Apple-Health-style vertical thread with live pulse dot on the active step.
-- **Tables**: zebra removed, replaced with hover-only highlight; sticky header with subtle blur; column resize handles.
-- **Top bar**: collapse the two header rows on Applications/Jobs into one with inline search + filter chips.
+### 1. Extension package (`extension/` folder, downloadable ZIP)
 
-## Phase D — Trust & professionalism details
+- `manifest.json` (MV3) — permissions for the 6 portal domains only
+- `content-linkedin.js` — parses `/jobs/search` and `/jobs/view/:id` pages
+- `content-indeed.js` — parses Indeed result lists + job detail panes
+- `content-glassdoor.js` — parses Glassdoor job listings
+- `content-ziprecruiter.js` — parses ZipRecruiter cards
+- `content-wellfound.js` — parses Wellfound (AngelList) listings
+- `content-dice.js` — parses Dice search results
+- `background.js` — batches captures (max 1 POST every 10s) and forwards to backend
+- `popup.html` — shows: paired account email, today's capture count, on/off toggle, pause button
+- `options.html` — paste pairing code from app → stores user token in `chrome.storage.local`
 
-- **Status badge in the global header**: green "Operational" dot when worker heartbeat <5min old, amber "Idle" 5–30min, red "Offline" >30min — click to see last 20 worker runs.
-- **Cost meter**: show today's Lovable AI spend in the footer ($0.04 / $5 cap) so the user trusts what's running.
-- **Audit log page** (`/logs` already exists): filter chips by scope, copy-as-cURL for any failed API call, "Reply with this error" button that prefills a support email.
-- **Keyboard**: ⌘K command palette (jump to any route, "Apply to top match", "Run sources now", "Pause worker"). This single feature is what makes apps feel Mac-native.
+**Safety guardrails built in:**
+- **No automated navigation, scrolling, or clicking** — extension only reads what you naturally view
+- **Per-domain throttle:** max 1 outbound POST every 10s, capture buffer flushed in batches
+- **Random 200–800ms jitter** on every read so it doesn't look mechanical
+- **Domain allowlist** — extension cannot touch any site outside the 6 portals
+- **Read-only** — never fills forms, never submits applications, never clicks "Apply" for you
+- **Off switch** in popup, kill-switch on backend if a portal changes their TOS
 
-## Technical notes
+### 2. Backend (extends existing pipeline)
 
-**Files I'll add**
-- `src/lib/sources/seed.server.ts` — default source set + `ensureSourcesSeeded(userId)`
-- `src/components/CommandPalette.tsx` — ⌘K palette
-- `src/components/StatusPill.tsx` — operational/idle/offline header pill
-- `src/components/CostMeter.tsx` — daily AI spend footer
-- `src/components/EmptyState.tsx` — reusable
-- `src/lib/apply/pdf.server.ts` — `@react-pdf/renderer` resume PDF
-- One migration: ensure pg_cron job for apply-worker exists, add `notify_on_apply` defaults
+- New route `src/routes/api/public/sources/ingest-extension.ts` — validates Bearer token, dedupes by `(source, external_id)`, inserts into existing `jobs` table, triggers `match_job_to_filters`
+- New table `extension_tokens` (user_id, token, label, last_seen_at, captures_today) — RLS scoped to owner, token is the pairing secret
+- Daily counter resets via a tiny pg_cron entry
 
-**Files I'll edit (polish pass)**
-- `src/styles.css` — token cleanup, type ramp, motion variables
-- `src/routes/__root.tsx` — global header with StatusPill + ⌘K mount + CostMeter footer
-- All 11 `_authenticated/*.tsx` routes — density, surface, empty state pass
-- `src/components/ApplyStepper.tsx` — vertical thread redesign
-- `src/components/JobCard.tsx` (and Bento variants) — favicon, ring score, tabular nums
-- `src/routes/_authenticated/sources.tsx` — Run-now + last-cron header + seed-on-load
-- `src/routes/_authenticated/setup.tsx` — "Test the pipeline" button
+### 3. UI additions (existing app)
 
-**Out of scope (unchanged from prior plan)**
-- LinkedIn / Indeed auto-apply (requires real browser, not possible in this runtime)
-- CAPTCHA solving
-- Any third-party paid proxy / scraping service
+- New page `/extension` — "Pair your browser" with copy-able token, install instructions, live capture feed, per-portal counts (last 24h), revoke button
+- Download button → fetches `/extension.zip` from `public/`
+- Sources page gets 6 new rows (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Wellfound, Dice) showing `via extension` badge + last-seen timestamp
 
-**Order**
-A (1 hr — you see jobs) → B (1 hr — you successfully apply once end-to-end) → C (2 hr — Mac polish) → D (1 hr — trust details). I'll do them in one pass.
+## Coverage after this ships
 
-Approve and I'll build everything.
+| Source | Before | After |
+|---|---|---|
+| Greenhouse/Lever/Ashby/Workable/SmartRecruiter | ✅ | ✅ |
+| RemoteOK/Remotive/Arbeitnow/Himalayas/Adzuna/Jooble | ✅ | ✅ |
+| LinkedIn | ❌ | ✅ via extension |
+| Indeed | ❌ | ✅ via extension |
+| Glassdoor | ❌ | ✅ via extension |
+| ZipRecruiter | ❌ | ✅ via extension |
+| Wellfound | ❌ | ✅ via extension |
+| Dice | ❌ | ✅ via extension |
+| **Total realistic coverage** | **~80%** | **~97%** |
+
+## Honest trade-offs
+
+- Only captures while your browser is open and you're on those sites. Open LinkedIn once a day, scroll the feed — that's enough to keep it fed.
+- First-time setup = unzip + load unpacked extension in `chrome://extensions` (4 clicks). Not one-click; Chrome Web Store publishing is a separate later step.
+- If a portal redesigns their HTML, that one parser breaks until updated. Other 5 keep working.
+- No "auto-apply" on these 6 portals — that's where bans happen. The existing ATS auto-apply (Greenhouse/Lever/etc.) is unaffected.
+
+## Out of scope
+
+- Storing your portal passwords on the server
+- Residential proxies, headless browsers, captcha solvers
+- Auto-clicking "Easy Apply" on LinkedIn (high ban risk — kept manual; extension surfaces the job, you click apply yourself in the same tab)
+- Chrome Web Store publication (can be a follow-up)
+
+## Order of work
+
+1. Backend route + `extension_tokens` table + migration (15 min)
+2. `/extension` pairing page in app (20 min)
+3. Extension skeleton + manifest + background batcher (20 min)
+4. 6 content scripts, one per portal (45 min)
+5. Package to `public/extension.zip` + download button (10 min)
+6. Sources page — add 6 extension rows with last-seen indicator (10 min)
+
+~2 hours end-to-end. Approve and I'll build it.
