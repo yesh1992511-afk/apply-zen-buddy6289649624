@@ -100,7 +100,9 @@ async def _do_compile_resume(payload: dict[str, Any]) -> dict[str, Any]:
     uid = user_id()
     row = db().table("resumes").select("id,tex_content,kind").eq(
         "id", resume_id
-    ).eq("user_id", uid).single().execute().data
+    ).eq("user_id", uid).maybe_single().execute().data
+    if not row:
+        raise ValueError(f"resume {resume_id} not found (deleted?)")
     tex = row.get("tex_content") or ""
     if not tex.strip():
         raise ValueError("resume has no tex_content")
