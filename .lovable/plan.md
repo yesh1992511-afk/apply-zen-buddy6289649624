@@ -1,29 +1,31 @@
-# Fix: `ImportError: cannot import name 'stealth_async'`
+# Fix: `ModuleNotFoundError: No module named 'pkg_resources'`
 
 ## Cause
 
-`worker/pyproject.toml` declares `playwright-stealth>=1.0.6`. Pip resolved that to the new **2.x** release, which renamed/removed the top-level `stealth_async` function — the codebase still imports the 1.x API in `worker/app/apply/browser.py` line 11.
+`playwright-stealth` 1.x does `import pkg_resources` at import time. `pkg_resources` ships with **setuptools**, which is no longer pre-installed in Python 3.12 base images. The Playwright base image used here doesn't include it, so the import crashes the worker.
 
-## Fix (one line)
+## Fix
 
-Edit `worker/pyproject.toml` and constrain the package below 2.0:
+Add `setuptools` to the worker dependencies so `pkg_resources` is available.
+
+Edit `worker/pyproject.toml`:
 
 ```diff
-- "playwright-stealth>=1.0.6",
-+ "playwright-stealth>=1.0.6,<2",
+   "playwright-stealth>=1.0.6,<2",
++  "setuptools>=68",
 ```
-
-This keeps `browser.py` untouched and avoids a wider rewrite for the 2.x API.
 
 ## Rebuild + restart on the server
 
 ```bash
 cd ~/jobpilot/worker
 git pull
-docker compose build --no-cache worker
-docker compose up -d
+docker compose build worker
+docker compose up -d --force-recreate worker
 docker compose logs -f worker
 ```
+
+(No `--no-cache` needed; only the `pip install` layer re-runs, ~30–60s.)
 
 ## Expected log output
 
@@ -32,11 +34,12 @@ docker compose logs -f worker
 - `realtime sources listener subscribed`
 - No more `ImportError` / restart loop
 
-If you'd rather not rebuild the full image (the base layer took ~7 min), the alternative is a quick in-container patch:
+## Quick in-container test (optional, before rebuild)
 
 ```bash
-docker compose exec worker pip install 'playwright-stealth<2'
+docker compose exec worker pip install setuptools
 docker compose restart worker
+docker compose logs -f worker
 ```
 
-…but the change won't survive the next `--build`, so the `pyproject.toml` pin is still the proper fix.
+If that boots cleanly, the `pyproject.toml` change is the permanent fix.
