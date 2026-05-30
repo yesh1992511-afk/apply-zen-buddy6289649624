@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, AlertCircle, Copy, Server, Shield } from "lucide-react";
+import { CheckCircle2, AlertCircle, Copy, Server, Shield, Zap, Send, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { formatDistanceToNow } from "date-fns";
@@ -19,6 +19,8 @@ type Heartbeat = { last_seen: string | null; version: string | null };
 function SetupPage() {
   const [hb, setHb] = useState<Heartbeat | null>(null);
   const [userId, setUserId] = useState<string>("");
+  const [testing, setTesting] = useState<"sources" | "apply" | null>(null);
+  const [pipelineResult, setPipelineResult] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? ""));
@@ -38,6 +40,41 @@ function SetupPage() {
     toast.success("Copied");
   };
 
+  const runSources = async () => {
+    if (!userId) return;
+    setTesting("sources");
+    setPipelineResult(null);
+    try {
+      const res = await fetch(`/api/public/sources/run-tier?tier=hot&user_id=${userId}`);
+      const json = await res.json() as { ok?: boolean; summary?: Record<string, { fetched: number; inserted: number }> };
+      const totals = Object.values(json.summary ?? {}).reduce(
+        (a, b) => ({ fetched: a.fetched + b.fetched, inserted: a.inserted + b.inserted }),
+        { fetched: 0, inserted: 0 },
+      );
+      setPipelineResult(`Step 1 ✓ Fetched ${totals.fetched} jobs · ${totals.inserted} newly inserted`);
+      toast.success(`Fetched ${totals.fetched} jobs · ${totals.inserted} new`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const runApplyWorker = async () => {
+    setTesting("apply");
+    try {
+      const res = await fetch("/api/public/hooks/apply-worker");
+      const json = await res.json() as { ok?: boolean; processed?: number; results?: Array<{ id: string; status: string; error?: string }> };
+      const okCount = (json.results ?? []).filter((r) => r.status === "ok").length;
+      setPipelineResult(`Step 2 ✓ Apply worker processed ${json.processed ?? 0} application(s) · ${okCount} ok`);
+      toast.success(`Worker processed ${json.processed ?? 0}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setTesting(null);
+    }
+  };
+
   const sshCmd = "ssh root@147.93.47.24";
   const deployCmd = `cd /root/jobpilot/worker && bash bootstrap.sh`;
 
@@ -45,8 +82,43 @@ function SetupPage() {
     <div className="mx-auto max-w-5xl space-y-6">
       <PageHeader
         title="Worker setup"
-        description="The scraping + apply engine runs on your VPS (147.93.47.24). Run the bootstrap script once and it appears here."
+        description="Verify the system end-to-end with one click, then read the optional VPS instructions below."
       />
+
+      {/* Mac-level "Test pipeline" card — the most important thing on this page */}
+      <Card className="border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" /> Test the pipeline
+          </CardTitle>
+          <CardDescription>
+            Run the two cron-driven workers on demand. Step 1 fetches jobs from all enabled sources.
+            Step 2 picks the oldest queued application and runs resume → cover → submit.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={runSources} disabled={testing !== null} className="gap-2 bg-gradient-emerald">
+              {testing === "sources" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              1. Fetch jobs now
+            </Button>
+            <Button onClick={runApplyWorker} disabled={testing !== null} variant="outline" className="gap-2">
+              {testing === "apply" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              2. Run apply worker
+            </Button>
+          </div>
+          {pipelineResult && (
+            <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success-foreground">
+              {pipelineResult}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Tip: press <kbd className="rounded border border-border/60 bg-surface-2 px-1.5 py-0.5 font-mono text-[10px]">⌘K</kbd> anywhere
+            to open the command palette and run these without leaving the page.
+          </p>
+        </CardContent>
+      </Card>
+
 
 
       <Card>
