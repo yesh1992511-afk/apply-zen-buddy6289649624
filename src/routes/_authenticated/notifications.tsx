@@ -272,13 +272,13 @@ function NotificationsPage() {
               label="Manual review needed"
               desc="Captcha, 2FA, or odd question blocks the bot"
               checked={settings.notify_manual_review}
-              onChange={(v) => update({ notify_manual_review: v })}
+              onChange={(v) => validateAndUpdate({ notify_manual_review: v })}
             />
             <ToggleRow
               label="High-score job found"
               desc={`When a job scores ≥ ${settings.high_score_threshold}`}
               checked={settings.notify_high_score}
-              onChange={(v) => update({ notify_high_score: v })}
+              onChange={(v) => validateAndUpdate({ notify_high_score: v })}
             >
               <Input
                 type="number"
@@ -294,19 +294,19 @@ function NotificationsPage() {
               label="Apply failed (after retries)"
               desc="Final failure after all retry attempts"
               checked={settings.notify_apply_failed}
-              onChange={(v) => update({ notify_apply_failed: v })}
+              onChange={(v) => validateAndUpdate({ notify_apply_failed: v })}
             />
             <ToggleRow
               label="Worker offline >10 min"
               desc="VPS or worker process crashed"
               checked={settings.notify_worker_offline}
-              onChange={(v) => update({ notify_worker_offline: v })}
+              onChange={(v) => validateAndUpdate({ notify_worker_offline: v })}
             />
             <ToggleRow
               label="Daily summary"
               desc={`Sent daily at ${(settings.daily_summary_time || "20:00").slice(0, 5)} UTC`}
               checked={settings.daily_summary_enabled}
-              onChange={(v) => update({ daily_summary_enabled: v })}
+              onChange={(v) => validateAndUpdate({ daily_summary_enabled: v })}
             >
               <Input
                 type="time"
