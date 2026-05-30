@@ -1,92 +1,84 @@
-# Gmail Integration: OTP Auto-Fill + Smart Notifications
+# Finish JobPilot: remaining gaps + phases
 
-## What this does
+## Phase A — Close gaps from the Gmail/notifications work just shipped
 
-1. **OTP auto-fill** — During an apply, when a portal sends a verification email, the worker polls your Gmail, extracts the 6-digit code, and types it into the form. No manual interruption.
-2. **Manual review alerts** — Instant email when captcha/2FA/odd question blocks the bot.
-3. **High-score job alerts** — Instant email when a 95+ score job is scraped (so you can review before auto-apply).
-4. **Apply failed alerts** — Email after retries exhausted on a job.
-5. **Worker offline alert** — Email if heartbeat is stale >10 min.
-6. **Daily summary** — Once a day: jobs scraped, applied, failed, manual-review pending, top 5 matches.
+These items were referenced but not fully wired in the last batch.
 
-## Step 1 — Connect Gmail (one click, you only)
+1. **Worker command handlers for notifications**
+   - `worker/app/commands.py`: add handlers for the new command kinds the cron hooks enqueue:
+     - `notify_offline` → call `gmail.send_and_log("worker_offline", ...)` with last_seen from payload.
+     - `notify_daily_summary` → query last 24h: jobs scraped, jobs matched, applications queued/applied/failed, top 5 by score, manual-review count. Send a single summary email.
+   - Without this, the cron hooks enqueue commands that the worker never executes.
 
-Trigger the Gmail connector. You sign in once and grant: `gmail.readonly` (read OTPs) + `gmail.send` (send notifications). Credentials live in the connector gateway — no API keys to manage.
+2. **OTP wiring in portal adapters**
+   - `worker/app/apply/gmail_otp.py` exists; confirm `wait_for_otp(portal_host)` is the public helper.
+   - `indeed.py`, `linkedin.py`, `workday.py`, `lever.py`: detect OTP/2FA input fields (`input[type=tel]`, `input[name*=code]`, `input[autocomplete=one-time-code]`) and call the helper before falling back to manual review.
+   - Falls back to `notify.manual_review(...)` after timeout (60–120s).
 
-## Step 2 — OTP reader server function
+3. **pg_cron registration**
+   - The two hook routes exist (`check-heartbeat`, `daily-summary`) but the cron jobs that call them must be registered.
+   - Use `supabase--insert` (not migration) to schedule:
+     - `*/5 * * * *` → POST `/api/public/hooks/check-heartbeat`
+     - `*/15 * * * *` → POST `/api/public/hooks/daily-summary`
+   - Both with `apikey: <anon>` header, empty `{}` body.
 
-`src/lib/gmail.functions.ts` → `fetchOtpCode({ portalDomain, sinceIso })`:
-- Calls `users/me/messages?q=from:<portalDomain> newer_than:5m is:unread`
-- Fetches latest message body, regex `/\b(\d{4,8})\b/` near keywords (code, verification, OTP, verify)
-- Returns `{ code, messageId }` or `null`
-- Marks message read after extraction
+4. **Recipient fallback**
+   - `worker/app/notify.py`: when `recipient_email` is empty, fall back to `gmail_credentials.email` (the user's own Gmail) instead of failing silently.
 
-Worker integration in `worker/app/apply/browser.py`:
-- New `wait_for_otp(portal_host, timeout=120s)` helper polls the server function every 5s
-- Called from each portal adapter (`indeed.py`, `lever.py`, `workday.py`) when an OTP input is detected
-- Falls back to manual review if no code arrives in time
+5. **`notification_log` retention**
+   - Keep only last 200 rows per user (worker cleanup at end of daily summary), so the "Recent notifications" card stays useful.
 
-## Step 3 — Notification dispatcher
+## Phase B — Remaining JobPilot phases (post-Gmail)
 
-`src/lib/notify.functions.ts` → `sendNotification({ kind, subject, body, jobId? })`:
-- Builds RFC 2822 email, base64url, POSTs to `users/me/messages/send`
-- Logs to `usage_events` (kind=`email_sent`)
-- Honors `notification_settings` toggles (skip if disabled)
+These are the broader pieces still needed to run the bot autonomously end-to-end.
 
-**New table `notification_settings`** (one row per user):
-- `daily_summary_enabled` bool, `daily_summary_time` time (default 20:00)
-- `notify_manual_review` bool default true
-- `notify_high_score` bool default true, `high_score_threshold` int default 95
-- `notify_apply_failed` bool default true
-- `notify_worker_offline` bool default true
-- `recipient_email` text (defaults to profile.email)
+### B1. Apify source credentials & connection test
+- `/sources` page: per Apify source (`apify_linkedin`, `apify_indeed`, `apify_glassdoor`, etc.), surface a "Test fetch" button that runs a single small fetch and reports count + errors. Right now the user has no way to validate a source is configured correctly without waiting for cron.
 
-Triggered from:
-- **Worker** (`apply/runner.py`): on manual-review state, on final fail → enqueues a `notify` worker_command, server function picks it up and sends via Gmail
-- **Worker** (`commands.py` scrape consumer): on job with score≥threshold → enqueue notify
-- **pg_cron** (every 5 min): checks `worker_heartbeat.last_seen` — if stale >10 min, calls a `/api/public/hooks/check-heartbeat` route that sends offline alert (debounced 1×/hour)
-- **pg_cron** (hourly): checks if any user's daily-summary time has passed in their timezone today and not yet sent — calls `/api/public/hooks/daily-summary` which aggregates jobs/applications from last 24h and emails
+### B2. Resume + cover-letter quick-check
+- `/profile` already has resume upload. Add a "Preview tailored output" panel that takes one job from `jobs` (highest score) and renders:
+  - LaTeX→PDF preview of tailored resume.
+  - AI-generated cover letter draft.
+- Lets the user verify AI tone before bot starts applying.
 
-## Step 4 — UI: Notifications settings page
+### B3. Dashboard upgrade
+- Replace current dashboard with live counters: scraped 24h, matched, queued, applied today vs. `max_applies_per_day` budget, worker heartbeat freshness, last 10 events feed.
 
-New route `src/routes/_authenticated/notifications.tsx`:
-- Toggles for each event type
-- Time picker for daily summary
-- "Send test email" button (uses Gmail connector)
-- Recent sent-notifications list (last 20 from `usage_events`)
-- Sidebar link in nav
+### B4. Kill-switch + safety
+- Global "Pause automation" toggle on dashboard (sets `automation_settings.enabled=false`) — already exists in DB; just needs a prominent button.
+- Per-portal rate-limit display ("Indeed: 4/10 last hour").
 
-## Step 5 — Wire everything
+### B5. Worker deployment
+- Bundle: `scp -r worker root@147.93.47.24:/root/jobpilot/ && ssh root@147.93.47.24 'cd /root/jobpilot/worker && docker compose build && docker compose up -d'`
+- Add `worker/VERSION` bump so heartbeat shows it.
 
-- Migration: `notification_settings` table + RLS + grants, seed row in `handle_new_user()`
-- `start.ts`: ensure `attachSupabaseAuth` is in `functionMiddleware` (likely already there)
-- Worker bumps version, deploys via existing `scp + bootstrap.sh`
-- pg_cron jobs use stable URL `project--ba5780a8-641e-4ee8-9c24-6e1c185cef2f.lovable.app`
-
-## Files
-
-**New:**
-- `src/lib/gmail.functions.ts` (fetchOtpCode, sendGmail helper)
-- `src/lib/notify.functions.ts` (sendNotification, getNotificationSettings)
-- `src/routes/_authenticated/notifications.tsx`
-- `src/routes/api/public/hooks/check-heartbeat.ts`
-- `src/routes/api/public/hooks/daily-summary.ts`
-- `worker/app/notify.py` (enqueue helper)
-- Migration: `notification_settings` table + cron jobs
-
-**Edited:**
-- `worker/app/apply/browser.py` (wait_for_otp polling)
-- `worker/app/apply/portals/{indeed,lever,workday}.py` (call wait_for_otp on OTP fields)
-- `worker/app/apply/runner.py` (emit notify events on manual-review / final fail)
-- `worker/app/commands.py` (emit notify on high-score scrape)
-- `src/components/AppSidebar.tsx` (add Notifications link)
+### B6. End-to-end smoke test
+- Manual checklist run after deploy:
+  1. Save Gmail App Password → click "Send test" → email arrives.
+  2. Enable one Apify source → wait one cycle → jobs appear.
+  3. Plant a fake high-score job (SQL update score=99) → notification email arrives.
+  4. Disable network on worker for 15 min → offline alert email arrives.
+  5. Wait until `daily_summary_time` → summary email arrives with non-zero counts.
 
 ## Order of execution
 
-1. Trigger Gmail connector → you click through OAuth
-2. Migration (table + cron) — await your approval
-3. Server functions + UI
-4. Worker code + redeploy
-5. End-to-end test: trigger a fake OTP email to yourself, verify worker reads it; trigger a fake high-score job, verify alert arrives
+1. Phase A1 (worker command handlers) — without it, A3 cron is dead weight.
+2. Phase A2 (OTP wiring polish) + A4/A5.
+3. Phase A3 (register cron jobs via supabase--insert).
+4. Phase B1 (source test button) → B2 (preview) → B3 (dashboard) → B4 (kill-switch).
+5. Phase B5 (deploy) → B6 (smoke test).
 
-Approve and I'll start with the Gmail connector flow.
+## Technical notes
+
+- All new server fns continue to use `requireSupabaseAuth`; cron hooks remain under `/api/public/*`.
+- No new secrets needed — Gmail App Password already covers send + read.
+- Worker writes its handler results into `worker_commands.result` so the UI can show "✓ summary sent at 20:01".
+- No schema changes required beyond what already shipped.
+
+## What I need from you
+
+Just **Approve** and pick one:
+- **(a) Do everything A→B in one go** (will take several batched edits + one deploy).
+- **(b) Do Phase A only now**, then we test, then I tackle Phase B.
+
+I recommend (b) — verify notifications work end-to-end before stacking dashboard work on top.
