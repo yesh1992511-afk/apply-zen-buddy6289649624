@@ -218,15 +218,27 @@ function SourcesPage() {
       ) : (
         <div className="space-y-3">
           {sources.map((s) => {
-            const statusOk = s.last_run_status === "ok";
+            const statusOk = s.last_run_status === "ok" || s.last_run_status === "success";
+            const statusPartial = s.last_run_status === "partial";
+            const healthLabel = !s.enabled ? "Paused" : !s.last_run_at ? "Idle" : statusOk ? "Healthy" : statusPartial ? "Degraded" : "Failing";
+            const healthClass = !s.enabled
+              ? "bg-surface-3 text-muted-foreground"
+              : statusOk
+                ? "bg-success/15 text-success ring-1 ring-success/30"
+                : statusPartial
+                  ? "bg-warning/15 text-warning ring-1 ring-warning/30"
+                  : !s.last_run_at
+                    ? "bg-surface-3 text-muted-foreground"
+                    : "bg-destructive/15 text-destructive ring-1 ring-destructive/30";
             return (
-              <div key={s.id} className="overflow-hidden rounded-xl border border-border/60 bg-card transition-shadow hover:shadow-elegant">
+              <div key={s.id} className="overflow-hidden rounded-xl border border-border/60 bg-card transition-shadow hover:shadow-elegant lift">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/40 bg-surface-1 p-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <PortalBadge source={s.key} size="sm" />
                       <h3 className="font-heading font-semibold">{s.display_name}</h3>
                       <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground">{s.kind}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${healthClass}`}>{healthLabel}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       {s.last_run_at ? (
@@ -236,7 +248,7 @@ function SourcesPage() {
                           ) : (
                             <AlertCircle className="h-3.5 w-3.5 text-warning" />
                           )}
-                          <span>Last run {new Date(s.last_run_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</span>
+                          <span>Last sync <span className="text-foreground/80 font-medium tabular-nums">{timeAgo(s.last_run_at)}</span></span>
                           <span className="text-muted-foreground/60">·</span>
                           <span className="font-medium tabular-nums text-foreground">{s.last_run_count ?? 0}</span>
                           <span>jobs</span>
