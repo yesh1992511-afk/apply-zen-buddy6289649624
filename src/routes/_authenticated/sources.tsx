@@ -251,16 +251,31 @@ function SourcesPage() {
           {sources.map((s) => {
             const statusOk = s.last_run_status === "ok" || s.last_run_status === "success";
             const statusPartial = s.last_run_status === "partial";
-            const healthLabel = !s.enabled ? "Paused" : !s.last_run_at ? "Idle" : statusOk ? "Healthy" : statusPartial ? "Degraded" : "Failing";
+            // Cadence-aware staleness: even an OK source is "Stale" if it hasn't run in 2× its cadence.
+            const ageMs = s.last_run_at ? Date.now() - new Date(s.last_run_at).getTime() : 0;
+            const isStale = statusOk && s.enabled && s.last_run_at != null
+              && ageMs > Math.max(s.cadence_minutes, 1) * 60_000 * 2;
+            const healthLabel = !s.enabled
+              ? "Paused"
+              : !s.last_run_at
+                ? "Idle"
+                : isStale
+                  ? "Stale"
+                  : statusOk
+                    ? "Healthy"
+                    : statusPartial ? "Degraded" : "Failing";
             const healthClass = !s.enabled
               ? "bg-surface-3 text-muted-foreground"
-              : statusOk
-                ? "bg-success/15 text-success ring-1 ring-success/30"
-                : statusPartial
-                  ? "bg-warning/15 text-warning ring-1 ring-warning/30"
-                  : !s.last_run_at
-                    ? "bg-surface-3 text-muted-foreground"
-                    : "bg-destructive/15 text-destructive ring-1 ring-destructive/30";
+              : isStale
+                ? "bg-warning/15 text-warning ring-1 ring-warning/30"
+                : statusOk
+                  ? "bg-success/15 text-success ring-1 ring-success/30"
+                  : statusPartial
+                    ? "bg-warning/15 text-warning ring-1 ring-warning/30"
+                    : !s.last_run_at
+                      ? "bg-surface-3 text-muted-foreground"
+                      : "bg-destructive/15 text-destructive ring-1 ring-destructive/30";
+
             return (
               <BusyOverlay key={s.id} busy={!!testing[s.id]} label="Testing…" className="rounded-xl">
               <div className="overflow-hidden rounded-xl border border-border/60 bg-card transition-shadow hover:shadow-elegant lift">
@@ -334,12 +349,23 @@ function SourcesPage() {
                   </div>
                   {s.last_error && (
                     <div className="md:col-span-2 rounded-md border border-destructive/30 bg-destructive/10 p-3">
-                      <div className="flex items-center gap-2 text-xs font-medium text-destructive">
-                        <AlertCircle className="h-3.5 w-3.5" /> Last error
+                      <div className="flex items-center justify-between gap-2 text-xs font-medium text-destructive">
+                        <span className="inline-flex items-center gap-2">
+                          <AlertCircle className="h-3.5 w-3.5" /> Last error
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(s.last_error ?? "");
+                            toast.success("Error copied");
+                          }}
+                          className="rounded border border-destructive/30 px-1.5 py-0.5 text-[10px] font-medium text-destructive/80 hover:bg-destructive/10"
+                        >Copy</button>
                       </div>
                       <p className="mt-1 font-mono text-xs text-destructive/90 break-all">{s.last_error}</p>
                     </div>
                   )}
+
                 </div>
               </div>
               </BusyOverlay>

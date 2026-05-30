@@ -1,19 +1,20 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { NotFoundRoute } from "@/components/NotFoundRoute";
-import { useEffect, useState, useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { toast } from "sonner";
 import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { QueryErrorState } from "@/components/QueryErrorState";
 import { JobDescriptionDialog, type JobDialogJob } from "@/components/JobDescriptionDialog";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
+import { jobsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies } from "@/lib/queries/jobs";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
   head: () => ({ meta: [{ title: "Jobs — JobPilot" }] }),
@@ -22,26 +23,8 @@ export const Route = createFileRoute("/_authenticated/jobs")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
-type Job = {
-  id: string;
-  title: string;
-  company: string;
-  location: string | null;
-  remote: string | null;
-  url: string;
-  source_key: string;
-  posted_at: string | null;
-  scraped_at: string;
-  score: number;
-  salary_min: number | null;
-  salary_max: number | null;
-  salary_currency: string | null;
-  employment_type: string | null;
-  seniority: string | null;
-  description: string | null;
-  description_html: string | null;
-  status: string;
-};
+// `Job` type is re-exported from the query module.
+
 
 const windows = [
   { label: "1h", hours: 1 },
@@ -60,42 +43,21 @@ function scoreChip(s: number) {
 
 function JobsPage() {
   const navigate = useNavigate();
-  const [jobs, setJobs] = useState<Job[]>([]);
   const [hours, setHours] = useState(24);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
   const [dialogJob, setDialogJob] = useState<JobDialogJob | null>(null);
-  const [applyingId, setApplyingId] = useState<string | null>(null);
-  const [savedFilters, setSavedFilters] = useState<Array<{ id: string; name: string; keywords: string[] }>>([]);
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    let q = supabase
-      .from("jobs")
-      .select("*")
-      .eq("matched", true)
-      .order("score", { ascending: false })
-      .order("posted_at", { ascending: false, nullsFirst: false })
-      .limit(200);
-    if (hours > 0) {
-      const since = new Date(Date.now() - hours * 3600_000).toISOString();
-      q = q.gte("scraped_at", since);
-    }
-    const { data, error } = await q;
-    if (error) toast.error(error.message);
-    setJobs((data ?? []) as Job[]);
-    setLoading(false);
-  };
+  const jobsQuery = useQuery(jobsQueryOptions({ hours }));
+  const filtersQuery = useQuery(savedFiltersQueryOptions());
+  const applyMutation = useApplyToJob();
+  const bulkQueue = useBulkQueueApplies();
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [hours]);
-  useEffect(() => {
-    supabase.from("filters").select("id, name, keywords").order("created_at").then(({ data }) => {
-      setSavedFilters((data ?? []) as Array<{ id: string; name: string; keywords: string[] }>);
-    });
-  }, []);
-
+  const jobs = jobsQuery.data ?? [];
+  const savedFilters = filtersQuery.data ?? [];
+  const loading = jobsQuery.isLoading;
+  const applyingId = applyMutation.isPending ? applyMutation.variables ?? null : null;
 
   const filtered = useMemo(() => {
     if (!search) return jobs;
@@ -115,51 +77,22 @@ function JobsPage() {
     });
   };
 
-  const queueApply = async () => {
+  const queueApply = () => {
     if (selected.size === 0) return;
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
-    const rows = [...selected].map((job_id) => ({ job_id, user_id: u.user!.id, status: "queued" as const }));
-    const { error } = await supabase.from("applications").insert(rows);
-    if (error) toast.error(error.message);
-    else {
-      toast.success(`Queued ${rows.length} job${rows.length > 1 ? "s" : ""} for the worker.`);
-      setSelected(new Set());
-    }
+    bulkQueue.mutate([...selected], {
+      onSuccess: () => setSelected(new Set()),
+    });
   };
 
-  const applyOne = async (job: { id: string }) => {
-    setApplyingId(job.id);
-    try {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) return;
-      const { data: existing } = await supabase
-        .from("applications")
-        .select("id")
-        .eq("job_id", job.id)
-        .eq("user_id", u.user.id)
-        .maybeSingle();
-      let appId = existing?.id;
-      if (!appId) {
-        const { data, error } = await supabase
-          .from("applications")
-          .insert({ job_id: job.id, user_id: u.user.id, status: "queued" })
-          .select("id")
-          .single();
-        if (error) { toast.error(error.message); return; }
-        appId = data.id;
-        toast.success("Application queued — worker starting");
-      } else {
-        toast.message("Already queued — opening application");
-      }
-      setDialogJob(null);
-      // Kick the worker immediately so user sees activity right away (don't wait for the 1-min cron)
-      fetch(`/api/public/hooks/apply-worker?application_id=${appId}`, { method: "POST" }).catch(() => {});
-      navigate({ to: "/applications/$id", params: { id: appId } });
-    } finally {
-      setApplyingId(null);
-    }
+  const applyOne = (job: { id: string }) => {
+    applyMutation.mutate(job.id, {
+      onSuccess: ({ id }) => {
+        setDialogJob(null);
+        navigate({ to: "/applications/$id", params: { id } });
+      },
+    });
   };
+
 
 
   return (
@@ -193,7 +126,7 @@ function JobsPage() {
               className="pl-9 bg-surface-2 border-border/60"
             />
           </div>
-          <Button variant="outline" onClick={load} disabled={loading} aria-label="Refresh jobs">{loading ? "…" : "Refresh"}</Button>
+          <Button variant="outline" onClick={() => jobsQuery.refetch()} disabled={jobsQuery.isFetching} aria-label="Refresh jobs">{jobsQuery.isFetching ? "…" : "Refresh"}</Button>
         </div>
         {savedFilters.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -227,12 +160,15 @@ function JobsPage() {
       </div>
 
 
-      {loading && jobs.length === 0 ? (
+      {jobsQuery.isError ? (
+        <QueryErrorState error={jobsQuery.error} onRetry={() => jobsQuery.refetch()} title="Couldn't load jobs" />
+      ) : loading && jobs.length === 0 ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-[180px] shimmer rounded-xl" />
           ))}
         </div>
+
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Briefcase}

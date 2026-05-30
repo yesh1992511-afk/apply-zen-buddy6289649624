@@ -1,6 +1,7 @@
-import { createFileRoute, Link, useRouter, notFound } from "@tanstack/react-router";
+import { createFileRoute, useRouter, notFound } from "@tanstack/react-router";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -8,8 +9,10 @@ import { ApplyStepper, deriveStep } from "@/components/ApplyStepper";
 import { LiveActivityPanel, type LogRow } from "@/components/LiveActivityPanel";
 import { FormFillTable, type FillRow } from "@/components/FormFillTable";
 import { PortalBadge } from "@/components/PortalBadge";
+import { ApplicationTimeline } from "@/components/ApplicationTimeline";
+import { applicationEventsQueryOptions, useRetryApplication } from "@/lib/queries/applications";
 import { timeAgo } from "@/lib/timeAgo";
-import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2, RefreshCw, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -35,7 +38,9 @@ type AppRow = {
   resume_id: string | null;
   cover_letter_id: string | null;
   attempts: number;
+  retry_count: number | null;
   last_error: string | null;
+  dlq_reason: string | null;
   queued_at: string;
   started_at: string | null;
   applied_at: string | null;
@@ -51,6 +56,7 @@ type AppRow = {
 type ResumeRow = { id: string; name: string; pdf_storage_path: string | null; kind: string };
 
 const ACTIVE_STATUSES = new Set(["queued", "applying", "optimizing", "generating_resume", "generating_cover", "submitting", "filling_form"]);
+const RETRYABLE_STATUSES = new Set(["failed", "needs_review", "error", "dlq"]);
 
 function ApplicationDetailPage() {
   const { id } = Route.useParams();
@@ -64,13 +70,18 @@ function ApplicationDetailPage() {
   const [tab, setTab] = useState("form");
   const [loading, setLoading] = useState(true);
 
+  const eventsQuery = useQuery(applicationEventsQueryOptions(id));
+  const retryMutation = useRetryApplication();
+  const canRetry = app ? RETRYABLE_STATUSES.has(app.status) || !!app.last_error || !!app.dlq_reason : false;
+
+
   // Initial load
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
         .from("applications")
-        .select("id, status, job_id, resume_id, cover_letter_id, attempts, last_error, queued_at, started_at, applied_at, finished_at, screenshots, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at)")
+        .select("id, status, job_id, resume_id, cover_letter_id, attempts, retry_count, last_error, dlq_reason, queued_at, started_at, applied_at, finished_at, screenshots, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at)")
         .eq("id", id)
         .maybeSingle();
       if (cancelled) return;
@@ -200,15 +211,35 @@ function ApplicationDetailPage() {
               </div>
             </div>
           )}
-          {app.last_error && (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-              {app.last_error}
+          {(app.last_error || app.dlq_reason) && (
+            <div className="space-y-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+              {app.dlq_reason && (
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-destructive">
+                  Dead-lettered · {app.dlq_reason}
+                </div>
+              )}
+              {app.last_error && (
+                <div className="text-xs text-destructive leading-relaxed">{app.last_error}</div>
+              )}
+              {canRetry && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={retryMutation.isPending}
+                  onClick={() => retryMutation.mutate(app.id)}
+                  className="w-full gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", retryMutation.isPending && "animate-spin")} />
+                  {retryMutation.isPending ? "Queuing…" : "Retry now"}
+                </Button>
+              )}
             </div>
           )}
           <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2">View</div>
           <nav className="rounded-xl border border-border/60 bg-card overflow-hidden">
             {[
               { v: "form", label: "Form", icon: ClipboardList },
+              { v: "timeline", label: "Timeline", icon: History },
               { v: "resume", label: "Resume", icon: FileText },
               { v: "cover", label: "Cover letter", icon: Mail },
             ].map((it) => (
@@ -223,6 +254,11 @@ function ApplicationDetailPage() {
                 )}
               >
                 <it.icon className="h-4 w-4" />{it.label}
+                {it.v === "timeline" && eventsQuery.data && eventsQuery.data.length > 0 && (
+                  <span className="ml-auto rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+                    {eventsQuery.data.length}
+                  </span>
+                )}
               </button>
             ))}
             {app.job?.url && (
@@ -233,17 +269,22 @@ function ApplicationDetailPage() {
           </nav>
         </aside>
 
+
         {/* Right pane */}
         <div className="space-y-4 min-w-0">
           <LiveActivityPanel logs={logs} active={isActive} />
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="hidden">
               <TabsTrigger value="form">Form</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="resume">Resume</TabsTrigger>
               <TabsTrigger value="cover">Cover</TabsTrigger>
             </TabsList>
             <TabsContent value="form" className="mt-0">
               <FormFillTable rows={fillRows} isActive={isActive} />
+            </TabsContent>
+            <TabsContent value="timeline" className="mt-0">
+              <ApplicationTimeline events={eventsQuery.data ?? []} />
             </TabsContent>
             <TabsContent value="resume" className="mt-0">
               <PdfViewer url={resumeUrl} title={resume?.name ?? "Tailored resume"} isGenerating={isActive && !resumeUrl} />
@@ -252,6 +293,7 @@ function ApplicationDetailPage() {
               <PdfViewer url={coverUrl} title={coverLetter?.name ?? "Cover letter"} isGenerating={isActive && !coverUrl} />
             </TabsContent>
           </Tabs>
+
         </div>
       </div>
     </div>
