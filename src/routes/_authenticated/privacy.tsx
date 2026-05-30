@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
+import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { exportMyData, requestAccountDeletion, cancelAccountDeletion, getDeletionStatus } from "@/lib/privacy.functions";
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/_authenticated/privacy")({
   head: () => ({ meta: [{ title: "Privacy & Data — JobPilot" }] }),
   component: PrivacyPage,
   errorComponent: ErrorBoundaryRoute,
+  notFoundComponent: () => <NotFoundRoute />,
 });
 
 function PrivacyPage() {

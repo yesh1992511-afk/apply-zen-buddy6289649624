@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
+import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useState, useCallback } from "react";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/_authenticated/applications")({
   head: () => ({ meta: [{ title: "Applications — JobPilot" }] }),
   component: ApplicationsPage,
   errorComponent: ErrorBoundaryRoute,
+  notFoundComponent: () => <NotFoundRoute />,
 });
 
 type Phase =

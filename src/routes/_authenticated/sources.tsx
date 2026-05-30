@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
+import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/lib/useAuth";
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/_authenticated/sources")({
   head: () => ({ meta: [{ title: "Sources — JobPilot" }] }),
   component: SourcesPage,
   errorComponent: ErrorBoundaryRoute,
+  notFoundComponent: () => <NotFoundRoute />,
 });
 
 type Source = {
