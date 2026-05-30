@@ -8,7 +8,7 @@ import { MetricTile } from "@/components/MetricTile";
 import { AlertOctagon, CheckCircle2, Clock, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/_admin/observability")({
+export const Route = createFileRoute("/admin/observability")({
   head: () => ({ meta: [{ title: "Observability — Admin" }] }),
   component: ObservabilityPage,
   errorComponent: ErrorBoundaryRoute,

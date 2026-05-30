@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { DataTable, type Column } from "@/components/DataTable";
 
-export const Route = createFileRoute("/_admin/audit")({
+export const Route = createFileRoute("/admin/audit")({
   head: () => ({ meta: [{ title: "Audit log — Admin" }] }),
   component: AuditPage,
   errorComponent: ErrorBoundaryRoute,

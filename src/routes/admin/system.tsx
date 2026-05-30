@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Pause, Play, RefreshCw, RotateCw, Send, Server } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_admin/system")({
+export const Route = createFileRoute("/admin/system")({
   head: () => ({ meta: [{ title: "System — Admin" }] }),
   component: SystemPage,
   errorComponent: ErrorBoundaryRoute,
