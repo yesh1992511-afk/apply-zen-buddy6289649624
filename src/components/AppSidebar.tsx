@@ -128,7 +128,7 @@ export function AppSidebar() {
         {renderGroup("Pilot", pilot)}
         {renderGroup("Profile", profile)}
         {renderGroup("System", system)}
-        {isAdmin && renderGroup("Admin", admin)}
+        {isSuperAdmin && renderGroup("Admin", admin)}
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border/60">
         <Button variant="ghost" size="sm" onClick={signOut} className="justify-start text-muted-foreground hover:text-foreground">
