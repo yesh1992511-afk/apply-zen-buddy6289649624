@@ -59,14 +59,6 @@ const system = [
   { title: "Worker setup", to: "/setup", icon: Server },
 ];
 
-const admin = [
-  { title: "Observability", to: "/admin/observability", icon: Shield },
-  { title: "System", to: "/admin/system", icon: Server },
-  { title: "Audit log", to: "/admin/audit", icon: ScrollText },
-  { title: "Feature flags", to: "/admin/flags", icon: Filter },
-  { title: "Plans", to: "/admin/plans", icon: CreditCard },
-];
-
 
 
 export function AppSidebar() {
