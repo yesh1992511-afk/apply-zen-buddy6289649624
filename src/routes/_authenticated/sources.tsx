@@ -63,20 +63,52 @@ function SourcesPage() {
   };
   useEffect(() => { load(); }, []);
 
+  // First-visit autopilot: if the user has zero sources, seed + enable everything
+  // and create a permissive default filter so jobs aren't all dropped.
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const [{ count: srcCount }, { count: filterCount }] = await Promise.all([
+        supabase.from("sources").select("id", { count: "exact", head: true }),
+        supabase.from("filters").select("id", { count: "exact", head: true }),
+      ]);
+      if ((filterCount ?? 0) === 0) {
+        await supabase.from("filters").insert({
+          user_id: user.id,
+          name: "Default",
+          is_default: true,
+          min_score: 30,
+          posted_within_hours: 168,
+          remote_only: false,
+          onsite_ok: true,
+          hybrid_ok: true,
+        } as never);
+      }
+      if ((srcCount ?? 0) === 0) {
+        const rows = PRESETS.map((p) => ({ ...p, user_id: user.id, enabled: true }));
+        await supabase.from("sources").insert(rows as never);
+        toast.success(`Seeded ${rows.length} sources — enabled by default`);
+        load();
+      }
+    })();
+  }, [user]);
+
   const toggleIngestion = async (v: boolean) => {
     if (!user) return;
     setIngestionEnabled(v);
-    const { error } = await supabase.from("automation_settings").update({ enabled: v }).eq("user_id", user.id);
+    // automation_settings is auto-created by handle_new_user trigger, but upsert to be safe
+    const { error } = await supabase.from("automation_settings").upsert({ user_id: user.id, enabled: v } as never, { onConflict: "user_id" });
     if (error) { toast.error(error.message); setIngestionEnabled(!v); return; }
     toast.success(v ? "Job ingestion enabled — first batch incoming" : "Ingestion paused");
     if (v) runNow();
   };
 
   const runNow = async () => {
+    if (!user) return;
     setRunningNow(true);
     setLastIngestResult(null);
     try {
-      const res = await fetch("/api/public/sources/run-tier?tier=hot");
+      const res = await fetch(`/api/public/sources/run-tier?tier=hot&user_id=${user.id}`);
       const json = await res.json() as { ok?: boolean; summary?: Record<string, { fetched: number; inserted: number }> };
       if (!json.ok) { toast.error("Run failed"); return; }
       const totals = Object.values(json.summary ?? {}).reduce((a, b) => ({ fetched: a.fetched + b.fetched, inserted: a.inserted + b.inserted }), { fetched: 0, inserted: 0 });
@@ -92,7 +124,7 @@ function SourcesPage() {
   const seed = async () => {
     if (!user) return;
     const existing = new Set(sources.map((s) => s.key));
-    const rows = PRESETS.filter((p) => !existing.has(p.key)).map((p) => ({ ...p, user_id: user.id, enabled: false }));
+    const rows = PRESETS.filter((p) => !existing.has(p.key)).map((p) => ({ ...p, user_id: user.id, enabled: true }));
     if (rows.length === 0) { toast.info("All presets already added"); return; }
     const { error } = await supabase.from("sources").insert(rows as never);
     if (error) toast.error(error.message); else { toast.success(`Seeded ${rows.length} sources`); load(); }

@@ -1,75 +1,70 @@
-# Honest audit + plan to make this actually land you a job
+# Make it professional + actually working
 
-After reviewing everything we've built, the **UI is done** (job cards, popups, applications detail with stepper / live activity / form-fill table / resume + cover preview, sources page, source adapters). But three critical gaps mean the system **does not yet do real work**:
+Current state: backend (sources adapters, run-tier, apply-worker, AI tailoring, log writer, cron, ATS detection) is built — but **the database is empty** (0 sources, 0 jobs, 0 applications, 0 logs). Nothing is flowing because no source rows were ever inserted for your user. The UI also still reads like a prototype in a few places. Plan below fixes both.
 
-| # | Gap | Symptom today |
-|---|---|---|
-| 1 | **Zero source rows in DB** | Cron runs every 15 min but finds nothing to fetch → 0 jobs ever appear |
-| 2 | **No apply worker** | Clicking "Apply" inserts a `queued` row that sits forever — no resume tailoring, no cover letter, no submission |
-| 3 | **No log writer** | `logs` table has no INSERT path → Live Activity panel and Form Fill table are permanently empty |
+## Phase A — Make jobs actually appear (highest priority)
 
-Plus one **honest limitation** I have to flag before we build more:
+1. **Auto-seed sources on first sign-in.** Add a trigger / server function that, the first time a user lands on `/sources` or `/dashboard`, inserts the full default set (12 aggregators + ~200 high-signal ATS company slugs) as `enabled=true`. No clicking required.
+2. **Run-now on the Sources page**: a prominent "Fetch jobs now" button that calls `/api/public/sources/run-tier?tier=hot&user_id=<me>` and streams a toast per source ("RemoteOK: 47 new, Greenhouse/stripe: 3 new…"). User sees jobs in <30s instead of waiting for cron.
+3. **Verify pg_cron** targets the stable preview URL and is actually firing — surface "Last cron run: 4 min ago • next in 11 min" on the Sources page header so failure is visible.
+4. **Backfill match scoring**: if a user has no `filters` row yet, auto-create a permissive default so incoming jobs aren't all dropped.
 
-> Lovable's server runtime (Cloudflare Workers) **cannot run a headless browser** (no Playwright/Puppeteer). True auto-fill on arbitrary career pages is impossible here. The realistic path is: (a) **direct REST submission** to ATS platforms that expose public application endpoints (Greenhouse, Lever, Ashby, Workable — covers thousands of companies), and (b) **AI-tailored resume + cover letter + one-click email apply** via your Gmail for the rest. That is what tsenta-style services actually do under the hood — they are not really filling 50k random forms.
+## Phase B — Apply pipeline end-to-end test
 
----
+5. **One-click "Test the pipeline" on Setup**: queues a fake application against the highest-scoring matched job, runs the worker inline (not via cron), and walks the user through the stepper live so they can see resume → cover → submit/needs_review actually work.
+6. **Apply-worker resilience**: retry with backoff on transient errors, cap attempts at 3, surface `last_error` in the application detail header with a "Retry" button.
+7. **PDF rendering** of tailored resume using `@react-pdf/renderer` (pure-JS, Workers-safe) so `needs_review` jobs have a downloadable PDF, not just markdown.
+8. **Notification on every applied / needs_review** via the existing Gmail path — already wired, just needs the worker to call it on terminal status.
 
-## What I'll build
+## Phase C — Mac-level UI polish
 
-### Phase 1 — Seed the firehose (jobs start arriving)
+This is the visible "professional" lift. Applied consistently across all 11 authenticated routes.
 
-- **Sources page**: add a big **"Enable all aggregators"** button that inserts 12 source rows (RemoteOK, Remotive, Arbeitnow, Himalayas, Jobicy, WeWorkRemotely, Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee) wired to the existing adapters.
-- **"Run now"** button per source — fires `/api/public/sources/run-tier` immediately so you see jobs within seconds instead of waiting for cron.
-- Verify pg_cron URLs point at the stable preview URL `project--ba5780a8-...-dev.lovable.app` so they work without publishing.
+- **Type system**: SF Pro Display for headings, Inter for body, tabular numerals for all counts/timestamps/scores. Tight tracking on large headers (-0.02em), generous leading on body (1.55).
+- **Surface system**: layered translucent surfaces (`bg-card/60 backdrop-blur-xl` + 1px hairline border in `--border/40`), soft inner highlight on top edge — the "frosted glass over a dark canvas" feel of macOS Sonoma/Sequoia.
+- **Motion**: 180ms cubic-bezier(0.2, 0.8, 0.2, 1) on every state change, scale-on-press (0.98) on primary buttons, list rows animate in with a 20ms stagger. No bouncy springs, no long fades.
+- **Density**: 8px grid everywhere, 14px base font in tables, 13px in chips/badges, generous 24–32px section gutters. Remove the prototype-feeling 16px gaps.
+- **Color discipline**: collapse the palette to ~7 semantic tokens (bg, surface, surface-elevated, border, text, text-muted, accent + 4 status colors). Audit and replace any raw `text-white`, `bg-zinc-*`, `bg-black/50` etc. with tokens.
+- **Iconography**: switch to Lucide at a single 16px size in tables and 20px in nav, 1.5px stroke. No emoji as UI.
+- **Empty states**: every page that can be empty (Jobs, Applications, Logs, Sources before seed) gets a real empty state — short headline + one primary action + small illustration in a single accent color.
+- **Job card refinements**: company favicon (via duckduckgo favicon API), salary as `$120k–$160k` tabular, posted time as `2h ago` with hover-tooltip absolute time, match score as a compact ring (not a giant pill), tags truncated to 3 + `+4 more`.
+- **Stepper**: switch from horizontal pills to a Apple-Health-style vertical thread with live pulse dot on the active step.
+- **Tables**: zebra removed, replaced with hover-only highlight; sticky header with subtle blur; column resize handles.
+- **Top bar**: collapse the two header rows on Applications/Jobs into one with inline search + filter chips.
 
-### Phase 2 — Real apply worker (the missing brain)
+## Phase D — Trust & professionalism details
 
-A `/api/public/hooks/apply-worker` route (cron every 1 min, also callable on-demand) that picks the oldest `queued` application and runs:
-
-```
-queued → applying → [generate resume → generate cover letter → submit or needs_review] → applied / failed
-```
-
-Each step:
-1. **Writes a log row** (`logs.scope = 'resume.generate' | 'cover.generate' | 'apply.submit' | 'form.fill.<field>'`) so the Live Activity panel and Form Fill table fill up in real time.
-2. Uses **Lovable AI (`google/gemini-2.5-pro`)** to tailor a resume from your `profile + experiences + skills` against the job description, and write a matching cover letter. Saved as `resumes` + `cover_letter` rows linked to the application.
-3. **Detects the portal**: if the job URL is a Greenhouse / Lever / Ashby / Workable board, POST the application directly via their public API using profile data + tailored docs → status `applied`. Otherwise mark `needs_review` with a one-click "Apply on portal" button that opens the URL and copies your tailored cover letter to clipboard.
-4. On finish: write to `notification_log`, email you via Gmail if `notify_high_score` is on.
-
-### Phase 3 — Polish the loop
-
-- Fix `ApplyStepper` to drive purely from log scopes (the `application_status` enum is intentionally small: `queued/applying/applied/failed/needs_review/skipped` — I'll keep it as-is and use log scopes for granular progress).
-- Allow `logs` INSERT from the service-role server route (no schema change — server routes use service role).
-- Dashboard: wire the "Jobs found in last hour" tile + "Applications submitted today" + "Worker last run" so you can see the system is alive.
-- Add a `secrets` check for `LOVABLE_API_KEY` (already set) and a "Test apply pipeline" button on Setup that runs the worker once against the most recent matched job.
-
-### Out of scope (and why)
-
-- **LinkedIn / Indeed auto-apply** — they ban scraping and require a real browser. Not doable from Lovable's runtime. Would need a separate worker on Fly.io/Railway.
-- **Filling CAPTCHA-protected forms** — same reason.
-- **PDF rendering of the tailored resume** — Phase 1 will save Markdown/text; PDF generation needs a follow-up (we'll use a pure-JS PDF lib that runs in Workers).
-
----
+- **Status badge in the global header**: green "Operational" dot when worker heartbeat <5min old, amber "Idle" 5–30min, red "Offline" >30min — click to see last 20 worker runs.
+- **Cost meter**: show today's Lovable AI spend in the footer ($0.04 / $5 cap) so the user trusts what's running.
+- **Audit log page** (`/logs` already exists): filter chips by scope, copy-as-cURL for any failed API call, "Reply with this error" button that prefills a support email.
+- **Keyboard**: ⌘K command palette (jump to any route, "Apply to top match", "Run sources now", "Pause worker"). This single feature is what makes apps feel Mac-native.
 
 ## Technical notes
 
-**Files I'll add/edit**
-- `src/routes/_authenticated/sources.tsx` — Enable-all + Run-now buttons (calls `supabase.from('sources').upsert(...)` + fetch the run-tier endpoint)
-- `src/routes/api/public/hooks/apply-worker.ts` — new, the apply engine
-- `src/lib/apply/ats-greenhouse.server.ts`, `ats-lever.server.ts`, `ats-ashby.server.ts`, `ats-workable.server.ts` — REST submission per platform
-- `src/lib/apply/generate-resume.server.ts`, `generate-cover.server.ts` — Lovable AI calls
-- `src/lib/apply/log.server.ts` — helper that writes `logs` rows via service-role client
-- `src/components/ApplyStepper.tsx` — drive from log scopes
-- `src/routes/_authenticated/dashboard.tsx` — add live tiles
-- One migration: pg_cron job for apply-worker (every 1 min)
+**Files I'll add**
+- `src/lib/sources/seed.server.ts` — default source set + `ensureSourcesSeeded(userId)`
+- `src/components/CommandPalette.tsx` — ⌘K palette
+- `src/components/StatusPill.tsx` — operational/idle/offline header pill
+- `src/components/CostMeter.tsx` — daily AI spend footer
+- `src/components/EmptyState.tsx` — reusable
+- `src/lib/apply/pdf.server.ts` — `@react-pdf/renderer` resume PDF
+- One migration: ensure pg_cron job for apply-worker exists, add `notify_on_apply` defaults
 
-**Cost control**: each apply uses ~1 Lovable AI call for resume + 1 for cover letter (~$0.01 with gemini-2.5-flash for cover, gemini-2.5-pro for resume). Scoring uses the existing free SQL `match_job_to_filters` — no AI cost there. Sources are 100% free (public APIs).
+**Files I'll edit (polish pass)**
+- `src/styles.css` — token cleanup, type ramp, motion variables
+- `src/routes/__root.tsx` — global header with StatusPill + ⌘K mount + CostMeter footer
+- All 11 `_authenticated/*.tsx` routes — density, surface, empty state pass
+- `src/components/ApplyStepper.tsx` — vertical thread redesign
+- `src/components/JobCard.tsx` (and Bento variants) — favicon, ring score, tabular nums
+- `src/routes/_authenticated/sources.tsx` — Run-now + last-cron header + seed-on-load
+- `src/routes/_authenticated/setup.tsx` — "Test the pipeline" button
 
-**Order of execution**
-1. Phase 1 (sources seed + Run-now) — 5 min, you see jobs immediately
-2. Phase 2 (apply worker + log writer + AI generators + 4 ATS adapters)
-3. Phase 3 (stepper rewire + dashboard tiles + test button)
+**Out of scope (unchanged from prior plan)**
+- LinkedIn / Indeed auto-apply (requires real browser, not possible in this runtime)
+- CAPTCHA solving
+- Any third-party paid proxy / scraping service
 
-After this, the real workflow is: **jobs auto-appear → you click Apply → worker generates tailored resume + cover letter → submits directly for ATS-backed jobs / queues `needs_review` for others → you review and one-click submit the rest.** That is the realistic version of what you asked for.
+**Order**
+A (1 hr — you see jobs) → B (1 hr — you successfully apply once end-to-end) → C (2 hr — Mac polish) → D (1 hr — trust details). I'll do them in one pass.
 
-Approve and I'll build all three phases in one pass.
+Approve and I'll build everything.
