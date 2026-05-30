@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useRouter, notFound } from "@tanstack/react-router";
-import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
+
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
