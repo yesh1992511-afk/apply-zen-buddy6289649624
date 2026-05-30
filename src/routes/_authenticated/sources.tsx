@@ -49,7 +49,12 @@ const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_s
   { key: "usajobs", display_name: "USAJobs (free)", kind: "rest", cadence_minutes: 240, config: { keyword: "software" } },
   { key: "greenhouse_boards", display_name: "Greenhouse boards", kind: "board", cadence_minutes: 180, config: { companies: ["stripe", "airbnb"] } },
   { key: "lever_boards", display_name: "Lever boards", kind: "board", cadence_minutes: 180, config: { companies: ["netflix"] } },
-  { key: "ashby_boards", display_name: "Ashby boards", kind: "board", cadence_minutes: 180, config: { companies: ["openai"] } },
+  { key: "ashby_boards", display_name: "Ashby boards", kind: "board", cadence_minutes: 180, config: { boards: ["openai"] } },
+  { key: "smartrecruiters_boards", display_name: "SmartRecruiters boards", kind: "board", cadence_minutes: 180, config: { companies: ["Square", "Bosch"] } },
+  { key: "workable_boards", display_name: "Workable boards", kind: "board", cadence_minutes: 180, config: { subdomains: [] } },
+  { key: "recruitee_boards", display_name: "Recruitee boards", kind: "board", cadence_minutes: 240, config: { companies: [] } },
+  { key: "teamtailor_boards", display_name: "Teamtailor boards", kind: "board", cadence_minutes: 240, config: { companies: [], api_keys: {} } },
+  { key: "builtin", display_name: "BuiltIn (US tech)", kind: "rest", cadence_minutes: 120, config: { queries: ["software engineer"], locations: ["remote"] } },
 ];
 
 function SourcesPage() {
