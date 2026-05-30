@@ -80,15 +80,16 @@ function FiltersPage() {
 
 
       {items.map((f) => (
-        <Card key={f.id}>
+        <Card key={f.id} className="lift">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="flex items-center gap-2 text-base">
               <Input className="max-w-xs" defaultValue={f.name} onBlur={(e) => update(f.id, { name: e.target.value })} />
               {f.is_default && <Badge variant="secondary"><Star className="mr-1 h-3 w-3" /> default</Badge>}
+              <FilterPreview filter={f} />
             </CardTitle>
             <div className="flex gap-2">
               {!f.is_default && <Button size="sm" variant="outline" onClick={() => setDefault(f.id)}>Make default</Button>}
-              <Button size="sm" variant="ghost" onClick={() => remove(f.id)}><Trash2 className="h-4 w-4" /></Button>
+              <Button size="sm" variant="ghost" aria-label="Delete filter" onClick={() => remove(f.id)}><Trash2 className="h-4 w-4" /></Button>
             </div>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
