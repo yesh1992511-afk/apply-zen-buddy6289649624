@@ -1,21 +1,21 @@
-# Fix: `ModuleNotFoundError: No module named 'pkg_resources'`
+## Plan
 
-## Cause
+1. **Make the worker import resilient**
+   - Update `worker/app/apply/browser.py` so the worker does not crash at startup if `playwright-stealth` changes its export shape again.
+   - Keep stealth enabled when available, but make it optional/fail-safe so browser startup can continue.
 
-`playwright-stealth` 1.x does `import pkg_resources` at import time. `pkg_resources` ships with **setuptools**, which is no longer pre-installed in Python 3.12 base images. The Playwright base image used here doesn't include it, so the import crashes the worker.
+2. **Keep dependency fix permanent**
+   - Keep `setuptools>=68` in `worker/pyproject.toml` because `playwright-stealth` 1.x imports `pkg_resources`, which comes from setuptools on Python 3.12.
+   - Keep `playwright-stealth>=1.0.6,<2` to avoid the 2.x API mismatch that removed `stealth_async`.
 
-## Fix
+3. **Add a simple import compatibility path**
+   - Support both common forms:
+     - `from playwright_stealth import stealth_async`
+     - fallback to `from playwright_stealth.stealth import stealth_async`
+   - If neither works, set stealth to `None` and skip only that optional stealth call.
 
-Add `setuptools` to the worker dependencies so `pkg_resources` is available.
-
-Edit `worker/pyproject.toml`:
-
-```diff
-   "playwright-stealth>=1.0.6,<2",
-+  "setuptools>=68",
-```
-
-## Rebuild + restart on the server
+4. **Server commands after code is updated**
+   - On your server, pull the new code and recreate the worker:
 
 ```bash
 cd ~/jobpilot/worker
@@ -25,21 +25,4 @@ docker compose up -d --force-recreate worker
 docker compose logs -f worker
 ```
 
-(No `--no-cache` needed; only the `pip install` layer re-runs, ~30–60s.)
-
-## Expected log output
-
-- `worker starting v0.1.0`
-- `scheduler started`
-- `realtime sources listener subscribed`
-- No more `ImportError` / restart loop
-
-## Quick in-container test (optional, before rebuild)
-
-```bash
-docker compose exec worker pip install setuptools
-docker compose restart worker
-docker compose logs -f worker
-```
-
-If that boots cleanly, the `pyproject.toml` change is the permanent fix.
+Expected result: no `stealth_async` import error, no `pkg_resources` error, and the worker stays running instead of restarting.

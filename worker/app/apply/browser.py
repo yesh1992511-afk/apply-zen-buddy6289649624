@@ -8,7 +8,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 from playwright.async_api import async_playwright, Page
-from playwright_stealth import stealth_async
+try:
+    from playwright_stealth import stealth_async
+except Exception:
+    try:
+        from playwright_stealth.stealth import stealth_async
+    except Exception:
+        stealth_async = None
 from .proxy import playwright_proxy
 from .. import gmail as _gmail
 
@@ -85,10 +91,11 @@ async def new_browser(portal_key: str = "default", headless: bool = True, finger
             color_scheme="light",
         )
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
-        try:
-            await stealth_async(page)
-        except Exception:
-            pass
+        if stealth_async is not None:
+            try:
+                await stealth_async(page)
+            except Exception:
+                pass
         # Inject session cookies uploaded by the browser extension, if any.
         # Mapped by host so LinkedIn cookies only land on the LinkedIn portal.
         try:
