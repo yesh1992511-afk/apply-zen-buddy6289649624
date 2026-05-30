@@ -44,6 +44,23 @@ export async function triggerTailor(job_id: string) {
   return id;
 }
 
+export async function triggerCompileResume(resume_id: string) {
+  return enqueue("compile_resume", { resume_id });
+}
+
+export async function triggerTestSource(source_key: string) {
+  const id = await enqueue("test_source", { source_key });
+  if (id) toast.success(`Test fetch queued for "${source_key}".`);
+  return id;
+}
+
+/** Get a 5-minute signed URL for a PDF in the `resumes` bucket. */
+export async function getResumePdfUrl(storage_path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from("resumes").createSignedUrl(storage_path, 300);
+  if (error) return null;
+  return data.signedUrl;
+}
+
 /** Polls a command row until done/failed, returns the final row. */
 export async function waitForCommand(id: string, timeoutMs = 120_000) {
   const start = Date.now();
