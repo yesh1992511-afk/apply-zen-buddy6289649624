@@ -1,15 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
-import { ExternalLink, MapPin, Building2, Search, Sparkles, Send, Briefcase, Plus, Check } from "lucide-react";
-import { triggerApply, triggerTailor } from "@/lib/commands";
+import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { JobDescriptionDialog, type JobDialogJob } from "@/components/JobDescriptionDialog";
+import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
