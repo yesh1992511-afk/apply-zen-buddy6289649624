@@ -77,7 +77,7 @@ function ProfilePage() {
 
   if (!p) return <div className="text-muted-foreground">Loading…</div>;
 
-  const set = (k: string, v: unknown) => setP({ ...p, [k]: v });
+  const set = (k: string, v: unknown) => setP((prev) => (prev ? { ...prev, [k]: v } : prev));
   const get = (k: string) => p[k];
   const getStr = (k: string): string => {
     const v = p[k];
