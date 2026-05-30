@@ -50,3 +50,9 @@ For each, replace manual `useState` + Save button with section-scoped autosave:
 - Server-side Zod on serverFns, RLS audit, DB indexes, worker queue hardening, extension token rotation policy, billing/Stripe surfaces.
 
 Reply **go** to execute Phase 2c end-to-end, or **phase 3** to skip to backend hardening.
+
+## Phase 2c — DONE
+
+Delivered: shared autosave (`useAutosaveSection`), Zod validation schemas, `SectionCard`, `FieldError`. Refactored `/automation`, `/notifications`, `/filters`, `/extension`, `/privacy` to TanStack Query mutations + autosave + inline errors + AlertDialog confirms + realtime invalidate.
+
+Next: Phase 3 (server-side Zod, RLS audit, indexes, worker hardening).
