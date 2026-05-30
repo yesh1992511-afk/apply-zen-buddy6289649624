@@ -85,6 +85,7 @@ export function useApplyToJob() {
       // Best-effort: kick the worker immediately
       fetch(`/api/public/hooks/apply-worker?application_id=${data.id}`, {
         method: "POST",
+        headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string },
       }).catch(() => {});
       return { id: data.id as string, existed: false };
     },

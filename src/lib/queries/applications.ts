@@ -49,6 +49,7 @@ export function useRetryApplication() {
       // Best-effort kick
       fetch(`/api/public/hooks/apply-worker?application_id=${id}`, {
         method: "POST",
+        headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string },
       }).catch(() => {});
       return id;
     },
