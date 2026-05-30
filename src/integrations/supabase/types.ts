@@ -1668,6 +1668,27 @@ export type Database = {
         }
         Relationships: []
       }
+      worker_invocations: {
+        Row: {
+          created_at: string
+          idempotency_key: string
+          kind: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          idempotency_key: string
+          kind: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          idempotency_key?: string
+          kind?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1681,6 +1702,7 @@ export type Database = {
         Returns: boolean
       }
       match_job_to_filters: { Args: { _job_id: string }; Returns: undefined }
+      prune_worker_invocations: { Args: never; Returns: undefined }
       usage_mtd_by_provider: {
         Args: { _user_id: string }
         Returns: {
