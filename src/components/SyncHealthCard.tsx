@@ -68,12 +68,10 @@ function chipTone(iso: string | null, warnMin: number, errMin: number): "ok" | "
 
 export function SyncHealthCard() {
   const qc = useQueryClient();
-  useRealtimeInvalidate([
-    { table: "worker_heartbeat", queryKey: ["sync-health"] },
-    { table: "extension_tokens", queryKey: ["sync-health"] },
-    { table: "applications", queryKey: ["sync-health"] },
-    { table: "session_cookies", queryKey: ["sync-health"] },
-  ]);
+  useRealtimeInvalidate({ table: "worker_heartbeat", queryKey: ["sync-health"] });
+  useRealtimeInvalidate({ table: "extension_tokens", queryKey: ["sync-health"] });
+  useRealtimeInvalidate({ table: "applications", queryKey: ["sync-health"] });
+  useRealtimeInvalidate({ table: "session_cookies", queryKey: ["sync-health"] });
   const { data } = useQuery({ queryKey: ["sync-health"], queryFn: fetchHealth, refetchInterval: 30_000 });
   const [, force] = useState(0);
   useEffect(() => {
