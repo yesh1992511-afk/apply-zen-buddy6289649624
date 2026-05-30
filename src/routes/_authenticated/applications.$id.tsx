@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useRouter, notFound } from "@tanstack/react-router";
+
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/applications/$id")({
   head: () => ({ meta: [{ title: "Application — JobPilot" }] }),
   component: ApplicationDetailPage,
+  
   errorComponent: ({ error }) => (
     <div className="p-8 text-center">
       <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-2" />

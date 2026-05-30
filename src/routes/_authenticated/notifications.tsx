@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +23,7 @@ import { CheckCircle2, XCircle, Mail, ExternalLink } from "lucide-react";
 export const Route = createFileRoute("/_authenticated/notifications")({
   head: () => ({ meta: [{ title: "Notifications — JobPilot" }] }),
   component: NotificationsPage,
+  errorComponent: ErrorBoundaryRoute,
 });
 
 function NotificationsPage() {

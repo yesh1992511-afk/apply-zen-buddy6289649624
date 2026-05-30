@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/extension")({
   head: () => ({ meta: [{ title: "Browser Extension — JobPilot" }] }),
   component: ExtensionPage,
+  errorComponent: ErrorBoundaryRoute,
 });
 
 type Token = {

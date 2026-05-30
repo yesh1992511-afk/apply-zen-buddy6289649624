@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -8,10 +9,14 @@ import {
 import { MetricTile } from "@/components/MetricTile";
 import { StatusDot } from "@/components/StatusDot";
 import { EmptyState } from "@/components/EmptyState";
+import { CountUp } from "@/components/CountUp";
+import { CardSkeleton } from "@/components/skeletons";
+
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — JobPilot" }] }),
   component: Dashboard,
+  errorComponent: ErrorBoundaryRoute,
 });
 
 type Stats = {
@@ -129,7 +134,7 @@ function Dashboard() {
   return (
     <div className="space-y-6 max-w-[1400px]">
       {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 float-in">
         <div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight">Welcome back</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -138,15 +143,27 @@ function Dashboard() {
         </div>
         <Link
           to="/jobs"
-          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-2 px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-2 px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-ring"
         >
           View all jobs
           <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
 
-      {/* Bento grid */}
+      {!stats && (
+        <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">
+          <div className="col-span-full lg:col-span-5 lg:row-span-2 h-[280px] shimmer rounded-2xl" />
+          <CardSkeleton className="col-span-3 md:col-span-2 lg:col-span-4 h-[120px]" />
+          <CardSkeleton className="col-span-3 md:col-span-2 lg:col-span-3 h-[120px]" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <CardSkeleton key={i} className="col-span-3 md:col-span-2 lg:col-span-3" />
+          ))}
+        </div>
+      )}
+
+      {stats && (
       <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">
+
         {/* HERO — daily progress */}
         <div className="relative col-span-full overflow-hidden rounded-2xl border border-border/60 bg-gradient-hero p-6 md:col-span-4 lg:col-span-5 lg:row-span-2">
           <div className="absolute inset-0 bg-gradient-to-br from-card/40 via-card/20 to-transparent" />
@@ -176,8 +193,9 @@ function Dashboard() {
               </div>
               <div className="min-w-0">
                 <div className="font-heading text-5xl font-semibold tabular-nums tracking-tight">
-                  {used}
+                  <CountUp value={used} />
                 </div>
+
                 <p className="mt-1 text-sm text-muted-foreground">applications today</p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   {budget > 0 ? (
@@ -315,13 +333,18 @@ function Dashboard() {
             />
           ) : (
             <div className="-mx-1 max-h-[360px] space-y-0.5 overflow-y-auto pr-1">
-              {recent.map((r) => {
+              {recent.map((r, i) => {
                 const colorCls =
                   r.level === "error" ? "bg-destructive" :
                   r.level === "warn" ? "bg-warning" :
                   r.level === "info" ? "bg-success" : "bg-muted-foreground";
                 return (
-                  <div key={r.id} className="group flex items-start gap-2.5 rounded-md px-1.5 py-1.5 text-sm transition-colors hover:bg-surface-2">
+                  <div
+                    key={r.id}
+                    style={{ animationDelay: `${Math.min(i * 25, 240)}ms` }}
+                    className="row-in group flex items-start gap-2.5 rounded-md px-1.5 py-1.5 text-sm transition-colors hover:bg-surface-2"
+                  >
+
                     <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${colorCls}`} />
                     <span className="font-mono text-[10px] tabular-nums text-muted-foreground/80 whitespace-nowrap pt-1">
                       {new Date(r.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -339,6 +362,8 @@ function Dashboard() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
+

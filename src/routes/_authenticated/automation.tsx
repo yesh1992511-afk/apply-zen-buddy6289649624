@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/lib/useAuth";
@@ -15,6 +16,7 @@ import { PageHeader } from "@/components/PageHeader";
 export const Route = createFileRoute("/_authenticated/automation")({
   head: () => ({ meta: [{ title: "Automation — JobPilot" }] }),
   component: AutomationPage,
+  errorComponent: ErrorBoundaryRoute,
 });
 
 type Settings = {

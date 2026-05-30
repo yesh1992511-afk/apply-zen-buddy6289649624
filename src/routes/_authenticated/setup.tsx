@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { formatDistanceToNow } from "date-fns";
 export const Route = createFileRoute("/_authenticated/setup")({
   head: () => ({ meta: [{ title: "Worker Setup — JobPilot" }] }),
   component: SetupPage,
+  errorComponent: ErrorBoundaryRoute,
 });
 
 type Heartbeat = { last_seen: string | null; version: string | null };
