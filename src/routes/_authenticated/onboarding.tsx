@@ -110,6 +110,47 @@ function OnboardingPage() {
           </Link>
         ))}
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-emerald shadow-glow">
+            <Sparkles className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <div>
+            <div className="font-heading text-sm font-semibold">
+              {onboardedAt ? "Setup complete" : "Ready to fly?"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {onboardedAt
+                ? "You can revisit this checklist any time."
+                : done < 3
+                  ? "Finish the first few steps before unlocking the cockpit."
+                  : "Mark setup complete to open the full cockpit."}
+            </p>
+          </div>
+        </div>
+        <Button
+          disabled={marking || done < 3 || !!onboardedAt}
+          onClick={async () => {
+            setMarking(true);
+            const { data: u } = await supabase.auth.getUser();
+            if (!u.user) { setMarking(false); return; }
+            const ts = new Date().toISOString();
+            const { error } = await supabase
+              .from("profile")
+              .update({ onboarded_at: ts })
+              .eq("user_id", u.user.id);
+            setMarking(false);
+            if (error) { toast.error(error.message); return; }
+            setOnboardedAt(ts);
+            toast.success("Welcome aboard");
+            navigate({ to: "/dashboard" });
+          }}
+        >
+          {onboardedAt ? "Already done" : marking ? "Saving…" : "I'm done — open the cockpit"}
+        </Button>
+      </div>
     </div>
+
   );
 }
