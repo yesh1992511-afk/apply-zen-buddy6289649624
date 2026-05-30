@@ -275,14 +275,46 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
 
 function ResumeUploader() {
   const { user } = useUser();
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string; tex_content: string | null; is_default: boolean | null; markers: unknown }>>([]);
+  type Tpl = { id: string; name: string; tex_content: string | null; is_default: boolean | null; markers: unknown; pdf_storage_path: string | null; kind: string };
+  const [templates, setTemplates] = useState<Tpl[]>([]);
   const [name, setName] = useState("My LaTeX resume");
   const [tex, setTex] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string>("");
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [compiling, setCompiling] = useState(false);
+  const [topJobId, setTopJobId] = useState<string | null>(null);
+  const [tailoredId, setTailoredId] = useState<string | null>(null);
+  const [tailoredUrl, setTailoredUrl] = useState<string | null>(null);
+  const [tailoring, setTailoring] = useState(false);
 
   const load = () => {
-    supabase.from("resumes").select("*").eq("kind", "template").order("created_at", { ascending: false }).then(({ data }) => setTemplates(data ?? []));
+    supabase.from("resumes").select("*").order("created_at", { ascending: false }).then(({ data }) => {
+      const all = (data ?? []) as Tpl[];
+      setTemplates(all.filter((r) => r.kind === "template"));
+    });
   };
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    supabase.from("jobs").select("id").order("score", { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => setTopJobId((data as { id: string } | null)?.id ?? null));
+  }, []);
+
+  // Load PDF for selected template
+  useEffect(() => {
+    if (!selectedId) { setPdfUrl(null); return; }
+    const t = templates.find((x) => x.id === selectedId);
+    if (!t) return;
+    setEditing(t.tex_content ?? "");
+    if (t.pdf_storage_path) {
+      import("@/lib/commands").then(({ getResumePdfUrl }) =>
+        getResumePdfUrl(t.pdf_storage_path!).then(setPdfUrl)
+      );
+    } else {
+      setPdfUrl(null);
+    }
+  }, [selectedId, templates]);
 
   const detectMarkers = (s: string) => {
     const re = /%\s*LOV:([a-zA-Z0-9_:.-]+)/g;
@@ -295,12 +327,68 @@ function ResumeUploader() {
   const upload = async () => {
     if (!user || !tex.trim()) return;
     const markers = detectMarkers(tex);
-    const { error } = await supabase.from("resumes").insert({
+    const { data, error } = await supabase.from("resumes").insert({
       user_id: user.id, kind: "template", name, tex_content: tex,
       markers, is_default: templates.length === 0,
-    });
-    if (error) toast.error(error.message);
-    else { toast.success(`Template saved with ${markers.length} marker(s)`); setTex(""); load(); }
+    }).select("id").single();
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Template saved (${markers.length} markers). Compiling…`);
+    setTex("");
+    load();
+    const { triggerCompileResume, waitForCommand, getResumePdfUrl } = await import("@/lib/commands");
+    const cid = await triggerCompileResume(data.id);
+    if (cid) {
+      const res = await waitForCommand(cid, 60_000);
+      if (res?.status === "done") {
+        toast.success("PDF ready");
+        const r = res.result as { pdf_path?: string } | null;
+        if (r?.pdf_path) setPdfUrl(await getResumePdfUrl(r.pdf_path));
+        setSelectedId(data.id);
+        load();
+      } else {
+        toast.error(`Compile failed: ${res?.last_error ?? "timeout"}`);
+      }
+    }
+  };
+
+  const saveAndCompile = async () => {
+    if (!selectedId) return;
+    setCompiling(true);
+    setPdfUrl(null);
+    const markers = detectMarkers(editing);
+    await supabase.from("resumes").update({ tex_content: editing, markers }).eq("id", selectedId);
+    const { triggerCompileResume, waitForCommand, getResumePdfUrl } = await import("@/lib/commands");
+    const cid = await triggerCompileResume(selectedId);
+    if (!cid) { setCompiling(false); return; }
+    const res = await waitForCommand(cid, 60_000);
+    setCompiling(false);
+    if (res?.status === "done") {
+      toast.success("PDF updated");
+      const r = res.result as { pdf_path?: string } | null;
+      if (r?.pdf_path) setPdfUrl(await getResumePdfUrl(r.pdf_path));
+      load();
+    } else {
+      toast.error(`Compile failed: ${res?.last_error ?? "timeout"}`);
+    }
+  };
+
+  const generateTailored = async () => {
+    if (!topJobId) { toast.error("No jobs yet — scrape one first."); return; }
+    setTailoring(true);
+    setTailoredUrl(null);
+    const { triggerTailor, waitForCommand, getResumePdfUrl } = await import("@/lib/commands");
+    const cid = await triggerTailor(topJobId);
+    if (!cid) { setTailoring(false); return; }
+    const res = await waitForCommand(cid, 180_000);
+    setTailoring(false);
+    if (res?.status === "done") {
+      const r = res.result as { pdf_path?: string; resume_id?: string } | null;
+      if (r?.pdf_path) setTailoredUrl(await getResumePdfUrl(r.pdf_path));
+      if (r?.resume_id) setTailoredId(r.resume_id);
+      toast.success("Tailored preview ready");
+    } else {
+      toast.error(`Tailor failed: ${res?.last_error ?? "timeout"}`);
+    }
   };
 
   const setDefault = async (id: string) => {
@@ -312,54 +400,100 @@ function ResumeUploader() {
 
   const remove = async (id: string) => {
     await supabase.from("resumes").delete().eq("id", id);
+    if (selectedId === id) setSelectedId(null);
     load();
   };
 
-  const onFile = async (f: File) => {
-    const text = await f.text();
-    setTex(text);
-    setName(f.name);
-  };
+  const onFile = async (f: File) => { setTex(await f.text()); setName(f.name); };
 
   return (
     <div className="space-y-4 pt-4">
       <Card>
         <CardHeader>
-          <CardTitle>Upload LaTeX template</CardTitle>
+          <CardTitle>Add a LaTeX template</CardTitle>
           <CardDescription>
-            Wrap AI-editable sections in <code>% LOV:summary</code> … <code>% LOV:end</code> markers. The worker only edits inside markers, never the LaTeX itself.
+            Wrap AI-editable sections in <code>% LOV:summary</code> … <code>% LOV:end</code>. Saving auto-compiles to PDF via tectonic (free, no AI).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Template name" className="max-w-sm" />
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent">
-              <Upload className="h-4 w-4" />
-              <span>Open .tex file</span>
+              <Upload className="h-4 w-4" /><span>Open .tex file</span>
               <input type="file" accept=".tex,text/x-tex,text/plain" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
             </label>
-            <Button onClick={upload} disabled={!tex.trim()}>Save template</Button>
+            <Button onClick={upload} disabled={!tex.trim()}>Save & compile</Button>
           </div>
-          <Textarea rows={12} placeholder="Paste your .tex content here…" value={tex} onChange={(e) => setTex(e.target.value)} className="font-mono text-xs" />
+          {tex && <Textarea rows={8} value={tex} onChange={(e) => setTex(e.target.value)} className="font-mono text-xs" />}
         </CardContent>
       </Card>
 
-      <div className="space-y-2">
-        {templates.map((t) => (
-          <Card key={t.id}>
-            <CardContent className="flex items-center justify-between pt-6">
-              <div>
-                <div className="font-medium">{t.name} {t.is_default && <span className="ml-2 rounded bg-primary/10 px-2 py-0.5 text-[10px] text-primary">DEFAULT</span>}</div>
-                <div className="text-xs text-muted-foreground">{Array.isArray(t.markers) ? t.markers.length : 0} markers</div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle className="text-sm">Templates</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {templates.map((t) => (
+              <div key={t.id} className={`flex items-center justify-between rounded border p-2 text-sm ${selectedId === t.id ? "border-primary bg-accent/30" : ""}`}>
+                <button className="flex-1 text-left" onClick={() => setSelectedId(t.id)}>
+                  <div className="font-medium">{t.name}{t.is_default && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">DEFAULT</span>}</div>
+                  <div className="text-xs text-muted-foreground">{Array.isArray(t.markers) ? t.markers.length : 0} markers · {t.pdf_storage_path ? "PDF ready" : "no PDF"}</div>
+                </button>
+                <div className="flex gap-1">
+                  {!t.is_default && <Button size="sm" variant="outline" onClick={() => setDefault(t.id)}>Default</Button>}
+                  <Button size="sm" variant="ghost" onClick={() => remove(t.id)}><Trash2 className="h-4 w-4" /></Button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                {!t.is_default && <Button size="sm" variant="outline" onClick={() => setDefault(t.id)}>Make default</Button>}
-                <Button size="sm" variant="ghost" onClick={() => remove(t.id)}><Trash2 className="h-4 w-4" /></Button>
+            ))}
+            {templates.length === 0 && <p className="text-center text-xs text-muted-foreground">No templates yet.</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">PDF preview</CardTitle>
+            <CardDescription>{selectedId ? "Edit LaTeX below and recompile." : "Select a template to preview."}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pdfUrl ? (
+              <iframe src={pdfUrl} className="h-[420px] w-full rounded border bg-white" title="Resume PDF" />
+            ) : (
+              <div className="flex h-[420px] items-center justify-center rounded border text-sm text-muted-foreground">
+                {compiling ? "Compiling…" : selectedId ? "No PDF yet — click Save & compile." : "Nothing selected."}
               </div>
-            </CardContent>
-          </Card>
-        ))}
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {selectedId && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Edit LaTeX (background)</CardTitle>
+            <CardDescription>The frontend only shows the PDF. Edit the raw .tex here when you need to tweak the template.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Textarea rows={14} value={editing} onChange={(e) => setEditing(e.target.value)} className="font-mono text-xs" />
+            <div className="flex justify-end">
+              <Button onClick={saveAndCompile} disabled={compiling}>{compiling ? "Compiling…" : "Save & recompile"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Tailored preview (top-scored job)</CardTitle>
+          <CardDescription>Runs the resume tailor + tectonic compile on the worker. AI tone check before the bot starts applying.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">{topJobId ? `Using job ${topJobId.slice(0, 8)}…` : "No jobs scraped yet."}</p>
+            <Button size="sm" onClick={generateTailored} disabled={!topJobId || tailoring}>{tailoring ? "Working…" : "Generate preview"}</Button>
+          </div>
+          {tailoredUrl && <iframe src={tailoredUrl} className="h-[480px] w-full rounded border bg-white" title="Tailored resume" />}
+          {tailoredId && !tailoredUrl && <p className="text-xs text-muted-foreground">Preview generated; PDF loading…</p>}
+        </CardContent>
+      </Card>
     </div>
   );
 }
