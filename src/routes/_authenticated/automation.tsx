@@ -300,8 +300,7 @@ function Row({
   );
 }
 
-function pickAutomationFields(s: AutomationSettings): AutomationPatch {
-  // Drop columns we don't validate / persist via this form.
+function pickAutomationFields(s: AutomationSettings): AutomationValues {
   const { user_id: _u, ...rest } = s;
-  return rest as AutomationPatch;
+  return rest as unknown as AutomationValues;
 }
