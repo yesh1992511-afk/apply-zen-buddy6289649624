@@ -84,47 +84,72 @@ function ProfilePage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-6 max-w-[1400px]">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
-          <p className="text-sm text-muted-foreground">Source of truth for resume tailoring and portal autofill.</p>
+          <h1 className="font-heading text-3xl font-semibold tracking-tight">Profile</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Source of truth for resume tailoring and portal autofill.
+          </p>
         </div>
-        <Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>
+        <Button onClick={save} disabled={saving} className="bg-gradient-emerald shadow-glow disabled:shadow-none">
+          {saving ? "Saving…" : "Save changes"}
+        </Button>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="font-medium">Autofill readiness</span>
-            <span className="text-muted-foreground">{completeness}%</span>
+      {/* Readiness band */}
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+        <div className="flex items-center justify-between gap-4 p-4">
+          <div className="flex items-center gap-3">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-full font-heading text-lg font-bold tabular-nums ${
+              completeness >= 90 ? "bg-gradient-gold text-gold-foreground" : completeness >= 60 ? "bg-success/20 text-success" : "bg-warning/20 text-warning"
+            }`}>
+              {completeness}
+            </div>
+            <div>
+              <div className="font-heading text-sm font-semibold">Autofill readiness</div>
+              <p className="text-xs text-muted-foreground">
+                {filled} of {CRITICAL_FIELDS.length} critical fields filled
+                {completeness === 100 && " · ready for full autopilot"}
+              </p>
+            </div>
           </div>
-          <Progress value={completeness} />
-          {missing.length > 0 && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Missing: {missing.map((m) => m.label).join(", ")}
+          <div className="hidden flex-1 max-w-xs sm:block">
+            <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+              <div
+                className={`h-full transition-all duration-500 ${completeness >= 90 ? "bg-gradient-gold" : "bg-gradient-emerald"}`}
+                style={{ width: `${completeness}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        {missing.length > 0 && (
+          <div className="border-t border-border/40 bg-surface-1 px-4 py-2.5">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Missing:</span>{" "}
+              {missing.map((m) => m.label).join(" · ")}
             </p>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
 
       <Tabs defaultValue="basic">
-        <TabsList className="flex h-auto flex-wrap">
-          <TabsTrigger value="basic">Basic</TabsTrigger>
-          <TabsTrigger value="address">Address</TabsTrigger>
-          <TabsTrigger value="workauth">Work auth</TabsTrigger>
-          <TabsTrigger value="comp">Comp & Availability</TabsTrigger>
-          <TabsTrigger value="prefs">Preferences</TabsTrigger>
-          <TabsTrigger value="links">Links</TabsTrigger>
-          <TabsTrigger value="experiences">Experience</TabsTrigger>
-          <TabsTrigger value="projects">Projects</TabsTrigger>
-          <TabsTrigger value="skills">Skills</TabsTrigger>
-          <TabsTrigger value="educations">Education</TabsTrigger>
-          <TabsTrigger value="languages">Languages</TabsTrigger>
-          <TabsTrigger value="certifications">Certs</TabsTrigger>
-          <TabsTrigger value="references_list">References</TabsTrigger>
-          <TabsTrigger value="screening">Screening</TabsTrigger>
-          <TabsTrigger value="resume">Resume LaTeX</TabsTrigger>
+        <TabsList className="flex h-auto flex-wrap gap-1 bg-surface-1 p-1">
+          <TabsTrigger value="basic" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Basic</TabsTrigger>
+          <TabsTrigger value="address" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Address</TabsTrigger>
+          <TabsTrigger value="workauth" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Work auth</TabsTrigger>
+          <TabsTrigger value="comp" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Comp</TabsTrigger>
+          <TabsTrigger value="prefs" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Preferences</TabsTrigger>
+          <TabsTrigger value="links" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Links</TabsTrigger>
+          <TabsTrigger value="experiences" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Experience</TabsTrigger>
+          <TabsTrigger value="projects" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Projects</TabsTrigger>
+          <TabsTrigger value="skills" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Skills</TabsTrigger>
+          <TabsTrigger value="educations" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Education</TabsTrigger>
+          <TabsTrigger value="languages" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Languages</TabsTrigger>
+          <TabsTrigger value="certifications" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Certs</TabsTrigger>
+          <TabsTrigger value="references_list" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">References</TabsTrigger>
+          <TabsTrigger value="screening" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Screening</TabsTrigger>
+          <TabsTrigger value="resume" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Resume</TabsTrigger>
         </TabsList>
 
         {/* BASIC */}
