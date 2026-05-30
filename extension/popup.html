@@ -5,24 +5,36 @@
 <title>JobPilot Capture</title>
 <style>
   :root { color-scheme: dark; }
-  body { width: 320px; margin: 0; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0a0a0a; color: #e5e5e5; padding: 16px; }
+  body { width: 340px; margin: 0; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0a0a0a; color: #e5e5e5; padding: 16px; }
   h1 { font-size: 14px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; }
-  .dot.off { background: #6b7280; box-shadow: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
+  .dot.on { background: #10b981; box-shadow: 0 0 8px #10b981; }
+  .dot.warn { background: #f59e0b; }
   .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #222; }
   .row:last-child { border: 0; }
   .muted { color: #888; font-size: 11px; }
-  button { width: 100%; margin-top: 12px; padding: 8px; background: #10b981; color: #000; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; }
+  .group { margin-top: 12px; padding-top: 10px; border-top: 1px solid #1a1a1a; }
+  button { width: 100%; margin-top: 8px; padding: 8px; background: #10b981; color: #000; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; }
   button.secondary { background: #1f1f1f; color: #e5e5e5; }
   a { color: #10b981; }
 </style>
 </head>
 <body>
-<h1><span class="dot" id="dot"></span> JobPilot Capture</h1>
+<h1>
+  <span class="dot" id="captureDot"></span> JobPilot Capture
+  <span style="margin-left:auto; display:flex; align-items:center; gap:6px; font-weight:400; font-size:11px; color:#888;">
+    <span class="dot" id="workerDot"></span> <span id="workerLabel">worker</span>
+  </span>
+</h1>
 <div id="status" class="muted">Loading…</div>
 <div id="stats" style="margin-top: 12px;"></div>
-<button id="toggle">Pause capture</button>
-<button class="secondary" id="options">Settings</button>
+<div class="group">
+  <div class="row"><span class="muted">Pending in queue</span><strong id="pending">0</strong></div>
+  <div class="row"><span class="muted">Apps queued on server</span><strong id="qapps">—</strong></div>
+</div>
+<button id="sync">Sync now</button>
+<button id="toggle" class="secondary">Pause capture</button>
+<button id="options" class="secondary">Settings</button>
 <script src="popup.js"></script>
 </body>
 </html>
