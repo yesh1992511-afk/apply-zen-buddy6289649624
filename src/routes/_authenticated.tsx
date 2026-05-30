@@ -109,7 +109,17 @@ function AuthLayout() {
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
             <span className="font-medium text-foreground">{ROUTE_LABEL[current] ?? current}</span>
           </nav>
-          <div className="ml-auto flex items-center gap-4">
+          <div className="ml-auto flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden h-8 gap-2 rounded-full border-border/60 bg-surface-2/60 px-3 text-xs text-muted-foreground hover:text-foreground sm:flex"
+              onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}
+            >
+              <Command className="h-3 w-3" />
+              <span>Quick actions</span>
+              <kbd className="ml-1 hidden rounded border border-border/60 bg-background/60 px-1.5 py-0.5 font-mono text-[10px] md:inline">⌘K</kbd>
+            </Button>
             <div className="hidden items-center gap-2 rounded-full border border-border/60 bg-surface-2 px-3 py-1.5 sm:flex">
               <StatusDot status={workerStatus} />
               <span className="text-xs font-medium tabular-nums text-muted-foreground">
@@ -129,6 +139,7 @@ function AuthLayout() {
         <main className="flex-1 px-4 py-6 md:px-6 md:py-8">
           <Outlet />
         </main>
+        <CommandPalette />
       </SidebarInset>
     </SidebarProvider>
   );
