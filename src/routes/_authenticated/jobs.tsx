@@ -65,6 +65,8 @@ function JobsPage() {
   const [loading, setLoading] = useState(false);
   const [dialogJob, setDialogJob] = useState<JobDialogJob | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [savedFilters, setSavedFilters] = useState<Array<{ id: string; name: string; keywords: string[] }>>([]);
+  const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -86,6 +88,12 @@ function JobsPage() {
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [hours]);
+  useEffect(() => {
+    supabase.from("filters").select("id, name, keywords").order("created_at").then(({ data }) => {
+      setSavedFilters((data ?? []) as Array<{ id: string; name: string; keywords: string[] }>);
+    });
+  }, []);
+
 
   const filtered = useMemo(() => {
     if (!search) return jobs;
