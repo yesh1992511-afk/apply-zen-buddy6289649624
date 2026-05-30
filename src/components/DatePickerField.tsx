@@ -11,16 +11,15 @@ type Props = {
   value: string; // ISO yyyy-MM-dd or ""
   onChange: (v: string | null) => void;
   className?: string;
-  /** restrict range; defaults sensible per use-case */
-  fromYear?: number;
-  toYear?: number;
+  startMonth?: Date;
+  endMonth?: Date;
   disabled?: (d: Date) => boolean;
 };
 
 export function DatePickerField({
   label, value, onChange, className,
-  fromYear = 1940,
-  toYear = new Date().getFullYear() + 10,
+  startMonth = new Date(1940, 0),
+  endMonth = new Date(new Date().getFullYear() + 10, 11),
   disabled,
 }: Props) {
   const parsed = value ? parse(value, "yyyy-MM-dd", new Date()) : undefined;
@@ -58,10 +57,11 @@ export function DatePickerField({
             selected={date}
             onSelect={(d) => onChange(d ? format(d, "yyyy-MM-dd") : null)}
             captionLayout="dropdown"
-            fromYear={fromYear}
-            toYear={toYear}
+            startMonth={startMonth}
+            endMonth={endMonth}
+            defaultMonth={date ?? new Date()}
             disabled={disabled}
-            initialFocus
+            autoFocus
             className={cn("p-3 pointer-events-auto")}
           />
         </PopoverContent>
