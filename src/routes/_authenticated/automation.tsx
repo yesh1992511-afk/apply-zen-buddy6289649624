@@ -192,7 +192,7 @@ function AutomationPage() {
           <Select
             value={s.active_filter_id ?? ""}
             onValueChange={(v) => {
-              set("active_filter_id", (v || null) as AutomationPatch["active_filter_id"]);
+              set("active_filter_id", (v || null) as AutomationValues["active_filter_id"]);
             }}
           >
             <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
