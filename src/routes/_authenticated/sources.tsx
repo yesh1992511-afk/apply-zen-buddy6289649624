@@ -239,6 +239,13 @@ function SourcesPage() {
         />
       ) : (
         <div className="space-y-3">
+          {runningNow && (
+            <div className="space-y-3" aria-live="polite" aria-label="Fetching jobs from sources">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <SourceRowSkeleton key={`run-skel-${i}`} />
+              ))}
+            </div>
+          )}
           {sources.map((s) => {
             const statusOk = s.last_run_status === "ok" || s.last_run_status === "success";
             const statusPartial = s.last_run_status === "partial";
