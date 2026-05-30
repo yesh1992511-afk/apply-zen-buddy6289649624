@@ -66,34 +66,14 @@ async def tick_heartbeat():
 
 
 async def realtime_sources_listener():
-    """Subscribe to postgres_changes on sources for our user and wake the loop.
-    Reconnects on failure. Falls back silently — cadence tick still runs."""
-    uid = user_id()
-    while True:
-        try:
-            from supabase import create_client
-            client = create_client(settings().SUPABASE_URL, settings().SUPABASE_SERVICE_ROLE_KEY)
-
-            def _on_change(payload):
-                db_log("info", "sources changed (realtime) — forcing tick", scope="scheduler")
-                _wake.set()
-
-            channel = client.channel(f"worker-sources-{uid}")
-            channel.on_postgres_changes(
-                event="*", schema="public", table="sources",
-                filter=f"user_id=eq.{uid}", callback=_on_change,
-            ).subscribe()
-            db_log("info", "realtime sources listener subscribed", scope="boot")
-            # Keep the channel alive; supabase-py runs realtime in a background thread.
-            while True:
-                await asyncio.sleep(60)
-        except Exception as e:
-            log.warning("realtime_listener_failed", error=str(e))
-            await asyncio.sleep(15)  # reconnect backoff
+    """Disabled: the sync supabase-py client does not support realtime.
+    The 2-minute scheduler tick still picks up source changes."""
+    log.info("realtime_listener_disabled", reason="sync client unsupported")
+    return
 
 
 async def wake_loop():
-    """When _wake is set, force-run sources immediately."""
+    """When _wake is set, force-run sources immediately. Unused while realtime is disabled."""
     while True:
         await _wake.wait()
         _wake.clear()
