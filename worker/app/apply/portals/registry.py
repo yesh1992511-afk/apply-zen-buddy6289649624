@@ -6,8 +6,15 @@ from .lever import Lever
 from .workday import Workday
 from .indeed import Indeed
 from .ashby import Ashby
+from .smartrecruiters import SmartRecruiters
+from .workable import Workable
+from .recruitee import Recruitee
+from .teamtailor import Teamtailor
 
-PORTALS: list[Portal] = [LinkedIn(), Greenhouse(), Lever(), Workday(), Indeed(), Ashby()]
+PORTALS: list[Portal] = [
+    LinkedIn(), Greenhouse(), Lever(), Workday(), Indeed(), Ashby(),
+    SmartRecruiters(), Workable(), Recruitee(), Teamtailor(),
+]
 
 
 def find_portal(url: str) -> Portal | None:
