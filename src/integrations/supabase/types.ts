@@ -1015,6 +1015,7 @@ export type Database = {
           needs_visa_future: boolean | null
           needs_visa_now: boolean | null
           notice_period_weeks: number | null
+          onboarded_at: string | null
           onboarding_state: Json
           open_to_contract: boolean | null
           open_to_fulltime: boolean | null
@@ -1093,6 +1094,7 @@ export type Database = {
           needs_visa_future?: boolean | null
           needs_visa_now?: boolean | null
           notice_period_weeks?: number | null
+          onboarded_at?: string | null
           onboarding_state?: Json
           open_to_contract?: boolean | null
           open_to_fulltime?: boolean | null
@@ -1171,6 +1173,7 @@ export type Database = {
           needs_visa_future?: boolean | null
           needs_visa_now?: boolean | null
           notice_period_weeks?: number | null
+          onboarded_at?: string | null
           onboarding_state?: Json
           open_to_contract?: boolean | null
           open_to_fulltime?: boolean | null
