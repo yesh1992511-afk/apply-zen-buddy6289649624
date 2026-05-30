@@ -54,11 +54,14 @@ function scoreColor(s: number) {
 }
 
 function JobsPage() {
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [hours, setHours] = useState(24);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [dialogJob, setDialogJob] = useState<JobDialogJob | null>(null);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -111,6 +114,39 @@ function JobsPage() {
       setSelected(new Set());
     }
   };
+
+  const applyOne = async (job: { id: string }) => {
+    setApplyingId(job.id);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      // Check for existing application
+      const { data: existing } = await supabase
+        .from("applications")
+        .select("id")
+        .eq("job_id", job.id)
+        .eq("user_id", u.user.id)
+        .maybeSingle();
+      let appId = existing?.id;
+      if (!appId) {
+        const { data, error } = await supabase
+          .from("applications")
+          .insert({ job_id: job.id, user_id: u.user.id, status: "queued" })
+          .select("id")
+          .single();
+        if (error) { toast.error(error.message); return; }
+        appId = data.id;
+        toast.success("Application queued");
+      } else {
+        toast.message("Already queued — opening application");
+      }
+      setDialogJob(null);
+      navigate({ to: "/applications/$id", params: { id: appId } });
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
 
   return (
     <div className="space-y-6 max-w-[1400px]">
