@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { listPlans } from "@/lib/admin.functions";
+import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/plans")({
   head: () => ({ meta: [{ title: "Plans — Admin" }] }),
@@ -10,10 +12,13 @@ export const Route = createFileRoute("/admin/plans")({
 });
 
 function BillingOpsPage() {
-  const [plans, setPlans] = useState<any[]>([]);
-  useEffect(() => {
-    supabase.from("plans").select("*").order("sort_order").then(({ data }) => setPlans(data ?? []));
-  }, []);
+  const fetchPlans = useServerFn(listPlans);
+  const { data, isLoading, error } = useQuery({ queryKey: ["admin", "plans"], queryFn: () => fetchPlans() });
+
+  if (isLoading) return <div className="flex items-center justify-center py-12 text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading plans…</div>;
+  if (error) return <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">Failed to load plans: {(error as Error).message}</div>;
+
+  const plans = (data ?? []) as any[];
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">Read-only view of plans & quotas. Stripe payments are managed via the Billing page.</p>

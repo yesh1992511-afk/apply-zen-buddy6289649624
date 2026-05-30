@@ -17,7 +17,8 @@ export function useRoles() {
     roles,
     loading,
     isOwner: roles.includes("owner"),
-    isAdmin: roles.includes("owner") || roles.includes("admin"),
+    isAdmin: roles.includes("admin") || roles.includes("super_admin"),
+    isSuperAdmin: roles.includes("super_admin"),
     isViewer: roles.includes("viewer"),
   };
 }

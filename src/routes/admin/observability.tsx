@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { listErrorEvents, setErrorResolved } from "@/lib/admin.functions";
 import { DataTable, type Column } from "@/components/DataTable";
 import { MetricTile } from "@/components/MetricTile";
-import { AlertOctagon, CheckCircle2, Clock, Activity } from "lucide-react";
+import { AlertOctagon, CheckCircle2, Clock, Activity, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin/observability")({
   head: () => ({ meta: [{ title: "Observability — Admin" }] }),
@@ -27,27 +28,28 @@ type ErrEvt = {
 };
 
 function ObservabilityPage() {
-  const [errors, setErrors] = useState<ErrEvt[]>([]);
-  const [stats, setStats] = useState({ open: 0, resolved: 0, last_24h: 0 });
+  const fetchErrors = useServerFn(listErrorEvents);
+  const toggleFn = useServerFn(setErrorResolved);
+  const qc = useQueryClient();
 
-  const load = () => {
-    supabase.from("error_events").select("*").order("last_seen", { ascending: false }).limit(500).then(({ data }) => {
-      const rows = (data ?? []) as ErrEvt[];
-      setErrors(rows);
-      const dayAgo = Date.now() - 86400_000;
-      setStats({
-        open: rows.filter((r) => !r.resolved).length,
-        resolved: rows.filter((r) => r.resolved).length,
-        last_24h: rows.filter((r) => new Date(r.last_seen).getTime() > dayAgo).length,
-      });
-    });
-  };
-  useEffect(load, []);
-  useRealtimeInvalidate({ table: "error_events", onChange: load });
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["admin", "error_events"],
+    queryFn: () => fetchErrors(),
+    refetchInterval: 15_000,
+  });
 
-  const toggleResolved = async (e: ErrEvt) => {
-    await supabase.from("error_events").update({ resolved: !e.resolved }).eq("id", e.id);
-    load();
+  const toggle = useMutation({
+    mutationFn: (e: ErrEvt) => toggleFn({ data: { id: e.id, resolved: !e.resolved } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "error_events"] }),
+    onError: (e: any) => toast.error(e.message ?? "Failed"),
+  });
+
+  const errors = (data ?? []) as ErrEvt[];
+  const dayAgo = Date.now() - 86400_000;
+  const stats = {
+    open: errors.filter((r) => !r.resolved).length,
+    resolved: errors.filter((r) => r.resolved).length,
+    last_24h: errors.filter((r) => new Date(r.last_seen).getTime() > dayAgo).length,
   };
 
   const columns: Column<ErrEvt>[] = [
@@ -65,7 +67,7 @@ function ObservabilityPage() {
     { key: "last_seen", header: "Last seen", accessor: (r) => new Date(r.last_seen).toLocaleString(), sortValue: (r) => r.last_seen, align: "right" },
     {
       key: "actions", header: "", align: "right",
-      accessor: (r) => <Button size="sm" variant="ghost" className="h-7" onClick={(e) => { e.stopPropagation(); toggleResolved(r); }}>{r.resolved ? "Reopen" : "Resolve"}</Button>,
+      accessor: (r) => <Button size="sm" variant="ghost" className="h-7" onClick={(e) => { e.stopPropagation(); toggle.mutate(r); }}>{r.resolved ? "Reopen" : "Resolve"}</Button>,
     },
   ];
 
@@ -76,14 +78,24 @@ function ObservabilityPage() {
         <MetricTile icon={Clock} label="Errors (24h)" value={stats.last_24h} accent="gold" />
         <MetricTile icon={Activity} label="Resolved" value={stats.resolved} accent="success" />
       </div>
-      <DataTable
-        rows={errors}
-        columns={columns}
-        rowKey={(r) => r.id}
-        searchKeys={(r) => `${r.message} ${r.source} ${r.route ?? ""}`}
-        exportFilename="error_events"
-        empty="No errors logged yet. 🎉"
-      />
+      {isLoading ? (
+        <div className="flex items-center justify-center rounded-lg border border-border/60 bg-card/40 py-12 text-sm text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading errors…
+        </div>
+      ) : error ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          Failed to load errors: {(error as Error).message}
+        </div>
+      ) : (
+        <DataTable
+          rows={errors}
+          columns={columns}
+          rowKey={(r) => r.id}
+          searchKeys={(r) => `${r.message} ${r.source} ${r.route ?? ""}`}
+          exportFilename="error_events"
+          empty="No errors logged yet. 🎉"
+        />
+      )}
     </div>
   );
 }
