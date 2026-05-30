@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_authenticated/profile")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
-type Profile = Record<string, unknown> & { user_id: string };
+
 
 // Fields that count toward "profile complete" for autofill quality.
 const CRITICAL_FIELDS: { key: string; label: string }[] = [
