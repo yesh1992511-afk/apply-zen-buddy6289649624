@@ -14,6 +14,34 @@ from typing import Any
 from .profile_map import answer_for
 
 
+def load_lists(user_id: str | None) -> dict:
+    """Fetch related rows (experiences/educations/languages/...) the mapper may need.
+
+    Shared by all portal adapters so they can call autofill_form uniformly.
+    """
+    if not user_id:
+        return {}
+    from ..db import db
+    out: dict = {}
+    for tbl in ("experiences", "educations", "languages", "certifications", "skills", "projects"):
+        try:
+            res = db().table(tbl).select("*").eq("user_id", user_id).execute()
+            out[tbl] = res.data or []
+        except Exception:
+            out[tbl] = []
+    return out
+
+
+async def safe_autofill(page, profile: dict) -> dict[str, int] | None:
+    """Convenience wrapper: load lists + run autofill, swallow all exceptions.
+    Call this right before the final Submit click in any portal adapter."""
+    try:
+        lists = load_lists(profile.get("user_id"))
+        return await autofill_form(page, profile, lists)
+    except Exception:
+        return None
+
+
 async def _label_for(page, handle) -> str:
     """Best-effort: extract the human question text for a single input element."""
     try:
