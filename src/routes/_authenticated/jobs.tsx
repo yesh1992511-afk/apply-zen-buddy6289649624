@@ -6,15 +6,19 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock } from "lucide-react";
+import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { QueryErrorState } from "@/components/QueryErrorState";
 import { JobDescriptionDialog, type JobDialogJob } from "@/components/JobDescriptionDialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
-import { jobsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies } from "@/lib/queries/jobs";
+import { jobsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies, useClearAllJobs } from "@/lib/queries/jobs";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
   head: () => ({ meta: [{ title: "Jobs — JobPilot" }] }),
