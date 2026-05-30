@@ -139,3 +139,31 @@ function ArrField({ label, value, onChange }: { label: string; value: string[]; 
     </div>
   );
 }
+
+function FilterPreview({ filter }: { filter: Filter }) {
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      let q = supabase.from("jobs").select("id", { count: "exact", head: true });
+      if (filter.min_score) q = q.gte("score", filter.min_score);
+      if (filter.posted_within_hours) {
+        const since = new Date(Date.now() - filter.posted_within_hours * 3600_000).toISOString();
+        q = q.gte("scraped_at", since);
+      }
+      if ((filter.keywords ?? []).length > 0) {
+        const or = filter.keywords.map((k) => `title.ilike.%${k}%,description.ilike.%${k}%`).join(",");
+        q = q.or(or);
+      }
+      const { count: c } = await q;
+      if (!cancelled) setCount(c ?? 0);
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [filter]);
+  return (
+    <Badge variant="outline" className="ml-1 gap-1 font-mono tabular-nums">
+      <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-dot" />
+      {count === null ? "…" : `${count} match`}
+    </Badge>
+  );
+}
