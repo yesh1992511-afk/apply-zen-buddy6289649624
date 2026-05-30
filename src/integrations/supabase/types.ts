@@ -1697,6 +1697,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_plan_for: {
+        Args: { _user_id: string }
+        Returns: {
+          active: boolean
+          admin_console: boolean
+          cookie_sync: boolean
+          currency: string
+          key: string
+          max_applies_per_day: number
+          max_sources: number
+          name: string
+          price_cents: number
+          sort_order: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "plans"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
