@@ -5,7 +5,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-type Kind = "scrape" | "apply" | "tailor";
+type Kind = "scrape" | "apply" | "tailor" | "compile_resume" | "test_source";
 
 async function enqueue(kind: Kind, payload: Record<string, unknown>): Promise<string | null> {
   const { data: u } = await supabase.auth.getUser();
@@ -42,6 +42,25 @@ export async function triggerTailor(job_id: string) {
   const id = await enqueue("tailor", { job_id });
   if (id) toast.success("Tailored resume preview queued.");
   return id;
+}
+
+export async function triggerCompileResume(resume_id: string) {
+  const id = await enqueue("compile_resume", { resume_id });
+  if (id) toast.success("Compiling LaTeX → PDF…");
+  return id;
+}
+
+export async function triggerTestSource(source_key: string) {
+  const id = await enqueue("test_source", { source_key });
+  if (id) toast.success(`Testing "${source_key}"…`);
+  return id;
+}
+
+/** Get a short-lived signed URL for a resume PDF in the `resumes` bucket. */
+export async function getResumePdfUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from("resumes").createSignedUrl(path, 300);
+  if (error || !data) return null;
+  return data.signedUrl;
 }
 
 /** Polls a command row until done/failed, returns the final row. */
