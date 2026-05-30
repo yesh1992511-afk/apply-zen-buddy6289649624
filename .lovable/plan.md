@@ -1,66 +1,55 @@
-## What the logs show
+## Status
 
-The worker is now starting successfully, but every database request is failing with:
+Good news: the worker is healthy. Auth works, the heartbeat is succeeding, the scheduler is running, and `compile_resume` jobs for the valid resume `52aeb6c0…` are completing and uploading PDFs to storage.
 
-```text
-401 Unauthorized: Invalid API key
+The remaining noise is two unrelated minor issues:
+
+1. **HTTP 406 on a deleted resume.** A stack of old `compile_resume` commands references resume id `36948da0-8f3e-4b92-bfc5-728a244ca945`, which no longer exists for your user. `worker/app/commands.py:101` uses `.single()`, which returns 406 Not Acceptable when zero rows match, producing `command_failed` tracebacks. Valid resumes still compile fine — this only affects the stale rows.
+
+2. **`realtime_listener_failed` warning.** Cosmetic. The sync supabase-py client can't open a realtime subscription; the scheduler poll already covers this. We can silence the warning.
+
+## Fix
+
+### 1. `worker/app/commands.py` — handle missing resume cleanly
+
+In `_do_compile_resume` (around lines 94–115):
+
+- Replace `.single()` with `.maybe_single()` so a missing row returns `None` instead of HTTP 406.
+- If `row` is `None`, raise `ValueError(f"resume {resume_id} not found")`. The existing `tick_commands` wrapper will mark the worker_command as failed with a clean one-line error (no traceback spam, no 406 in HTTP logs).
+
+### 2. `worker/app/main.py` — drop the realtime warning
+
+Remove (or downgrade to `debug`) the `realtime_listener_failed` log line, since we intentionally don't use realtime in the sync client and the scheduler poll is the source of truth.
+
+### 3. Clear the stale pending commands (one-time, on the VPS)
+
+The queue still contains old `compile_resume` rows pointing at the deleted resume. After the code fix they'll fail cleanly instead of looping with 406s, but you can also just mark them done so the log stops mentioning them. From the VPS, run once:
+
+```bash
+docker compose exec worker python -c "
+from app.db import db, user_id
+res = db().table('worker_commands').update({'status':'failed','error':'stale: resume deleted'}).eq('user_id', user_id()).eq('status','pending').eq('kind','compile_resume').execute()
+print('cleared', len(res.data or []))
+"
 ```
 
-This means the Docker worker is using a wrong, expired, or copied-truncated `SUPABASE_SERVICE_ROLE_KEY` in `worker/.env`. The worker code is reading `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` correctly, but the value on the server is not accepted by the backend.
+(Or skip this — the new code will drain them on the next tick.)
 
-There is also a secondary warning:
-
-```text
-This feature isn't available in the sync client. You can use the realtime feature in the async client only.
-```
-
-That realtime warning is not the main blocker, but it will keep repeating in logs.
-
-## Plan
-
-1. Add safer worker startup validation
-   - Validate that `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `JOBPILOT_USER_ID` look valid before the scheduler starts.
-   - Run a small backend health/query check at boot.
-   - If the key is invalid, log one clear message and stop instead of flooding logs every 5 seconds.
-
-2. Make scheduled command polling resilient
-   - Wrap `tick_commands()` database polling in a try/except so API failures do not produce repeated APScheduler tracebacks.
-   - Log a concise `commands_poll_failed` warning.
-
-3. Remove or disable the broken sync realtime listener
-   - Since the current sync Python client cannot use realtime, disable that listener path.
-   - Keep the normal 2-minute scheduler polling, so sources still run without realtime.
-
-4. Update server instructions
-   - Add exact safe commands for checking `.env` without printing secrets.
-   - Tell you which key must be replaced on the VPS: `SUPABASE_SERVICE_ROLE_KEY`.
-   - Then rebuild/recreate the worker.
-
-## What you will need to do on the server after this code change
-
-You will still need to update the secret in `~/jobpilot/worker/.env`; code cannot fix an invalid key stored on the VPS.
-
-The important check is:
+### 4. Redeploy
 
 ```bash
 cd ~/jobpilot/worker
-nano .env
-```
-
-Make sure:
-
-```text
-SUPABASE_URL=https://iarfebnnnoswymgfvnel.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<real service role key, not anon key>
-JOBPILOT_USER_ID=6143b580-35ac-4204-9807-1cf07f6fcff7
-```
-
-Then run:
-
-```bash
+git pull
 docker compose build worker
 docker compose up -d --force-recreate worker
 docker compose logs -f worker
 ```
 
-Expected result: no `Invalid API key` messages, heartbeat succeeds, and the worker keeps running cleanly.
+## Expected result
+
+- No more `HTTP/2 406` or `command_failed` tracebacks.
+- No more `realtime_listener_failed` warning at boot.
+- Valid `compile_resume` jobs continue to succeed (as `52aeb6c0…` already is).
+- Heartbeat, source polling, and apply ticks keep running on their normal schedule.
+
+Approve and I'll apply the two code changes.
