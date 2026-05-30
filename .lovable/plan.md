@@ -1,89 +1,67 @@
-# Full-Platform Audit & Wiring Verification
+## Goal
 
-You asked three things: (1) some sections still look like placeholder UI, (2) you don't understand how the backend syncs, (3) is the Chrome extension fully working. I'll do a structured audit and fix anything that isn't real, then hand you a one-page "how it all connects" doc.
+Make `/admin` a real, separate **super-admin** area — not visible to regular users or even the workspace **owner**. Fix the clumsy layout and the "The app encountered an error" toast on Audit log.
 
-## Part 1 — Section-by-section UI audit (read-only pass first)
+## 1. Backend — new `super_admin` role
 
-I'll open each authenticated route and grade it `REAL` / `PARTIAL` / `PLACEHOLDER`:
+Migration:
+- Add `'super_admin'` to the `app_role` enum.
+- Seed your account (`6143b580-…fff7`) with `super_admin` so you keep access.
+- Update every RLS policy that currently grants admin pages to `owner`/`admin` so they require `has_role(auth.uid(), 'super_admin')` instead (audit_log, feature_flags, plans, system tables, observability views).
+- Keep `owner`/`admin` for the normal app — they just lose `/admin` access.
 
-| Section | Route | What "REAL" means |
-|---|---|---|
-| Dashboard | `/dashboard` | Reads live counts from `jobs`, `applications`, `automation_runs` |
-| Jobs | `/jobs` | Lists rows from `jobs` table, filter chips work |
-| Applications | `/applications` + `/applications/$id` | Lists `applications`, detail shows events + screenshots |
-| Filters | `/filters` | CRUD against `filters` table |
-| Sources | `/sources` | CRUD against `sources`, shows last run status |
-| Automation | `/automation` | Edits `automation_settings`, Start/Pause writes to worker |
-| Worker | `/worker` | Shows `worker_heartbeat`, can dispatch commands |
-| Logs | `/logs` | Tails `logs` + `application_events` |
-| Notifications | `/notifications` | Edits `notification_settings`, test send |
-| Profile | `/profile` | Full US-standard form (already rebuilt) |
-| Onboarding | `/onboarding` | Wizard writes to `profile.onboarding_state` |
-| Billing | `/billing` | Plan + owner unlimited badge |
-| Extension | `/extension` | Token mint + install steps |
-| Setup | `/setup` | First-run checklist |
-| Privacy | `/privacy` | Export + delete account |
-| Admin (5 tabs) | `/admin/*` | Observability / System / Audit / Flags / Plans |
+No new table needed; `user_roles` already supports it.
 
-For each `PARTIAL` or `PLACEHOLDER` I find, I list the exact gap (e.g. "Logs page renders static rows, not querying `logs`") — then fix it in Part 4.
+## 2. Route gating — only super-admin
 
-## Part 2 — Backend wiring map (deliverable: `BACKEND.md`)
+`src/routes/admin.tsx` `beforeLoad`:
+- If not logged in → `redirect /admin/login` (new dedicated login).
+- If logged in but not `super_admin` → `redirect /` with a toast "Admin area is restricted".
+- Hide the "Admin" link in the main sidebar unless the current user has `super_admin`.
 
-I'll write a plain-English file at the repo root describing the loop:
+## 3. Separate super-admin login
 
-```text
- Sources (LinkedIn/Indeed/Greenhouse/Extension)
-        │  ingest via /api/public/sources/*
-        ▼
- jobs table  ──► match_job_to_filters() trigger ──► scores + flags "matched"
-        │
-        ▼
- Worker polls worker_commands + matched jobs
-        │  AI tailoring (Lovable AI: resume + cover letter)
-        ▼
- applications (queued → running → applied/failed)
-        │  emits application_events + screenshots/* in storage
-        ▼
- notification_settings  ──► email summaries / failure alerts
-        │
-        ▼
- audit_log + usage_events  ──► /admin/observability dashboards
-```
+New route `src/routes/admin/login.tsx`:
+- Standalone page (no app shell), dark "console" styling, shield icon, "Super-admin access only".
+- Email + password sign-in via Supabase, then verifies `super_admin` role; signs the user out and shows an error if they lack it.
+- Robots noindex/nofollow.
+- No "sign up" / "forgot password to create account" — recovery only.
 
-Plus a table of every server function and HTTP endpoint with: purpose, who calls it, what tables it touches.
+## 4. UI polish for `/admin/*`
 
-## Part 3 — Extension end-to-end check
+Rebuild `admin.tsx` shell:
+- Proper console layout: fixed left rail with sections (Observability, System, Audit log, Feature flags, Plans), top bar with current super-admin email + "Exit admin" button, content area with breadcrumbs.
+- Replace the cramped underline tab row with the side rail (matches the screenshot's "console" intent and removes the empty black void below content).
+- Consistent card framing for empty states ("No audit entries yet" inside a centered illustration block, not a stretched empty rectangle).
+- Tighten spacing, use design tokens only.
 
-The extension talks to two public endpoints:
-- `POST /api/public/sources/ingest-extension` — push captured jobs
-- `POST /api/public/extension/error-report` — push errors
+## 5. Fix the runtime error on Audit log
 
-I will:
-1. Verify the extension ZIP exists in `public/`, manifest is V3, content/background scripts reference the right host.
-2. Verify auth uses a token from `extension_tokens` (not user session) and the ingest endpoint validates it.
-3. Test ingest with `invoke-server-function`: send a fake captured job with a real token from your account, confirm a row appears in `jobs` and `match_job_to_filters` runs.
-4. Confirm `extension_tokens.last_seen_at` + `captures_today` increment.
-5. If anything is off, fix it.
+The red "The app encountered an error" card in your screenshot comes from `ErrorBoundaryRoute` on `/admin/audit`. Root cause: the page calls `supabase.from("audit_log").select(...)` directly from the browser, but `audit_log` RLS will reject it once policies are tightened, and the `.then()` chain doesn't handle the error → boundary triggers.
 
-## Part 4 — Fixes
+Fix:
+- Move all admin data reads (audit_log, feature_flags, system stats, plans, observability) behind `createServerFn` + `requireSupabaseAuth` middleware that additionally asserts `has_role(userId, 'super_admin')`, and use the admin Supabase client so RLS doesn't bite.
+- Convert the page to TanStack Query (`useQuery` + `useServerFn`) so errors surface inline ("Failed to load audit log — Retry") instead of crashing the route.
+- Apply the same pattern to the other admin tabs.
 
-For each gap found in Parts 1–3, I'll do the minimum surgical fix:
-- Replace placeholder JSX with real queries (TanStack Query + server fns).
-- Wire any disconnected "Save" / "Test" / "Run now" button to its server fn.
-- Ensure every admin page reads live data.
+## 6. Verify
 
-I will NOT redesign anything visually — only make the data real.
+- Log in as your owner account → `/admin` redirects to `/admin/login`.
+- Log in at `/admin/login` with same account (now also `super_admin`) → console loads, Audit log renders without the error card.
+- Create a second test user with only `owner` role → `/admin` redirects away, sidebar hides Admin link.
 
-## Part 5 — Report back
+## Out of scope
 
-Final message to you will include:
-- The graded table (Part 1) marked `REAL` after fixes.
-- Link to `BACKEND.md` (Part 2).
-- Extension test result with the row that appeared in your DB (Part 3).
-- List of files changed.
+- Separate super-admin user database (we reuse Supabase auth + role table; safer than a parallel auth system).
+- Email/2FA hardening for super-admin (can add TOTP later if you want).
+- Visual redesign of non-admin pages.
 
-## Out of scope (unless you say otherwise)
-- Live Stripe checkout
-- Real LinkedIn/Indeed automation against production sites (we'll test with seeded jobs)
-- New visual design
-- Mobile native apps
+## Technical notes
+
+Files touched:
+- new migration: add enum value + seed + tighten RLS
+- `src/routes/admin.tsx` — new shell + strict gate
+- `src/routes/admin/login.tsx` — new
+- `src/routes/admin/{audit,observability,system,flags,plans}.tsx` — switch to server fns + useQuery
+- `src/lib/admin.functions.ts` — new server fns with `super_admin` guard
+- `src/components/AppSidebar.tsx` (or wherever the admin link lives) — conditional render
