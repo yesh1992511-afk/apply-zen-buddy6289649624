@@ -10,13 +10,25 @@ export function toastSaved(label = "Saved") {
 }
 
 export function toastError(err: unknown, fallback = "Something went wrong") {
-  const msg =
-    err instanceof Error
-      ? err.message
-      : typeof err === "string"
-        ? err
-        : fallback;
-  toast.error(msg || fallback);
+  // Try to parse our AppError envelope for {code, message, hint}.
+  let message = fallback;
+  let hint: string | undefined;
+  const raw =
+    err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && "message" in parsed) {
+        message = String(parsed.message) || fallback;
+        if (typeof parsed.hint === "string") hint = parsed.hint;
+      } else {
+        message = raw;
+      }
+    } catch {
+      message = raw;
+    }
+  }
+  toast.error(message || fallback, hint ? { description: hint } : undefined);
 }
 
 export function toastQueued(n: number, what = "job") {
