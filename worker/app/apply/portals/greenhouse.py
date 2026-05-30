@@ -41,6 +41,12 @@ class Greenhouse(Portal):
                     cl = page.locator("textarea[name*='cover'], textarea[id*='cover']")
                     if await cl.count():
                         await cl.first.fill(cover_letter_text)
+                # Walk the rest of the form and auto-answer any custom questions
+                try:
+                    lists = _load_lists(profile.get("user_id"))
+                    await autofill_form(page, profile, lists)
+                except Exception:
+                    pass
                 await pause(0.5, 1.5)
                 submit = page.locator("input[type='submit'], button[type='submit']").first
                 await submit.click()
