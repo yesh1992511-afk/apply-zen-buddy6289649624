@@ -102,7 +102,7 @@ function AuthLayout() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset className="bg-background">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur-md">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border/40 bg-background/60 px-4 backdrop-blur-xl backdrop-saturate-150 ease-apple">
           <SidebarTrigger className="-ml-1" />
           <nav className="flex items-center gap-1.5 text-sm">
             <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">JobPilot</Link>
