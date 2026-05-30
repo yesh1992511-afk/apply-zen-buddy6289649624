@@ -74,10 +74,11 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
               for (let j = 0; j < jobs.length; j += 100) {
                 const chunk = jobs.slice(j, j + 100).map((nj) => ({
                   ...nj,
+                  raw: nj.raw as never,
                   user_id: userId,
                   matched: false,
                   score: 0,
-                  status: 'new' as const,
+                  status: 'new',
                 }));
                 const { data: upserted, error } = await supabaseAdmin
                   .from('jobs')
