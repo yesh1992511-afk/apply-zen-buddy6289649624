@@ -9,6 +9,9 @@ import {
 import { MetricTile } from "@/components/MetricTile";
 import { StatusDot } from "@/components/StatusDot";
 import { EmptyState } from "@/components/EmptyState";
+import { CountUp } from "@/components/CountUp";
+import { CardSkeleton } from "@/components/skeletons";
+
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — JobPilot" }] }),
