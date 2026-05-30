@@ -234,9 +234,13 @@ HANDLERS = {
 
 
 async def tick_commands() -> None:
-    rows = db().table("worker_commands").select("*").eq(
-        "user_id", user_id()
-    ).eq("status", "pending").order("created_at").limit(5).execute().data or []
+    try:
+        rows = db().table("worker_commands").select("*").eq(
+            "user_id", user_id()
+        ).eq("status", "pending").order("created_at").limit(5).execute().data or []
+    except Exception as e:
+        log.warning("commands_poll_failed", error=str(e)[:300])
+        return
     for cmd in rows:
         if not await _claim(cmd["id"]):
             continue
