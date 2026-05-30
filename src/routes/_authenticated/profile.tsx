@@ -3,6 +3,8 @@ import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useProfileEditor } from "@/lib/queries/profile";
+import { SavedIndicator } from "@/components/SavedIndicator";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,30 +58,21 @@ const CRITICAL_FIELDS: { key: string; label: string }[] = [
 
 function ProfilePage() {
   const { user } = useUser();
-  const [p, setP] = useState<Profile | null>(null);
-  const [saving, setSaving] = useState(false);
+  const { data: p, set, flush, saveState, error: saveError, isLoading } = useProfileEditor();
 
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("profile").select("*").eq("user_id", user.id).maybeSingle().then(({ data }) => {
-      setP(data as Profile);
-    });
-  }, [user]);
+  // Hint that `user` is still consumed elsewhere (kept for future per-section flushes).
+  void user;
 
-  const save = async () => {
-    if (!p || !user) return;
-    setSaving(true);
-    // strip read-only / managed columns
-    const { user_id: _u, created_at: _c, updated_at: _up, ...patch } = p;
-    void _u; void _c; void _up;
-    const { error } = await (supabase as unknown as { from: (t: string) => { update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: { message: string } | null }> } } }).from("profile").update(patch).eq("user_id", user.id);
-    setSaving(false);
-    if (error) toast.error(error.message); else toast.success("Profile saved");
-  };
+  if (isLoading || !p) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-48 animate-pulse rounded-md bg-surface-2" />
+        <div className="h-20 animate-pulse rounded-xl bg-surface-2" />
+        <div className="h-96 animate-pulse rounded-xl bg-surface-2" />
+      </div>
+    );
+  }
 
-  if (!p) return <div className="text-muted-foreground">Loading…</div>;
-
-  const set = (k: string, v: unknown) => setP((prev) => (prev ? { ...prev, [k]: v } : prev));
   const get = (k: string) => p[k];
   const getStr = (k: string): string => {
     const v = p[k];
@@ -99,17 +92,25 @@ function ProfilePage() {
   });
 
   return (
-    <div className="space-y-6 max-w-[1400px]">
+    <div className="space-y-6 max-w-[1400px]" onBlurCapture={() => flush()}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight">Profile</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Source of truth for resume tailoring and portal autofill.
+            Source of truth for resume tailoring and portal autofill. Changes save automatically.
           </p>
         </div>
-        <Button onClick={save} disabled={saving} className="bg-gradient-emerald shadow-glow disabled:shadow-none">
-          {saving ? "Saving…" : "Save changes"}
-        </Button>
+        <div className="flex items-center gap-3">
+          <SavedIndicator state={saveState} error={saveError} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => flush()}
+            disabled={saveState !== "dirty"}
+          >
+            Save now
+          </Button>
+        </div>
       </div>
 
       {/* Readiness band */}
