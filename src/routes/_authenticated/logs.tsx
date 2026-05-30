@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { ScrollText, Search, RefreshCw } from "lucide-react";
+import { ScrollText, Search, RefreshCw, Copy } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/logs")({
