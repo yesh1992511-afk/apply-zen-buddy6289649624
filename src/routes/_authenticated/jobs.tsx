@@ -49,10 +49,11 @@ const windows = [
   { label: "All", hours: 0 },
 ];
 
-function scoreColor(s: number) {
-  if (s >= 80) return "bg-gradient-gold text-gold-foreground";
-  if (s >= 60) return "bg-success/20 text-success border border-success/30";
-  return "bg-surface-3 text-muted-foreground";
+function scoreChip(s: number) {
+  // Gradient ramp: red < 60 → amber 60–84 → emerald ≥ 85
+  if (s >= 85) return "bg-gradient-to-br from-emerald-500/30 to-emerald-700/40 text-emerald-200 ring-1 ring-emerald-400/40 shadow-[0_0_12px_-2px_oklch(0.65_0.16_162/0.5)]";
+  if (s >= 60) return "bg-gradient-to-br from-amber-500/25 to-amber-700/30 text-amber-200 ring-1 ring-amber-400/30";
+  return "bg-gradient-to-br from-rose-500/15 to-rose-700/20 text-rose-200/90 ring-1 ring-rose-400/20";
 }
 
 function JobsPage() {
