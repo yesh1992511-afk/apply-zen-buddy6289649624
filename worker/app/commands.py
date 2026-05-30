@@ -123,6 +123,15 @@ async def _do_notify_daily_summary(payload: dict[str, Any]) -> dict[str, Any]:
         f"Top matches:\n{top_lines}\n"
     )
     _gmail.send_and_log("daily_summary", f"[JobPilot] Daily summary — {applied} applied", body)
+    # Retention: keep only the 200 most recent notification_log rows for this user
+    try:
+        old = db().table("notification_log").select("id").eq("user_id", uid).order(
+            "created_at", desc=True
+        ).range(200, 999).execute().data or []
+        if old:
+            db().table("notification_log").delete().in_("id", [r["id"] for r in old]).execute()
+    except Exception:
+        pass
     return {"ok": True, "applied": applied, "jobs_in": jobs_in}
 
 
