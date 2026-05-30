@@ -59,6 +59,14 @@ const CRITICAL_FIELDS: { key: string; label: string }[] = [
 function ProfilePage() {
   const { user } = useUser();
   const { data: p, set, flush, saveState, error: saveError, isLoading } = useProfileEditor();
+  const [tab, setTab] = useState<string>(() =>
+    typeof window !== "undefined" && window.location.hash.length > 1 ? window.location.hash.slice(1) : "basic",
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    history.replaceState(null, "", `#${tab}`);
+  }, [tab]);
+
 
   // Hint that `user` is still consumed elsewhere (kept for future per-section flushes).
   void user;
@@ -149,7 +157,9 @@ function ProfilePage() {
         )}
       </div>
 
-      <Tabs defaultValue="basic">
+      <Tabs value={tab} onValueChange={setTab}>
+
+
         <TabsList className="flex h-auto flex-wrap gap-1 bg-surface-1 p-1">
           <TabsTrigger value="basic" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Basic</TabsTrigger>
           <TabsTrigger value="address" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Address</TabsTrigger>

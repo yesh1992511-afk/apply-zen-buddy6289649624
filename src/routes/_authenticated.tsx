@@ -59,6 +59,25 @@ function AuthLayout() {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  // First-run gate: send users without onboarded_at to /onboarding until they finish setup.
+  // Allow them to reach /onboarding itself plus the supporting routes they need to complete it.
+  useEffect(() => {
+    if (!ready) return;
+    const ONBOARDING_ALLOW = ["/onboarding", "/profile", "/setup", "/extension", "/sources", "/filters"];
+    if (ONBOARDING_ALLOW.some((p) => path === p || path.startsWith(p + "/"))) return;
+    let cancelled = false;
+    supabase
+      .from("profile")
+      .select("onboarded_at")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (!data?.onboarded_at) navigate({ to: "/onboarding", replace: true });
+      });
+    return () => { cancelled = true; };
+  }, [ready, path, navigate]);
+
+
   useEffect(() => {
     if (!ready) return;
     const load = () => {

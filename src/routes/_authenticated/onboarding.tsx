@@ -1,10 +1,12 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
-import { Check, Chrome, Mail, Server, Filter, Database, Send, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { Check, Chrome, Mail, Server, Filter, Database, Send, User, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
@@ -14,15 +16,21 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
+
 type StepStatus = { profile: boolean; extension: boolean; gmail: boolean; worker: boolean; filter: boolean; source: boolean; firstApply: boolean };
 
 function OnboardingPage() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState<StepStatus | null>(null);
+  const [onboardedAt, setOnboardedAt] = useState<string | null>(null);
+  const [marking, setMarking] = useState(false);
+
 
   useEffect(() => {
     const load = async () => {
       const [{ data: p }, { data: ext }, { data: gmail }, { data: hb }, { data: filters }, { data: sources }, { data: apps }] = await Promise.all([
-        supabase.from("profile").select("full_name, location, work_authorization").maybeSingle(),
+        supabase.from("profile").select("full_name, location, work_authorization, onboarded_at").maybeSingle(),
+
         supabase.from("extension_tokens").select("last_seen_at").not("last_seen_at", "is", null).limit(1),
         supabase.from("gmail_credentials").select("verified_at").not("verified_at", "is", null).limit(1),
         supabase.from("worker_heartbeat").select("last_seen").maybeSingle(),
@@ -39,6 +47,8 @@ function OnboardingPage() {
         source: (sources ?? []).length > 0,
         firstApply: (apps ?? []).length > 0,
       });
+      setOnboardedAt((p?.onboarded_at as string | null) ?? null);
+
     };
     load();
     const t = setInterval(load, 5000);
@@ -100,6 +110,47 @@ function OnboardingPage() {
           </Link>
         ))}
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-emerald shadow-glow">
+            <Sparkles className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <div>
+            <div className="font-heading text-sm font-semibold">
+              {onboardedAt ? "Setup complete" : "Ready to fly?"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {onboardedAt
+                ? "You can revisit this checklist any time."
+                : done < 3
+                  ? "Finish the first few steps before unlocking the cockpit."
+                  : "Mark setup complete to open the full cockpit."}
+            </p>
+          </div>
+        </div>
+        <Button
+          disabled={marking || done < 3 || !!onboardedAt}
+          onClick={async () => {
+            setMarking(true);
+            const { data: u } = await supabase.auth.getUser();
+            if (!u.user) { setMarking(false); return; }
+            const ts = new Date().toISOString();
+            const { error } = await supabase
+              .from("profile")
+              .update({ onboarded_at: ts })
+              .eq("user_id", u.user.id);
+            setMarking(false);
+            if (error) { toast.error(error.message); return; }
+            setOnboardedAt(ts);
+            toast.success("Welcome aboard");
+            navigate({ to: "/dashboard" });
+          }}
+        >
+          {onboardedAt ? "Already done" : marking ? "Saving…" : "I'm done — open the cockpit"}
+        </Button>
+      </div>
     </div>
+
   );
 }
