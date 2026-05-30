@@ -149,6 +149,11 @@ function Dashboard() {
   const startMin = automation?.run_24_7 ? 0 : parseTime(automation?.daily_start ?? null) ?? 9 * 60;
   const endMin = automation?.run_24_7 ? 24 * 60 : parseTime(automation?.daily_end ?? null) ?? 18 * 60;
 
+  // Reflect any background activity: sync-health refetch, scrape, or apply mutations.
+  const fetchingSync = useIsFetching({ queryKey: ["sync-health"] });
+  const mutating = useIsMutating();
+  const isSyncing = fetchingSync > 0 || mutating > 0;
+
   return (
     <div className="space-y-5 max-w-[1400px]">
       {/* Header */}
