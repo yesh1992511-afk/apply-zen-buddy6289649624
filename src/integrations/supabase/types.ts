@@ -1252,6 +1252,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      match_job_to_filters: { Args: { _job_id: string }; Returns: undefined }
     }
     Enums: {
       app_role: "owner"
