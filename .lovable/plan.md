@@ -1,74 +1,34 @@
-## Phase 3 — Backend Hardening
+## Phase 4 — Verify & Polish
 
-Tighten the server-side surface that Phases 2a–2c rely on. No new user-facing features; this is correctness, security, and performance.
+Phase 3 shipped DB indexes, idempotency, error envelope, and `apikey` auth on cron hooks. Before moving on, lock it down with verification and small follow-ups.
 
-### 1. Server-side Zod validation
+### 1. Verify Phase 3 in the live backend
+- Run `supabase--linter` and fix anything new it surfaces.
+- Spot-check the new indexes exist (`pg_indexes`) and that `worker_invocations` is writable by `service_role` only.
+- Hit `/api/public/hooks/{apply-worker,check-heartbeat,daily-summary}` without `apikey` → expect 401; with `apikey` → expect 200.
+- Re-fire `apply-worker` with the same idempotency key → expect `skipped`.
 
-Every `createServerFn` that takes input gets an `.inputValidator(schema.parse)` using the schemas already defined in `src/lib/validation/settings.ts` (reuse, don't duplicate). Targets:
+### 2. Server-side Zod on remaining serverFns
+Phase 3 audit noted "existing handlers already use Zod" but skipped a final pass. Confirm every `createServerFn` in:
+- `src/lib/profile.functions.ts`
+- `src/lib/queries/*.ts` (automation, notifications, filters, gmail, extension, applications, jobs)
+- `src/lib/apply-worker.functions.ts`
 
-- `src/lib/profile.functions.ts` — profile section updates
-- `src/lib/queries/*.functions.ts` companions for automation, notifications, filters, gmail, extension tokens
-- `src/lib/apply-worker.functions.ts` (or equivalent) — retry / requeue payloads
-- Any server route under `src/routes/api/public/*` — validate JSON body + headers with Zod, return 400 on failure
+has `.inputValidator(schema.parse)`. Add where missing using schemas from `src/lib/validation/settings.ts`. No new schemas unless a gap exists.
 
-Add a shared `src/lib/validation/server.ts` with `parseBody(schema, request)` and `parseQuery(schema, url)` helpers for server routes.
+### 3. Wire `withErrorBoundary` into the 3 public hooks
+`src/lib/errors.ts` exists but the hooks still hand-roll JSON responses. Wrap each handler so failures return the standard `{ error: { code, message, hint? } }` envelope and the client's `toastError` shows the hint automatically.
 
-### 2. RLS + GRANT audit
+### 4. Pruning + observability
+- Schedule `prune_worker_invocations()` via pg_cron (daily) so the dedupe table doesn't grow unbounded.
+- Add structured `console.log(JSON.stringify({evt, userId, ...}))` at start/end of each hook for ClickHouse.
 
-Run linter + manual review across all `public.*` tables. For each table confirm:
-
-- RLS enabled
-- Policies scope to `auth.uid()` (or `has_role(...)` for admin-only)
-- GRANTs present for `authenticated` + `service_role`; `anon` only where intentionally public
-- No policy uses `USING (true)` for writes
-- `user_roles` writes are blocked from `authenticated` (only service_role / triggers can grant roles)
-
-Migration created per-table only where gaps are found. Document accepted public reads in security memory.
-
-### 3. Database indexes
-
-Add covering indexes for the hot query paths surfaced in Phase 2:
-
-- `jobs (user_id, status, posted_at DESC)` — jobs list
-- `jobs (user_id, matched, score DESC)` — matched feed
-- `applications (user_id, created_at DESC)` — apps list
-- `applications (user_id, status)` — status filter
-- `application_events (application_id, created_at)` — timeline
-- `usage_events (user_id, created_at DESC)` — already partly covered by `usage_mtd_by_provider`; verify
-- `sources (user_id, last_run_at)` — staleness query
-- Partial index on `applications (user_id) WHERE status IN ('failed','dlq')` — retry surface
-
-### 4. Worker / queue hardening
-
-`/api/public/hooks/apply-worker` and any cron-driven endpoints:
-
-- HMAC signature verification using `WORKER_SHARED_SECRET` (add via `add_secret` if missing) with `timingSafeEqual`
-- Idempotency key check (table `worker_invocations(idempotency_key PK, created_at)`, 24h dedupe)
-- Per-user concurrency cap honoring `automation_settings.parallelism`
-- Bounded retry: increment `retry_count`, move to `dlq` after N attempts, set `last_error`
-- Structured logging via `console.log(JSON.stringify({...}))` for ClickHouse parsing
-
-### 5. Auth + session correctness
-
-- Verify `attachSupabaseAuth` is registered in `src/start.ts` `functionMiddleware`
-- Confirm `_authenticated` layout's `beforeLoad` redirects unauthenticated users before any protected loader runs
-- Audit serverFns called from public-route loaders (must be none)
-- Ensure `block_extra_signups` trigger still active (single-user app invariant)
-
-### 6. Error envelope + observability
-
-- Standard error shape from server fns: `throw new Error(JSON.stringify({ code, message, hint? }))` consumed by `toastError` to surface `hint`
-- Add `src/lib/errors.ts` with `AppError` class + `toAppError(unknown)` normalizer
-- Wire server route handlers through a `withErrorBoundary` wrapper that returns `{ error: { code, message } }` with correct HTTP status
+### 5. Quick UI follow-ups surfaced by Phase 2
+- Surface `last_error` from failed applications in `ApplicationTimeline`.
+- Show `skipped`/`requeued` counts in the toast returned by manual "Run worker" on `/jobs` and `/applications`.
 
 ### Out of scope
-
-- New UI
-- Billing / Stripe
-- Extension token rotation policy
-- Multi-tenant features
-- Migration of inherited edge functions (left as-is)
+- New features, billing, extension rotation, edge function migration.
 
 ### Deliverable
-
-Reply **"go"** to execute Phase 3, or call out sections to drop/reorder.
+Reply **"go"** to execute, or call out sections to drop.
