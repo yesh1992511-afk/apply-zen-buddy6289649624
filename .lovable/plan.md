@@ -1,34 +1,42 @@
-## Phase 4 — Verify & Polish
+## Phase 5 — Polish & First-Run UX
 
-Phase 3 shipped DB indexes, idempotency, error envelope, and `apikey` auth on cron hooks. Before moving on, lock it down with verification and small follow-ups.
+Backend is solid (Phases 1–4). Now focus on the surfaces users touch first: a smoother onboarding, accessibility, and mobile.
 
-### 1. Verify Phase 3 in the live backend
-- Run `supabase--linter` and fix anything new it surfaces.
-- Spot-check the new indexes exist (`pg_indexes`) and that `worker_invocations` is writable by `service_role` only.
-- Hit `/api/public/hooks/{apply-worker,check-heartbeat,daily-summary}` without `apikey` → expect 401; with `apikey` → expect 200.
-- Re-fire `apply-worker` with the same idempotency key → expect `skipped`.
+### 1. Onboarding flow
+The `onboarding.tsx` and `setup.tsx` routes exist but aren't wired into the post-signup path. Goal: after first sign-in, route to `/onboarding` until the minimum profile is complete (name, email, work auth, at least one experience, default resume uploaded). Add a 4-step wizard:
+1. Identity & contact
+2. Work authorization & location preferences
+3. One experience + skills
+4. Resume upload + automation defaults (use existing `automation_settings` row)
 
-### 2. Server-side Zod on remaining serverFns
-Phase 3 audit noted "existing handlers already use Zod" but skipped a final pass. Confirm every `createServerFn` in:
-- `src/lib/profile.functions.ts`
-- `src/lib/queries/*.ts` (automation, notifications, filters, gmail, extension, applications, jobs)
-- `src/lib/apply-worker.functions.ts`
+Mark complete by setting `profile.onboarded_at`. Redirect logic in `_authenticated.tsx beforeLoad`.
 
-has `.inputValidator(schema.parse)`. Add where missing using schemas from `src/lib/validation/settings.ts`. No new schemas unless a gap exists.
+### 2. Profile page UX
+`profile.tsx` is 891 lines of dense forms. Without rewriting it:
+- Add a sticky completion meter (already has `CRITICAL_FIELDS`) showing % done with jump-to-incomplete buttons.
+- Split into the existing Tabs but persist active tab in URL search param so refresh keeps position.
+- Inline validation errors via the existing `FieldError` component on blur, not just on save.
 
-### 3. Wire `withErrorBoundary` into the 3 public hooks
-`src/lib/errors.ts` exists but the hooks still hand-roll JSON responses. Wrap each handler so failures return the standard `{ error: { code, message, hint? } }` envelope and the client's `toastError` shows the hint automatically.
+### 3. Mobile pass (≤768px)
+Most pages are desktop-first. Tighten:
+- App sidebar collapses to a bottom tab bar on mobile (5 primary routes: Dashboard, Jobs, Applications, Profile, More).
+- `applications.$id.tsx` 280px left rail stacks above content on mobile.
+- Tables (`jobs`, `applications`, `logs`) switch to card list on mobile.
+- Touch targets ≥44px on action buttons.
 
-### 4. Pruning + observability
-- Schedule `prune_worker_invocations()` via pg_cron (daily) so the dedupe table doesn't grow unbounded.
-- Add structured `console.log(JSON.stringify({evt, userId, ...}))` at start/end of each hook for ClickHouse.
+### 4. Accessibility pass
+- Add `aria-label` to all icon-only buttons (audit with `rg "<Button[^>]*size=\"icon\""`).
+- Ensure all form inputs have associated `<Label>` (a few in profile use placeholder-as-label).
+- Focus-visible ring on custom interactive elements (timeline screenshot button, tab triggers in detail page).
+- Keyboard-navigable lightbox in `ApplicationTimeline` (ESC closes — already via Dialog; verify arrow keys for multi-screenshot).
+- Color contrast check on `text-muted-foreground` over `bg-surface-2`.
 
-### 5. Quick UI follow-ups surfaced by Phase 2
-- Surface `last_error` from failed applications in `ApplicationTimeline`.
-- Show `skipped`/`requeued` counts in the toast returned by manual "Run worker" on `/jobs` and `/applications`.
+### 5. Empty/loading states
+- Skeletons (not spinners) on jobs/applications/logs lists.
+- Empty states with one clear CTA on each list page (most have text-only "No items").
 
 ### Out of scope
-- New features, billing, extension rotation, edge function migration.
+- New features, billing changes, design system overhaul.
 
 ### Deliverable
-Reply **"go"** to execute, or call out sections to drop.
+Reply **"go"** to execute all 5 sections, or call out which to drop/reorder.
