@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Chrome, Cookie, Server } from "lucide-react";
+import { Activity, Chrome, Cookie, RefreshCw, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Health = {
@@ -72,7 +72,7 @@ export function SyncHealthCard() {
   useRealtimeInvalidate({ table: "extension_tokens", queryKey: ["sync-health"] });
   useRealtimeInvalidate({ table: "applications", queryKey: ["sync-health"] });
   useRealtimeInvalidate({ table: "session_cookies", queryKey: ["sync-health"] });
-  const { data } = useQuery({ queryKey: ["sync-health"], queryFn: fetchHealth, refetchInterval: 30_000 });
+  const { data, isFetching } = useQuery({ queryKey: ["sync-health"], queryFn: fetchHealth, refetchInterval: 30_000 });
   const [, force] = useState(0);
   useEffect(() => {
     const id = setInterval(() => force((n) => n + 1), 15_000);
@@ -98,8 +98,11 @@ export function SyncHealthCard() {
         </h3>
         <button
           onClick={() => qc.invalidateQueries({ queryKey: ["sync-health"] })}
-          className="text-xs text-muted-foreground hover:text-foreground"
+          disabled={isFetching}
+          aria-busy={isFetching || undefined}
+          className="group inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-all hover:bg-accent hover:text-foreground active:scale-95 disabled:opacity-60"
         >
+          <RefreshCw className={cn("h-3 w-3 transition-transform group-hover:rotate-180", isFetching && "animate-spin group-hover:rotate-0")} />
           Refresh
         </button>
       </div>
