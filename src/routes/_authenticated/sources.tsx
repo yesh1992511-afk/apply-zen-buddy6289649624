@@ -104,7 +104,16 @@ function SourcesPage() {
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => triggerScrape(s.key)}>
+                <Button size="sm" variant="outline" onClick={async () => {
+                  const id = await triggerTestSource(s.key);
+                  if (id) { await waitForCommand(id, 60_000); load(); }
+                }}>
+                  <FlaskConical className="mr-1 h-3 w-3" /> Test
+                </Button>
+                <Button size="sm" variant="outline" onClick={async () => {
+                  const id = await triggerScrape(s.key);
+                  if (id) { await waitForCommand(id, 120_000); load(); }
+                }}>
                   <Play className="mr-1 h-3 w-3" /> Run now
                 </Button>
                 <label className="flex items-center gap-2 text-sm">
