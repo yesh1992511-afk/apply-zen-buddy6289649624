@@ -106,10 +106,34 @@ function JobsPage() {
         title="Jobs"
         description={`${filtered.length} matched · sorted by relevance score`}
         actions={
-          <Button onClick={queueApply} disabled={selected.size === 0} className="bg-gradient-emerald gap-1.5 shadow-glow disabled:shadow-none">
-            <Send className="h-4 w-4" />
-            Queue {selected.size > 0 ? selected.size : ""} apply
-          </Button>
+          <div className="flex items-center gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive" disabled={clearAll.isPending}>
+                  <Trash2 className="h-4 w-4" />
+                  {clearAll.isPending ? "Clearing…" : "Clear all"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear all scraped jobs?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This permanently deletes every scraped job on your account, along with any queued applications and job-tied logs. New scrapes will use your current filters.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => clearAll.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Delete everything
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <Button onClick={queueApply} disabled={selected.size === 0} className="bg-gradient-emerald gap-1.5 shadow-glow disabled:shadow-none">
+              <Send className="h-4 w-4" />
+              Queue {selected.size > 0 ? selected.size : ""} apply
+            </Button>
+          </div>
         }
       />
 
