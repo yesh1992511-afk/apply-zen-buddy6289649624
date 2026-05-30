@@ -14,7 +14,7 @@ import { QueryErrorState } from "@/components/QueryErrorState";
 import { JobDescriptionDialog, type JobDialogJob } from "@/components/JobDescriptionDialog";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
-import { jobsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies, type Job } from "@/lib/queries/jobs";
+import { jobsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies } from "@/lib/queries/jobs";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
   head: () => ({ meta: [{ title: "Jobs — JobPilot" }] }),
@@ -160,12 +160,15 @@ function JobsPage() {
       </div>
 
 
-      {loading && jobs.length === 0 ? (
+      {jobsQuery.isError ? (
+        <QueryErrorState error={jobsQuery.error} onRetry={() => jobsQuery.refetch()} title="Couldn't load jobs" />
+      ) : loading && jobs.length === 0 ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-[180px] shimmer rounded-xl" />
           ))}
         </div>
+
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Briefcase}
