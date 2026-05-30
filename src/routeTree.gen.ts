@@ -24,6 +24,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
 import { Route as AuthenticatedApplicationsIdRouteImport } from './routes/_authenticated/applications.$id'
+import { Route as ApiPublicSourcesRunTierRouteImport } from './routes/api/public/sources/run-tier'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
 
@@ -104,6 +105,11 @@ const AuthenticatedApplicationsIdRoute =
     path: '/$id',
     getParentRoute: () => AuthenticatedApplicationsRoute,
   } as any)
+const ApiPublicSourcesRunTierRoute = ApiPublicSourcesRunTierRouteImport.update({
+  id: '/api/public/sources/run-tier',
+  path: '/api/public/sources/run-tier',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksDailySummaryRoute =
   ApiPublicHooksDailySummaryRouteImport.update({
     id: '/api/public/hooks/daily-summary',
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   '/_authenticated/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/applications/$id'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/sources/run-tier'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -210,6 +220,7 @@ export interface FileRouteTypes {
     | '/applications/$id'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/sources/run-tier'
   id:
     | '__root__'
     | '/'
@@ -229,6 +240,7 @@ export interface FileRouteTypes {
     | '/_authenticated/applications/$id'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/sources/run-tier'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -238,6 +250,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPublicHooksCheckHeartbeatRoute: typeof ApiPublicHooksCheckHeartbeatRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
+  ApiPublicSourcesRunTierRoute: typeof ApiPublicSourcesRunTierRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -347,6 +360,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApplicationsIdRouteImport
       parentRoute: typeof AuthenticatedApplicationsRoute
     }
+    '/api/public/sources/run-tier': {
+      id: '/api/public/sources/run-tier'
+      path: '/api/public/sources/run-tier'
+      fullPath: '/api/public/sources/run-tier'
+      preLoaderRoute: typeof ApiPublicSourcesRunTierRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/daily-summary': {
       id: '/api/public/hooks/daily-summary'
       path: '/api/public/hooks/daily-summary'
@@ -415,6 +435,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   ApiPublicHooksCheckHeartbeatRoute: ApiPublicHooksCheckHeartbeatRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
+  ApiPublicSourcesRunTierRoute: ApiPublicSourcesRunTierRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

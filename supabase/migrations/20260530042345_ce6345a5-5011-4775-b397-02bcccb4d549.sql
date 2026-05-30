@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.match_job_to_filters(uuid) FROM anon;
