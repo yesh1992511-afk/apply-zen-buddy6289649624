@@ -21,7 +21,7 @@ const TABS = [
   { to: "/admin/system", label: "System", icon: Server },
   { to: "/admin/audit", label: "Audit log", icon: ScrollText },
   { to: "/admin/flags", label: "Feature flags", icon: Flag },
-  { to: "/admin/billing", label: "Billing ops", icon: CreditCard },
+  { to: "/admin/plans", label: "Plans", icon: CreditCard },
 ] as const;
 
 function AdminLayout() {
