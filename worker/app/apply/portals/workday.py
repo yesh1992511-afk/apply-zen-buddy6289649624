@@ -48,10 +48,12 @@ class Workday(Portal):
                 if await phone.count():
                     await type_humanlike(page, "input[data-automation-id='phone-number']", profile["phone"])
 
-            # Walk Next/Submit chain (auto-fill OTP if portal asks)
+            # Walk Next/Submit chain (auto-fill OTP if portal asks, autofill custom questions)
             from ..browser import fill_otp_if_present
+            from ..form_walker import safe_autofill
             for _ in range(10):
                 await fill_otp_if_present(page, portal_url=job["url"], timeout=90)
+                await safe_autofill(page, profile)
                 nxt = page.locator(
                     "button[data-automation-id='pageFooterNextButton'], "
                     "button[data-automation-id='bottom-navigation-next-button'], "

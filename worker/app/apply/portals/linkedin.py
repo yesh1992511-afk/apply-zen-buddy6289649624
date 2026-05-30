@@ -80,8 +80,11 @@ class LinkedIn(Portal):
 
                 # Multi-step: click Next/Review until Submit appears (auto-fill OTP if asked)
                 from ..browser import fill_otp_if_present
+                from ..form_walker import safe_autofill
                 for _ in range(8):
                     await fill_otp_if_present(page, portal_url=job["url"], timeout=90)
+                    # Answer any custom screening questions on this step
+                    await safe_autofill(page, profile)
                     if await page.locator(SEL["submit"]).count():
                         await page.locator(SEL["submit"]).first.click()
                         await pause(2, 4)
