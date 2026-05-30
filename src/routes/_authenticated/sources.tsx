@@ -253,7 +253,8 @@ function SourcesPage() {
                     ? "bg-surface-3 text-muted-foreground"
                     : "bg-destructive/15 text-destructive ring-1 ring-destructive/30";
             return (
-              <div key={s.id} className="overflow-hidden rounded-xl border border-border/60 bg-card transition-shadow hover:shadow-elegant lift">
+              <BusyOverlay key={s.id} busy={!!testing[s.id]} label="Testing…" className="rounded-xl">
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-card transition-shadow hover:shadow-elegant lift">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/40 bg-surface-1 p-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
