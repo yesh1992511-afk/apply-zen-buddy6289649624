@@ -2,6 +2,36 @@ import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query
 import { supabase } from "@/integrations/supabase/client";
 import { toastError, toastQueued, toastSaved } from "@/lib/toast";
 
+/** Delete every scraped job (and dependent rows) for the signed-in user. */
+export function useClearAllJobs() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("Not signed in");
+      const uid = u.user.id;
+      // Order matters: clear dependents before jobs.
+      await supabase.from("application_events").delete().eq("user_id", uid);
+      await supabase.from("logs").delete().eq("user_id", uid).not("job_id", "is", null);
+      await supabase.from("notification_log").delete().eq("user_id", uid).not("job_id", "is", null);
+      await supabase.from("applications").delete().eq("user_id", uid);
+      const { error, count } = await supabase
+        .from("jobs")
+        .delete({ count: "exact" })
+        .eq("user_id", uid);
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+    onSuccess: (n) => {
+      toastSaved(`Cleared ${n} job${n === 1 ? "" : "s"}`);
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+    },
+    onError: (e) => toastError(e),
+  });
+}
+
+
 export type Job = {
   id: string;
   title: string;
