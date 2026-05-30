@@ -206,7 +206,7 @@ function ProfilePage() {
               <SelectField label="Work auth country" value={getStr("work_auth_country") || "United States"} onChange={(v) => set("work_auth_country", v)} options={COUNTRIES} />
               <SelectField label="Visa / work auth status" value={getStr("visa_status")} onChange={(v) => { set("visa_status", v); set("work_authorization", v); }} options={WORK_AUTH_US} />
               <DatePickerField label="Visa expiry (if applicable)" value={getStr("visa_expiry")} onChange={(v) => set("visa_expiry", v)} />
-              <SelectField label="Do you require sponsorship NOW?" value={getBool("needs_visa_now") ? "Yes" : getStr("needs_visa_now_str") || "No"} onChange={(v) => { set("needs_visa_now", v === "Yes"); set("needs_visa_now_str", v); }} options={["Yes", "No"]} />
+              <SelectField label="Do you require sponsorship NOW?" value={getBool("needs_visa_now") ? "Yes" : "No"} onChange={(v) => set("needs_visa_now", v === "Yes")} options={["Yes", "No"]} />
               <SelectField label="Will you require sponsorship in the FUTURE?" value={getBool("needs_visa_future") ? "Yes" : "No"} onChange={(v) => { set("needs_visa_future", v === "Yes"); set("requires_sponsorship", v === "Yes"); }} options={["Yes", "No"]} />
               <MultiSelectChips label="Other countries authorized to work in" values={getArr("authorized_countries")} onChange={(arr) => set("authorized_countries", arr)} options={COUNTRIES} className="md:col-span-2" />
               <SelectField label="Has passport" value={getBool("has_passport") ? "Yes" : "No"} onChange={(v) => set("has_passport", v === "Yes")} options={["Yes", "No"]} />
