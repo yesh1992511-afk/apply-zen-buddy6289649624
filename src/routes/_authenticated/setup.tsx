@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, AlertCircle, Copy, Server, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/PageHeader";
 import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/setup")({
@@ -42,12 +43,11 @@ function SetupPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Worker setup</h1>
-        <p className="text-sm text-muted-foreground">
-          The scraping + apply engine runs on your VPS (147.93.47.24). Run the bootstrap script once and it appears here.
-        </p>
-      </div>
+      <PageHeader
+        title="Worker setup"
+        description="The scraping + apply engine runs on your VPS (147.93.47.24). Run the bootstrap script once and it appears here."
+      />
+
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

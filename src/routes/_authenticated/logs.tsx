@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { ScrollText, Search, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/logs")({
   head: () => ({ meta: [{ title: "Logs — JobPilot" }] }),
@@ -14,11 +16,11 @@ export const Route = createFileRoute("/_authenticated/logs")({
 
 type Log = { id: number; ts: string; level: string; scope: string | null; message: string };
 
-const COLORS: Record<string, string> = {
-  debug: "text-muted-foreground",
-  info: "text-foreground",
-  warn: "text-yellow-500",
-  error: "text-destructive",
+const LEVEL_META: Record<string, { dot: string; text: string; bg: string }> = {
+  debug: { dot: "bg-muted-foreground", text: "text-muted-foreground", bg: "bg-surface-2" },
+  info:  { dot: "bg-success",          text: "text-success",          bg: "bg-success/10" },
+  warn:  { dot: "bg-warning",          text: "text-warning",          bg: "bg-warning/10" },
+  error: { dot: "bg-destructive",      text: "text-destructive",      bg: "bg-destructive/10" },
 };
 
 function LogsPage() {
@@ -36,7 +38,6 @@ function LogsPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [level]);
 
-  // Realtime tail
   useEffect(() => {
     const ch = supabase
       .channel("logs-tail")
@@ -55,37 +56,64 @@ function LogsPage() {
   }, [level, q]);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Logs</h1>
-        <p className="text-sm text-muted-foreground">Last 500 worker events.</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <ToggleGroup type="single" value={level} onValueChange={(v) => v && setLevel(v)}>
-          <ToggleGroupItem value="all">All</ToggleGroupItem>
-          <ToggleGroupItem value="debug">Debug</ToggleGroupItem>
-          <ToggleGroupItem value="info">Info</ToggleGroupItem>
-          <ToggleGroupItem value="warn">Warn</ToggleGroupItem>
-          <ToggleGroupItem value="error">Error</ToggleGroupItem>
+    <div className="space-y-6 max-w-[1400px]">
+      <PageHeader
+        title="Logs"
+        description={`Live tail · last ${logs.length} events`}
+        actions={
+          <Button variant="outline" onClick={load} className="gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </Button>
+        }
+      />
+
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-card p-3">
+        <ToggleGroup type="single" value={level} onValueChange={(v) => v && setLevel(v)} className="bg-surface-2 rounded-lg p-0.5">
+          <ToggleGroupItem value="all" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-md text-xs">All</ToggleGroupItem>
+          <ToggleGroupItem value="debug" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-md text-xs">Debug</ToggleGroupItem>
+          <ToggleGroupItem value="info" className="data-[state=on]:bg-success data-[state=on]:text-success-foreground rounded-md text-xs">Info</ToggleGroupItem>
+          <ToggleGroupItem value="warn" className="data-[state=on]:bg-warning data-[state=on]:text-warning-foreground rounded-md text-xs">Warn</ToggleGroupItem>
+          <ToggleGroupItem value="error" className="data-[state=on]:bg-destructive data-[state=on]:text-destructive-foreground rounded-md text-xs">Error</ToggleGroupItem>
         </ToggleGroup>
-        <Input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} className="max-w-xs" />
-        <Button variant="outline" onClick={load}>Refresh</Button>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search messages…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && load()}
+            className="pl-9 bg-surface-2 border-border/60"
+          />
+        </div>
       </div>
-      <Card>
-        <CardContent className="p-0">
+
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+        {logs.length === 0 ? (
+          <EmptyState
+            icon={ScrollText}
+            title="No logs match"
+            description={level !== "all" || q ? "Try clearing filters." : "Once the worker starts running, events stream here in real time."}
+            className="border-none"
+          />
+        ) : (
           <div className="max-h-[70vh] overflow-auto font-mono text-xs">
-            {logs.length === 0 && <div className="p-6 text-center text-muted-foreground">No logs yet.</div>}
-            {logs.map((l) => (
-              <div key={l.id} className="flex gap-2 border-b px-3 py-1.5 hover:bg-accent/30">
-                <span className="shrink-0 text-muted-foreground">{new Date(l.ts).toLocaleTimeString()}</span>
-                <Badge variant="outline" className={`shrink-0 text-[10px] ${COLORS[l.level] ?? ""}`}>{l.level}</Badge>
-                {l.scope && <span className="shrink-0 text-muted-foreground">[{l.scope}]</span>}
-                <span className="break-all">{l.message}</span>
-              </div>
-            ))}
+            {logs.map((l) => {
+              const meta = LEVEL_META[l.level] ?? LEVEL_META.debug;
+              return (
+                <div key={l.id} className="flex items-start gap-2 border-b border-border/30 px-4 py-1.5 hover:bg-surface-2">
+                  <span className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)} />
+                  <span className="shrink-0 tabular-nums text-muted-foreground/70">{new Date(l.ts).toLocaleTimeString()}</span>
+                  <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase", meta.bg, meta.text)}>
+                    {l.level}
+                  </span>
+                  {l.scope && <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted-foreground">{l.scope}</span>}
+                  <span className="break-all leading-relaxed text-foreground/90">{l.message}</span>
+                </div>
+              );
+            })}
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
     </div>
   );
 }

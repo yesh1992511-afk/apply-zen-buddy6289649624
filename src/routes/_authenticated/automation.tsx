@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/PageHeader";
 
 export const Route = createFileRoute("/_authenticated/automation")({
   head: () => ({ meta: [{ title: "Automation — JobPilot" }] }),
@@ -61,14 +62,17 @@ function AutomationPage() {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS({ ...s, [k]: v });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Automation</h1>
-          <p className="text-sm text-muted-foreground">Master controls for the worker.</p>
-        </div>
-        <Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
-      </div>
+    <div className="space-y-6 max-w-4xl">
+      <PageHeader
+        title="Automation"
+        description="Master controls for the autopilot worker."
+        actions={
+          <Button onClick={save} disabled={saving} className="bg-gradient-emerald shadow-glow disabled:shadow-none">
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        }
+      />
+
 
       <Card>
         <CardHeader><CardTitle>Master switch</CardTitle></CardHeader>

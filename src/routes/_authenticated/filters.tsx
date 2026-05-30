@@ -9,7 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Trash2, Star } from "lucide-react";
+import { Plus, Trash2, Star, Filter as FilterIcon } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 
 export const Route = createFileRoute("/_authenticated/filters")({
   head: () => ({ meta: [{ title: "Filters — JobPilot" }] }),
@@ -65,14 +67,15 @@ function FiltersPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Filters</h1>
-          <p className="text-sm text-muted-foreground">Only jobs matching at least one enabled filter show up in your feed.</p>
-        </div>
-        <Button onClick={add}><Plus className="mr-1 h-4 w-4" /> New filter</Button>
-      </div>
+    <div className="space-y-6 max-w-5xl">
+      <PageHeader
+        title="Filters"
+        description="Only jobs matching at least one enabled filter show up in your feed."
+        actions={
+          <Button onClick={add} className="bg-gradient-emerald gap-1.5"><Plus className="h-4 w-4" /> New filter</Button>
+        }
+      />
+
 
       {items.map((f) => (
         <Card key={f.id}>
@@ -113,7 +116,14 @@ function FiltersPage() {
           </CardContent>
         </Card>
       ))}
-      {items.length === 0 && <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No filters yet.</CardContent></Card>}
+      {items.length === 0 && (
+        <EmptyState
+          icon={FilterIcon}
+          title="No filters yet"
+          description="Create a filter to control which jobs appear in your feed and qualify for auto-apply."
+          action={<Button onClick={add} className="bg-gradient-emerald"><Plus className="mr-1 h-4 w-4" /> Create first filter</Button>}
+        />
+      )}
     </div>
   );
 }
