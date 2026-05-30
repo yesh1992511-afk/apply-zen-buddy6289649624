@@ -8,11 +8,15 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { hasValidApiKey } from "@/lib/api-auth.server";
 
 export const Route = createFileRoute("/api/public/hooks/daily-summary")({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }) => {
+        if (!hasValidApiKey(request)) {
+          return new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Invalid apikey" } }), { status: 401, headers: { "Content-Type": "application/json" } });
+        }
         const { data: settingsList } = await supabaseAdmin
           .from("notification_settings")
           .select("user_id,daily_summary_enabled,daily_summary_time,last_daily_summary_date");
