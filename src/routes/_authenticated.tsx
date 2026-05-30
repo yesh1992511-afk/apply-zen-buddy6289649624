@@ -7,8 +7,11 @@ import { StatusDot } from "@/components/StatusDot";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ChevronRight, Command } from "lucide-react";
+import { ChevronRight, Command, Keyboard } from "lucide-react";
 import { CommandPalette } from "@/components/CommandPalette";
+import { ShortcutHelp } from "@/components/ShortcutHelp";
+import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
+import { useCallback } from "react";
 
 export const Route = createFileRoute("/_authenticated")({
   head: () => ({ meta: [{ name: "robots", content: "noindex,nofollow" }] }),
@@ -41,6 +44,9 @@ function AuthLayout() {
   const [ready, setReady] = useState(false);
   const [heartbeat, setHeartbeat] = useState<string | null>(null);
   const [automation, setAutomation] = useState<{ enabled: boolean } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const showHelp = useCallback(() => setHelpOpen(true), []);
+  useGlobalShortcuts(showHelp);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
@@ -134,12 +140,22 @@ function AuthLayout() {
                 <Switch checked={automation.enabled} onCheckedChange={toggleAutomation} />
               </div>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Keyboard shortcuts"
+              className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+              onClick={showHelp}
+            >
+              <Keyboard className="h-4 w-4" />
+            </Button>
           </div>
         </header>
         <main className="flex-1 px-4 py-6 md:px-6 md:py-8">
           <Outlet />
         </main>
-        <CommandPalette />
+        <CommandPalette onShowHelp={showHelp} />
+        <ShortcutHelp open={helpOpen} onOpenChange={setHelpOpen} />
       </SidebarInset>
     </SidebarProvider>
   );
