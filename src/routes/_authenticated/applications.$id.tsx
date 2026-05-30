@@ -16,7 +16,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/applications/$id")({
   head: () => ({ meta: [{ title: "Application — JobPilot" }] }),
   component: ApplicationDetailPage,
-  errorComponent: ErrorBoundaryRoute,
+  
   errorComponent: ({ error }) => (
     <div className="p-8 text-center">
       <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-2" />
