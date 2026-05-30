@@ -1,54 +1,30 @@
 # Goal
 
-Replace the thin one-paragraph system prompt in `src/lib/apply/ai.server.ts` (`generateTailoredResume`) with a rigorous ATS-strict prompt distilled from your uploaded `example prompt.docx`, so every tailored resume the worker generates follows your role-mapping, bullet-anatomy, anti-repetition, keyword-bolding, and validation rules.
+Tidy the Dashboard grid so the tiles line up on clean rows with even gutters — no orphan tiles wrapping under the hero, no mismatched heights.
 
-Scope: prompt content + a small wrapper around it. No DB changes, no UI changes, no new tables, no new routes.
+## Current problem
 
-## What I'll change
+The 12-col grid in `src/routes/_authenticated/dashboard.tsx` (around line 188) is misaligned:
 
-### 1. `src/lib/apply/ai.server.ts` — rewrite `generateTailoredResume`
+- Hero = `lg:col-span-5 lg:row-span-2` → owns rows 1–2, cols 1–5.
+- Row 1 right side: Worker `col-span-4` + Portal `col-span-3` = 7 cols (fits 6–12). ✓
+- Row 2 right side: 4 × MetricTile `col-span-3` = needs 12 cols but only 7 are free → "Queued" and "Failed" wrap onto a new row under the hero, creating the empty gap you see in the screenshot.
 
-Keep the function signature (`profile`, `job` → markdown string) so the worker call sites don't change. Internally:
+## Fix (CSS-only, no logic change)
 
-- New `SYSTEM_PROMPT` constant ≈ 70 lines, encoding the rules from your doc:
-  - **Role**: ATS-strict resume optimizer; preserve candidate truth (no invented employers/dates/credentials).
-  - **Title normalization**: most-recent role title rewritten to match JD target role (industry-standard equivalent, not copy-paste); prior roles one/two levels below where appropriate.
-  - **Summary**: rephrased in candidate voice, 4–6 high-signal JD keywords wrapped in `**bold**`, no copying JD sentences.
-  - **Experience**: exactly 7 bullets per role, each 25–35 words, one sentence, ≤2 commas / ≤1 "and" / ≤2 tool mentions, no parens/em-dashes, ≥1 numeric metric per bullet, first bullet describes system/team/goal/role.
-  - **Bullet anatomy**: `[Action verb] + [initiative + scope] + [tools] + [core action] + [risk addressed] + [quantified impact]`.
-  - **Coverage lenses** (rotate across bullets in a role): latency/scale, data quality, platform/IaC, modeling/marts, streaming, orchestration/observability, security/governance.
-  - **Anti-repetition**: unique first verb + two-word opener per bullet within a role; no repeated tri-grams; banned scaffolds ("Integrated data from…", "Set up, deployed, and configured…", "Provided management reporting…", "Created innovative solutions…") allowed at most once per role.
-  - **Action verb bank** embedded verbatim from doc.
-  - **Skills**: keep existing; append JD-required tools; group by category; no duplicates; no proprietary tools.
-  - **Projects**: reframe rather than replace when partially aligned; descriptive original names; never copy JD product names.
-  - **Keyword bolding**: wrap each exact JD term in `**…**` on first appearance in each section; cap at 3–4 repetitions resume-wide; never bold soft skills/generic verbs.
-  - **Realism guardrails**: don't invent tools/certs/clearances; preserve years of experience; flag visa/clearance/geo conflicts inline at top with `<!-- GUARDRAIL: … -->` instead of silently proceeding.
-  - **Validation pass** the model must self-run before emitting: bullet counts, word range, unique openers, no tri-gram repeats, ≥1 metric + ≥1 JD tool per bullet, ≥6 quantified achievements total, all high-priority JD keywords bolded ≥once.
-  - **Output**: Markdown only, name as H1, no commentary, no code fences around the whole resume.
+Edit `src/routes/_authenticated/dashboard.tsx` only:
 
-- Keep the user message as today (target job block + JSON profile dump), with the JD slice raised from 4000 → 6000 chars so keyword coverage is fairer.
+1. **Hero**: drop `lg:row-span-2`, set `lg:col-span-6` (was 5).
+2. **Worker tile**: `lg:col-span-3` (was 4).
+3. **Today by portal**: `lg:col-span-3` (was 3, unchanged).
+   → Row 1 = 6 + 3 + 3 = 12. Clean.
+4. **Metric strip (4 tiles)**: each `lg:col-span-3` (unchanged) → Row 2 = 3+3+3+3 = 12. Clean full-width strip below.
+5. **Tighten vertical gap**: change outer wrapper `space-y-6` → `space-y-5`, grid `gap-4` → `gap-5` for consistent gutters.
+6. **Match heights on row 1**: add `h-full` to Worker + Portal cards so they stretch to the hero's height (hero has more inner content, so this keeps the row visually level).
+7. **Skeleton grid**: mirror the same spans so the loading state doesn't jump when data arrives.
 
-- Model: keep `google/gemini-2.5-pro` for tailored resumes; it handles the long rule set best.
+No changes to data fetching, server functions, queries, or any other file.
 
-### 2. Leave `generateCoverLetter` alone
+## Verify
 
-Your doc is resume-specific; cover-letter prompt stays as-is.
-
-### 3. No call-site changes
-
-`apply-worker.ts` and anywhere else that calls `generateTailoredResume(profile, job)` keep working unchanged.
-
-## Out of scope (ask if you want these next)
-
-- LaTeX path: your doc references `.tex` preamble preservation. Current worker generates **Markdown** resumes (then renders to PDF elsewhere). Adding a LaTeX-preserving path would need a new function + a stored LaTeX template per user. I can add that as a follow-up if you want.
-- "remember this structure" command: would need a `resume_templates` table to store the verbatim LaTeX. Follow-up.
-- A UI control to preview/regenerate with the new prompt — current admin "test_apply" worker command already covers this once shipped.
-
-## Verification after build
-
-1. From `/admin` → System → Command Center, dispatch `test_apply` against a known job.
-2. Open the generated resume in `/applications/:id` and confirm: 7-bullet roles, bolded JD terms, numeric metric per bullet, no banned scaffolds.
-
-## Files touched
-
-- `src/lib/apply/ai.server.ts` (only `generateTailoredResume` body + new prompt constant)
+After the build: load `/dashboard`, confirm hero + Worker + Portal sit on one row, all four metric tiles sit on the next row at equal width, no empty gap between them, and Month-to-date spend / Pipeline funnel / Recent activity rows below are unaffected.
