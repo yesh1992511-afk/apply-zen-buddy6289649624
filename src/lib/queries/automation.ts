@@ -27,10 +27,7 @@ export const automationQueryOptions = () =>
   queryOptions({
     queryKey: automationKey,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("automation_settings")
-        .select("*")
-        .maybeSingle();
+      const { data, error } = await supabase.from("automation_settings").select("*").maybeSingle();
       if (error) throw new Error(error.message);
       return data as AutomationSettings | null;
     },
@@ -41,10 +38,7 @@ export const filtersListQueryOptions = () =>
   queryOptions({
     queryKey: ["filters", "id-name"] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("filters")
-        .select("id, name")
-        .order("created_at");
+      const { data, error } = await supabase.from("filters").select("id, name").order("created_at");
       if (error) throw new Error(error.message);
       return (data ?? []) as Array<{ id: string; name: string }>;
     },

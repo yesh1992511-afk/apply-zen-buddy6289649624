@@ -33,7 +33,11 @@ export const Route = createFileRoute("/_authenticated/privacy")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
-type DeletionStatus = { purge_after: string; cancelled_at: string | null; reason: string | null } | null;
+type DeletionStatus = {
+  purge_after: string;
+  cancelled_at: string | null;
+  reason: string | null;
+} | null;
 
 function PrivacyPage() {
   const doExport = useServerFn(exportMyData);
@@ -97,14 +101,18 @@ function PrivacyPage() {
 
   return (
     <div className="space-y-6 max-w-[800px]">
-      <PageHeader title="Privacy & data rights" description="Export or delete your data. GDPR-aligned." />
+      <PageHeader
+        title="Privacy & data rights"
+        description="Export or delete your data. GDPR-aligned."
+      />
 
       <div className="rounded-xl border border-border/60 bg-card p-5">
         <h3 className="font-heading text-base font-semibold flex items-center gap-2">
           <Download className="h-4 w-4" /> Export all data
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Download a JSON archive of every record we hold for your account: profile, jobs, applications, events, settings, logs.
+          Download a JSON archive of every record we hold for your account: profile, jobs,
+          applications, events, settings, logs.
         </p>
         <Button className="mt-3" size="sm" onClick={handleExport} disabled={busy}>
           Download export
@@ -116,7 +124,8 @@ function PrivacyPage() {
           <ShieldAlert className="h-4 w-4" /> Delete account
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Deletion is scheduled 30 days out — purge happens then. You can cancel anytime in this window.
+          Deletion is scheduled 30 days out — purge happens then. You can cancel anytime in this
+          window.
         </p>
         {pendingDeletion && status ? (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-background/50 px-3 py-2 text-xs">
@@ -145,7 +154,8 @@ function PrivacyPage() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Schedule account deletion?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Your account and all associated data will be purged 30 days from now. You can cancel anytime in that window.
+                  Your account and all associated data will be purged 30 days from now. You can
+                  cancel anytime in that window.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

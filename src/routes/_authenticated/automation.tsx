@@ -6,15 +6,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/PageHeader";
 import { SectionCard } from "@/components/SectionCard";
 import { FieldError } from "@/components/FieldError";
 import { QueryErrorState } from "@/components/QueryErrorState";
 import { useAutosaveSection } from "@/hooks/useAutosaveSection";
-import { automationQueryOptions, filtersListQueryOptions, useUpdateAutomation, type AutomationSettings } from "@/lib/queries/automation";
-import { automationSchema, validateAutomationCross, type AutomationPatch } from "@/lib/validation/settings";
+import {
+  automationQueryOptions,
+  filtersListQueryOptions,
+  useUpdateAutomation,
+  type AutomationSettings,
+} from "@/lib/queries/automation";
+import {
+  automationSchema,
+  validateAutomationCross,
+  type AutomationPatch,
+} from "@/lib/validation/settings";
 import type { z } from "zod";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 
@@ -77,10 +92,7 @@ function AutomationPage() {
         >
           <Switch checked={!!s.enabled} onCheckedChange={(v) => set("enabled", v)} />
         </Row>
-        <Row
-          label="24/7 mode"
-          desc="If off, the worker only runs inside the daily window."
-        >
+        <Row label="24/7 mode" desc="If off, the worker only runs inside the daily window.">
           <Switch checked={!!s.run_24_7} onCheckedChange={(v) => set("run_24_7", v)} />
         </Row>
         {!s.run_24_7 && (
@@ -128,7 +140,9 @@ function AutomationPage() {
         <div>
           <Label className="flex items-center justify-between">
             <span>Max applies per day</span>
-            <Badge variant="secondary" className="tabular-nums">{s.max_applies_per_day}</Badge>
+            <Badge variant="secondary" className="tabular-nums">
+              {s.max_applies_per_day}
+            </Badge>
           </Label>
           <Slider
             value={[s.max_applies_per_day ?? 50]}
@@ -144,7 +158,9 @@ function AutomationPage() {
         <div>
           <Label className="flex items-center justify-between">
             <span>Parallelism (concurrent browsers)</span>
-            <Badge variant="secondary" className="tabular-nums">{s.parallelism}</Badge>
+            <Badge variant="secondary" className="tabular-nums">
+              {s.parallelism}
+            </Badge>
           </Label>
           <Slider
             value={[s.parallelism ?? 2]}
@@ -160,7 +176,9 @@ function AutomationPage() {
         <div>
           <Label className="flex items-center justify-between">
             <span>Aggressiveness</span>
-            <Badge variant="secondary" className="tabular-nums">{s.aggressiveness}/5</Badge>
+            <Badge variant="secondary" className="tabular-nums">
+              {s.aggressiveness}/5
+            </Badge>
           </Label>
           <p className="mt-1 text-xs text-muted-foreground">
             1 = slow, human-like, Easy Apply only · 5 = max throughput, all portals, parallel.
@@ -195,10 +213,14 @@ function AutomationPage() {
               set("active_filter_id", (v || null) as AutomationValues["active_filter_id"]);
             }}
           >
-            <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
             <SelectContent>
               {(filters.data ?? []).map((f) => (
-                <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                <SelectItem key={f.id} value={f.id}>
+                  {f.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -208,7 +230,10 @@ function AutomationPage() {
           <Input
             defaultValue={(s.exclude_companies ?? []).join(", ")}
             onBlur={(e) => {
-              const list = e.target.value.split(",").map((x) => x.trim()).filter(Boolean);
+              const list = e.target.value
+                .split(",")
+                .map((x) => x.trim())
+                .filter(Boolean);
               set("exclude_companies", list);
               flush();
             }}
@@ -233,7 +258,9 @@ function AutomationPage() {
               value={s.captcha_provider ?? ""}
               onValueChange={(v) => set("captcha_provider", v)}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="2captcha">2Captcha</SelectItem>
                 <SelectItem value="capsolver">CapSolver</SelectItem>
@@ -243,11 +270,10 @@ function AutomationPage() {
           </div>
           <div>
             <Label>Proxy provider</Label>
-            <Select
-              value={s.proxy_provider ?? ""}
-              onValueChange={(v) => set("proxy_provider", v)}
-            >
-              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+            <Select value={s.proxy_provider ?? ""} onValueChange={(v) => set("proxy_provider", v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="iproyal">IPRoyal</SelectItem>
                 <SelectItem value="brightdata">BrightData</SelectItem>

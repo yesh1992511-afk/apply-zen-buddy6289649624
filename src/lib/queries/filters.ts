@@ -27,10 +27,7 @@ export const filtersQueryOptions = () =>
   queryOptions({
     queryKey: filtersKey,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("filters")
-        .select("*")
-        .order("created_at");
+      const { data, error } = await supabase.from("filters").select("*").order("created_at");
       if (error) throw new Error(error.message);
       return (data ?? []) as Filter[];
     },

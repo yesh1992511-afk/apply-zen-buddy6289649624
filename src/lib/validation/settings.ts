@@ -4,8 +4,16 @@ import { z } from "zod";
 export const automationSchema = z.object({
   enabled: z.boolean(),
   run_24_7: z.boolean(),
-  daily_start: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional(),
-  daily_end: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional(),
+  daily_start: z
+    .string()
+    .regex(/^\d{2}:\d{2}(:\d{2})?$/)
+    .nullable()
+    .optional(),
+  daily_end: z
+    .string()
+    .regex(/^\d{2}:\d{2}(:\d{2})?$/)
+    .nullable()
+    .optional(),
   timezone: z.string().trim().min(1).max(64).nullable().optional(),
   max_applies_per_day: z.number().int().min(1).max(500),
   parallelism: z.number().int().min(1).max(10),
@@ -53,7 +61,11 @@ export const filterSchema = z.object({
   hybrid_ok: z.boolean().optional(),
   onsite_ok: z.boolean().optional(),
   salary_min: z.number().int().min(0).max(10_000_000).nullable().optional(),
-  posted_within_hours: z.number().int().min(1).max(24 * 365),
+  posted_within_hours: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 365),
   min_score: z.number().int().min(0).max(100),
 });
 export type FilterPatch = Partial<z.infer<typeof filterSchema>>;

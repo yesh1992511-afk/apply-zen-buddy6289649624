@@ -79,10 +79,11 @@ export function useAutosaveSection<Values extends Record<string, unknown>>({
     }
   }, [onSave]);
 
-  const { debounced, flush: flushDebounce, cancel } = useDebouncedCallback(
-    () => void performSave(),
-    debounceMs,
-  );
+  const {
+    debounced,
+    flush: flushDebounce,
+    cancel,
+  } = useDebouncedCallback(() => void performSave(), debounceMs);
 
   const set = useCallback(
     <K extends keyof Values>(key: K, value: Values[K]) => {
@@ -111,10 +112,13 @@ export function useAutosaveSection<Values extends Record<string, unknown>>({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [flushDebounce]);
 
-  useEffect(() => () => {
-    if (savedTimer.current) clearTimeout(savedTimer.current);
-    cancel();
-  }, [cancel]);
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      cancel();
+    },
+    [cancel],
+  );
 
   return { values, set, flush, saveState, error, errors, isLoading: !values };
 }

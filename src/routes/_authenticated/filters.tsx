@@ -155,7 +155,9 @@ function FilterRow({ filter }: { filter: Filter }) {
               }}
             />
             {filter.is_default && (
-              <Badge variant="secondary"><Star className="mr-1 h-3 w-3" /> default</Badge>
+              <Badge variant="secondary">
+                <Star className="mr-1 h-3 w-3" /> default
+              </Badge>
             )}
             <FilterPreview filter={filter} />
             <SavedIndicator state={saveState} error={error} />
@@ -178,7 +180,8 @@ function FilterRow({ filter }: { filter: Filter }) {
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete this filter?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Jobs matched only by &ldquo;{filter.name}&rdquo; will disappear from your feed. This cannot be undone.
+                  Jobs matched only by &ldquo;{filter.name}&rdquo; will disappear from your feed.
+                  This cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -195,12 +198,36 @@ function FilterRow({ filter }: { filter: Filter }) {
         </div>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2">
-        <ArrField label="Keywords (any match)" value={filter.keywords} onChange={(v) => save({ keywords: v })} />
-        <ArrField label="Exclude keywords" value={filter.exclude_keywords} onChange={(v) => save({ exclude_keywords: v })} />
-        <ArrField label="Exclude companies" value={filter.exclude_companies} onChange={(v) => save({ exclude_companies: v })} />
-        <ArrField label="Locations" value={filter.locations} onChange={(v) => save({ locations: v })} />
-        <ArrField label="Seniority" value={filter.seniority} onChange={(v) => save({ seniority: v })} />
-        <ArrField label="Employment type" value={filter.employment_type} onChange={(v) => save({ employment_type: v })} />
+        <ArrField
+          label="Keywords (any match)"
+          value={filter.keywords}
+          onChange={(v) => save({ keywords: v })}
+        />
+        <ArrField
+          label="Exclude keywords"
+          value={filter.exclude_keywords}
+          onChange={(v) => save({ exclude_keywords: v })}
+        />
+        <ArrField
+          label="Exclude companies"
+          value={filter.exclude_companies}
+          onChange={(v) => save({ exclude_companies: v })}
+        />
+        <ArrField
+          label="Locations"
+          value={filter.locations}
+          onChange={(v) => save({ locations: v })}
+        />
+        <ArrField
+          label="Seniority"
+          value={filter.seniority}
+          onChange={(v) => save({ seniority: v })}
+        />
+        <ArrField
+          label="Employment type"
+          value={filter.employment_type}
+          onChange={(v) => save({ employment_type: v })}
+        />
         <div>
           <Label>Salary min</Label>
           <Input
@@ -239,13 +266,19 @@ function FilterRow({ filter }: { filter: Filter }) {
         </div>
         <div className="flex flex-wrap items-center gap-4 md:col-span-2">
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={filter.remote_only} onCheckedChange={(v) => save({ remote_only: v })} /> Remote only
+            <Switch
+              checked={filter.remote_only}
+              onCheckedChange={(v) => save({ remote_only: v })}
+            />{" "}
+            Remote only
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={filter.hybrid_ok} onCheckedChange={(v) => save({ hybrid_ok: v })} /> Hybrid OK
+            <Switch checked={filter.hybrid_ok} onCheckedChange={(v) => save({ hybrid_ok: v })} />{" "}
+            Hybrid OK
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={filter.onsite_ok} onCheckedChange={(v) => save({ onsite_ok: v })} /> Onsite OK
+            <Switch checked={filter.onsite_ok} onCheckedChange={(v) => save({ onsite_ok: v })} />{" "}
+            Onsite OK
           </label>
         </div>
       </CardContent>
@@ -269,7 +302,10 @@ function ArrField({
         defaultValue={(value ?? []).join(", ")}
         placeholder="comma-separated"
         onBlur={(e) => {
-          const next = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+          const next = e.target.value
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
           const prev = (value ?? []).join("|");
           if (next.join("|") !== prev) onChange(next);
         }}
@@ -288,7 +324,9 @@ function FilterPreview({ filter }: { filter: Filter }) {
       q = q.gte("scraped_at", since);
     }
     if ((filter.keywords ?? []).length > 0) {
-      const or = filter.keywords.map((k) => `title.ilike.%${k}%,description.ilike.%${k}%`).join(",");
+      const or = filter.keywords
+        .map((k) => `title.ilike.%${k}%,description.ilike.%${k}%`)
+        .join(",");
       q = q.or(or);
     }
     const { count: c } = await q;

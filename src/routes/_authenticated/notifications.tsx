@@ -154,14 +154,12 @@ function NotificationsPage() {
   const creds = data?.creds as GmailCreds;
   const isVerified = !!creds?.verified_at && !creds?.last_error;
 
-
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
         title="Notifications"
         description="Email yourself when manual review is needed, a 95+ score job is found, or for daily summary."
       />
-
 
       {/* Gmail credentials */}
       <Card>
@@ -195,7 +193,8 @@ function NotificationsPage() {
             >
               myaccount.google.com/apppasswords <ExternalLink className="h-3 w-3" />
             </a>
-            . The worker uses it via IMAP (read OTPs) + SMTP (send notifications). Requires 2-Step Verification enabled on your Google account.
+            . The worker uses it via IMAP (read OTPs) + SMTP (send notifications). Requires 2-Step
+            Verification enabled on your Google account.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -348,12 +347,23 @@ function NotificationsPage() {
             <CardTitle className="flex items-center gap-2 text-base">
               <Mail className="h-4 w-4 text-primary" /> Daily digest preview
             </CardTitle>
-            <CardDescription>What lands in your inbox at {(settings.daily_summary_time || "20:00").slice(0, 5)} UTC.</CardDescription>
+            <CardDescription>
+              What lands in your inbox at {(settings.daily_summary_time || "20:00").slice(0, 5)}{" "}
+              UTC.
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <div className="border-b border-border/30 bg-background/60 px-5 py-3 text-xs text-muted-foreground">
-              <div><span className="text-muted-foreground/70">From: </span>JobPilot &lt;{creds?.email || "you@gmail.com"}&gt;</div>
-              <div><span className="text-muted-foreground/70">Subject: </span><span className="text-foreground font-medium">Your JobPilot digest — 24 matched · 7 applied</span></div>
+              <div>
+                <span className="text-muted-foreground/70">From: </span>JobPilot &lt;
+                {creds?.email || "you@gmail.com"}&gt;
+              </div>
+              <div>
+                <span className="text-muted-foreground/70">Subject: </span>
+                <span className="text-foreground font-medium">
+                  Your JobPilot digest — 24 matched · 7 applied
+                </span>
+              </div>
             </div>
             <div className="p-5 space-y-3 text-sm">
               <div className="font-heading text-base font-semibold">Yesterday in one glance</div>
@@ -363,18 +373,26 @@ function NotificationsPage() {
                   { label: "Applied", value: "7", tone: "text-success" },
                   { label: "Needs review", value: "2", tone: "text-warning" },
                 ].map((m) => (
-                  <div key={m.label} className="rounded-lg border border-border/40 bg-surface-1 p-3">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80">{m.label}</div>
-                    <div className={`mt-1 font-heading text-2xl font-bold tabular-nums ${m.tone}`}>{m.value}</div>
+                  <div
+                    key={m.label}
+                    className="rounded-lg border border-border/40 bg-surface-1 p-3"
+                  >
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+                      {m.label}
+                    </div>
+                    <div className={`mt-1 font-heading text-2xl font-bold tabular-nums ${m.tone}`}>
+                      {m.value}
+                    </div>
                   </div>
                 ))}
               </div>
-              <div className="text-xs text-muted-foreground italic">+ top 5 high-score matches and any failures requiring attention.</div>
+              <div className="text-xs text-muted-foreground italic">
+                + top 5 high-score matches and any failures requiring attention.
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
-
 
       {/* Recent notifications */}
       <Card>
@@ -388,7 +406,10 @@ function NotificationsPage() {
                 <div key={n.id} className="flex items-center justify-between py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-sm">
-                      <Badge variant={n.status === "sent" ? "default" : "secondary"} className="text-xs">
+                      <Badge
+                        variant={n.status === "sent" ? "default" : "secondary"}
+                        className="text-xs"
+                      >
                         {n.kind}
                       </Badge>
                       <span className="truncate font-medium">{n.subject}</span>

@@ -24,9 +24,7 @@ export function SectionCard({
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
         <div className="min-w-0 flex-1">
           <CardTitle className="text-base">{title}</CardTitle>
-          {description && (
-            <CardDescription className="mt-1">{description}</CardDescription>
-          )}
+          {description && <CardDescription className="mt-1">{description}</CardDescription>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {actions}
