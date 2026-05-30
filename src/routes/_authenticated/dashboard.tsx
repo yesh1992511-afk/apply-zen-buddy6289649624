@@ -148,7 +148,7 @@ function Dashboard() {
   const endMin = automation?.run_24_7 ? 24 * 60 : parseTime(automation?.daily_end ?? null) ?? 18 * 60;
 
   return (
-    <div className="space-y-6 max-w-[1400px]">
+    <div className="space-y-5 max-w-[1400px]">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-3 float-in">
         <div>
@@ -174,21 +174,21 @@ function Dashboard() {
 
 
       {!stats && (
-        <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">
-          <div className="col-span-full lg:col-span-5 lg:row-span-2 h-[280px] shimmer rounded-2xl" />
-          <CardSkeleton className="col-span-3 md:col-span-2 lg:col-span-4 h-[120px]" />
-          <CardSkeleton className="col-span-3 md:col-span-2 lg:col-span-3 h-[120px]" />
+        <div className="grid gap-5 md:grid-cols-6 lg:grid-cols-12">
+          <div className="col-span-full lg:col-span-6 h-[280px] shimmer rounded-2xl" />
+          <CardSkeleton className="col-span-3 md:col-span-3 lg:col-span-3 h-[280px]" />
+          <CardSkeleton className="col-span-3 md:col-span-3 lg:col-span-3 h-[280px]" />
           {Array.from({ length: 4 }).map((_, i) => (
-            <CardSkeleton key={i} className="col-span-3 md:col-span-2 lg:col-span-3" />
+            <CardSkeleton key={i} className="col-span-3 md:col-span-3 lg:col-span-3" />
           ))}
         </div>
       )}
 
       {stats && (
-      <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">
+      <div className="grid gap-5 md:grid-cols-6 lg:grid-cols-12">
 
         {/* HERO — daily progress */}
-        <div className="relative col-span-full overflow-hidden rounded-2xl border border-border/60 bg-gradient-hero p-6 md:col-span-4 lg:col-span-5 lg:row-span-2">
+        <div className="relative col-span-full overflow-hidden rounded-2xl border border-border/60 bg-gradient-hero p-6 md:col-span-6 lg:col-span-6">
           <div className="absolute inset-0 bg-gradient-to-br from-card/40 via-card/20 to-transparent" />
           <div className="relative">
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -258,7 +258,7 @@ function Dashboard() {
         </div>
 
         {/* Heartbeat tile */}
-        <div className="col-span-3 rounded-2xl border border-border/60 bg-card p-5 md:col-span-2 lg:col-span-4">
+        <div className="col-span-3 h-full rounded-2xl border border-border/60 bg-card p-5 md:col-span-3 lg:col-span-3">
           <div className="flex items-start justify-between">
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Worker</div>
@@ -278,7 +278,7 @@ function Dashboard() {
         </div>
 
         {/* Per-portal tile */}
-        <div className="col-span-3 rounded-2xl border border-border/60 bg-card p-5 md:col-span-2 lg:col-span-3">
+        <div className="col-span-3 h-full rounded-2xl border border-border/60 bg-card p-5 md:col-span-3 lg:col-span-3">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Today by portal</div>
           <div className="mt-4 space-y-2">
             {portalList.map((p) => {
