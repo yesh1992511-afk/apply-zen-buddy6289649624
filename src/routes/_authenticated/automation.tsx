@@ -94,11 +94,7 @@ function AutomationPage() {
       <PageHeader
         title="Automation"
         description="Master controls for the autopilot worker."
-        actions={
-          <Button onClick={save} disabled={saving} className="bg-gradient-emerald shadow-glow disabled:shadow-none">
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
-        }
+        actions={SaveBtn}
       />
 
 
