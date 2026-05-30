@@ -134,7 +134,7 @@ function Dashboard() {
   return (
     <div className="space-y-6 max-w-[1400px]">
       {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 float-in">
         <div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight">Welcome back</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -143,12 +143,26 @@ function Dashboard() {
         </div>
         <Link
           to="/jobs"
-          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-2 px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-2 px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-ring"
         >
           View all jobs
           <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
+
+      {!stats && (
+        <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">
+          <div className="col-span-full lg:col-span-5 lg:row-span-2 h-[280px] shimmer rounded-2xl" />
+          <CardSkeleton className="col-span-3 md:col-span-2 lg:col-span-4 h-[120px]" />
+          <CardSkeleton className="col-span-3 md:col-span-2 lg:col-span-3 h-[120px]" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <CardSkeleton key={i} className="col-span-3 md:col-span-2 lg:col-span-3" />
+          ))}
+        </div>
+      )}
+
+      {stats && (
+
 
       {/* Bento grid */}
       <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">
