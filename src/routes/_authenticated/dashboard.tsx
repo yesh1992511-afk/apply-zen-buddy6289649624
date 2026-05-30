@@ -162,10 +162,8 @@ function Dashboard() {
       )}
 
       {stats && (
-
-
-      {/* Bento grid */}
       <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">
+
         {/* HERO — daily progress */}
         <div className="relative col-span-full overflow-hidden rounded-2xl border border-border/60 bg-gradient-hero p-6 md:col-span-4 lg:col-span-5 lg:row-span-2">
           <div className="absolute inset-0 bg-gradient-to-br from-card/40 via-card/20 to-transparent" />
