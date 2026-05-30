@@ -44,13 +44,35 @@ async function handle(request: Request) {
   if (error) return Response.json({ error: error.message }, { status: 500 });
   if (!apps?.length) return Response.json({ ok: true, processed: 0 });
 
-  const results: Array<{ id: string; status: string; error?: string }> = [];
+  const results: Array<{ id: string; status: string; error?: string; skipped?: boolean }> = [];
   for (const app of apps) {
+    // 24h idempotency per application+attempt so a duplicate cron tick can't double-process
+    const claimed = await claimIdempotency({
+      supabaseAdmin,
+      key: `apply-worker:${app.id}:${(app.attempts ?? 0) + 1}`,
+      kind: 'apply-worker',
+      userId: app.user_id,
+    });
+    if (!claimed) {
+      results.push({ id: app.id, status: 'skipped', skipped: true });
+      continue;
+    }
     try {
       await processOne(app.id, app.user_id, app.job_id, app.attempts ?? 0);
       results.push({ id: app.id, status: 'ok' });
     } catch (e) {
-      results.push({ id: app.id, status: 'failed', error: e instanceof Error ? e.message : String(e) });
+      const message = e instanceof Error ? e.message : String(e);
+      const nextAttempts = (app.attempts ?? 0) + 1;
+      const giveUp = nextAttempts >= 5;
+      await supabaseAdmin
+        .from('applications')
+        .update({
+          status: giveUp ? 'failed' : 'queued',
+          last_error: message.slice(0, 1000),
+          finished_at: giveUp ? new Date().toISOString() : null,
+        })
+        .eq('id', app.id);
+      results.push({ id: app.id, status: giveUp ? 'failed' : 'requeued', error: message });
     }
   }
   return Response.json({ ok: true, processed: results.length, results });
