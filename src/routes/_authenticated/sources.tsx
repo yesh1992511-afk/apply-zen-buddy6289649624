@@ -79,6 +79,15 @@ const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_s
 ];
 
 
+const DEFAULT_TARGET: JobTarget = {
+  field: "cybersecurity",
+  titles: findPreset("cybersecurity")!.titles,
+  locations: findPreset("cybersecurity")!.locations,
+  country: findPreset("cybersecurity")!.country,
+  postedWithinHours: findPreset("cybersecurity")!.postedWithinHours,
+  excludeKeywords: findPreset("cybersecurity")!.excludeKeywords,
+};
+
 function SourcesPage() {
   const { user } = useUser();
   const [sources, setSources] = useState<Source[]>([]);
@@ -86,10 +95,28 @@ function SourcesPage() {
   const [ingestionEnabled, setIngestionEnabled] = useState(false);
   const [runningNow, setRunningNow] = useState(false);
   const [lastIngestResult, setLastIngestResult] = useState<string | null>(null);
+  const [target, setTarget] = useState<JobTarget>(DEFAULT_TARGET);
+  const [applyingTarget, setApplyingTarget] = useState(false);
 
   const load = () => {
     supabase.from("sources").select("*").order("display_name").then(({ data }) => setSources((data ?? []) as Source[]));
-    supabase.from("automation_settings").select("enabled").maybeSingle().then(({ data }) => setIngestionEnabled(!!data?.enabled));
+    supabase
+      .from("automation_settings")
+      .select("enabled, target_titles, target_locations, target_country, target_posted_within_hours, target_exclude_keywords")
+      .maybeSingle()
+      .then(({ data }) => {
+        setIngestionEnabled(!!data?.enabled);
+        if (data && (data.target_titles?.length ?? 0) > 0) {
+          setTarget({
+            field: "custom",
+            titles: data.target_titles ?? [],
+            locations: data.target_locations ?? ["United States"],
+            country: data.target_country ?? "US",
+            postedWithinHours: data.target_posted_within_hours ?? 168,
+            excludeKeywords: data.target_exclude_keywords ?? [],
+          });
+        }
+      });
   };
   useEffect(() => { load(); }, []);
   useRealtimeInvalidate({ table: "sources", onChange: load });
