@@ -12,19 +12,28 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedWorkerRouteImport } from './routes/_authenticated/worker'
 import { Route as AuthenticatedSourcesRouteImport } from './routes/_authenticated/sources'
 import { Route as AuthenticatedSetupRouteImport } from './routes/_authenticated/setup'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedPrivacyRouteImport } from './routes/_authenticated/privacy'
+import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
 import { Route as AuthenticatedJobsRouteImport } from './routes/_authenticated/jobs'
 import { Route as AuthenticatedFiltersRouteImport } from './routes/_authenticated/filters'
 import { Route as AuthenticatedExtensionRouteImport } from './routes/_authenticated/extension'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
+import { Route as AdminSystemRouteImport } from './routes/_admin/system'
+import { Route as AdminPlansRouteImport } from './routes/_admin/plans'
+import { Route as AdminObservabilityRouteImport } from './routes/_admin/observability'
+import { Route as AdminFlagsRouteImport } from './routes/_admin/flags'
+import { Route as AdminAuditRouteImport } from './routes/_admin/audit'
 import { Route as AuthenticatedApplicationsIdRouteImport } from './routes/_authenticated/applications.$id'
 import { Route as ApiPublicSourcesWorkerStatusRouteImport } from './routes/api/public/sources/worker-status'
 import { Route as ApiPublicSourcesUploadCookiesRouteImport } from './routes/api/public/sources/upload-cookies'
@@ -34,6 +43,7 @@ import { Route as ApiPublicSourcesIngestExtensionRouteImport } from './routes/ap
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
 import { Route as ApiPublicHooksApplyWorkerRouteImport } from './routes/api/public/hooks/apply-worker'
+import { Route as ApiPublicExtensionErrorReportRouteImport } from './routes/api/public/extension/error-report'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -47,6 +57,10 @@ const LoginRoute = LoginRouteImport.update({
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/_admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -72,6 +86,16 @@ const AuthenticatedSetupRoute = AuthenticatedSetupRouteImport.update({
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedPrivacyRoute = AuthenticatedPrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedNotificationsRoute =
@@ -105,6 +129,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedAutomationRoute = AuthenticatedAutomationRouteImport.update({
   id: '/automation',
   path: '/automation',
@@ -116,6 +145,31 @@ const AuthenticatedApplicationsRoute =
     path: '/applications',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AdminSystemRoute = AdminSystemRouteImport.update({
+  id: '/system',
+  path: '/system',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPlansRoute = AdminPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminObservabilityRoute = AdminObservabilityRouteImport.update({
+  id: '/observability',
+  path: '/observability',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminFlagsRoute = AdminFlagsRouteImport.update({
+  id: '/flags',
+  path: '/flags',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AuthenticatedApplicationsIdRoute =
   AuthenticatedApplicationsIdRouteImport.update({
     id: '/$id',
@@ -169,24 +223,39 @@ const ApiPublicHooksApplyWorkerRoute =
     path: '/api/public/hooks/apply-worker',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicExtensionErrorReportRoute =
+  ApiPublicExtensionErrorReportRouteImport.update({
+    id: '/api/public/extension/error-report',
+    path: '/api/public/extension/error-report',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/audit': typeof AdminAuditRoute
+  '/flags': typeof AdminFlagsRoute
+  '/observability': typeof AdminObservabilityRoute
+  '/plans': typeof AdminPlansRoute
+  '/system': typeof AdminSystemRoute
   '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
+  '/billing': typeof AuthenticatedBillingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/extension': typeof AuthenticatedExtensionRoute
   '/filters': typeof AuthenticatedFiltersRoute
   '/jobs': typeof AuthenticatedJobsRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
+  '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/privacy': typeof AuthenticatedPrivacyRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
   '/worker': typeof AuthenticatedWorkerRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
+  '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
@@ -200,19 +269,28 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/audit': typeof AdminAuditRoute
+  '/flags': typeof AdminFlagsRoute
+  '/observability': typeof AdminObservabilityRoute
+  '/plans': typeof AdminPlansRoute
+  '/system': typeof AdminSystemRoute
   '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
+  '/billing': typeof AuthenticatedBillingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/extension': typeof AuthenticatedExtensionRoute
   '/filters': typeof AuthenticatedFiltersRoute
   '/jobs': typeof AuthenticatedJobsRoute
   '/logs': typeof AuthenticatedLogsRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
+  '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/privacy': typeof AuthenticatedPrivacyRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
   '/worker': typeof AuthenticatedWorkerRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
+  '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
@@ -225,22 +303,32 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_admin': typeof AdminRouteWithChildren
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_admin/audit': typeof AdminAuditRoute
+  '/_admin/flags': typeof AdminFlagsRoute
+  '/_admin/observability': typeof AdminObservabilityRoute
+  '/_admin/plans': typeof AdminPlansRoute
+  '/_admin/system': typeof AdminSystemRoute
   '/_authenticated/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/_authenticated/automation': typeof AuthenticatedAutomationRoute
+  '/_authenticated/billing': typeof AuthenticatedBillingRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/extension': typeof AuthenticatedExtensionRoute
   '/_authenticated/filters': typeof AuthenticatedFiltersRoute
   '/_authenticated/jobs': typeof AuthenticatedJobsRoute
   '/_authenticated/logs': typeof AuthenticatedLogsRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
+  '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
+  '/_authenticated/privacy': typeof AuthenticatedPrivacyRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/sources': typeof AuthenticatedSourcesRoute
   '/_authenticated/worker': typeof AuthenticatedWorkerRoute
   '/_authenticated/applications/$id': typeof AuthenticatedApplicationsIdRoute
+  '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
@@ -256,19 +344,28 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/reset-password'
+    | '/audit'
+    | '/flags'
+    | '/observability'
+    | '/plans'
+    | '/system'
     | '/applications'
     | '/automation'
+    | '/billing'
     | '/dashboard'
     | '/extension'
     | '/filters'
     | '/jobs'
     | '/logs'
     | '/notifications'
+    | '/onboarding'
+    | '/privacy'
     | '/profile'
     | '/setup'
     | '/sources'
     | '/worker'
     | '/applications/$id'
+    | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
@@ -282,19 +379,28 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/reset-password'
+    | '/audit'
+    | '/flags'
+    | '/observability'
+    | '/plans'
+    | '/system'
     | '/applications'
     | '/automation'
+    | '/billing'
     | '/dashboard'
     | '/extension'
     | '/filters'
     | '/jobs'
     | '/logs'
     | '/notifications'
+    | '/onboarding'
+    | '/privacy'
     | '/profile'
     | '/setup'
     | '/sources'
     | '/worker'
     | '/applications/$id'
+    | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
@@ -306,22 +412,32 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/_admin'
     | '/_authenticated'
     | '/login'
     | '/reset-password'
+    | '/_admin/audit'
+    | '/_admin/flags'
+    | '/_admin/observability'
+    | '/_admin/plans'
+    | '/_admin/system'
     | '/_authenticated/applications'
     | '/_authenticated/automation'
+    | '/_authenticated/billing'
     | '/_authenticated/dashboard'
     | '/_authenticated/extension'
     | '/_authenticated/filters'
     | '/_authenticated/jobs'
     | '/_authenticated/logs'
     | '/_authenticated/notifications'
+    | '/_authenticated/onboarding'
+    | '/_authenticated/privacy'
     | '/_authenticated/profile'
     | '/_authenticated/setup'
     | '/_authenticated/sources'
     | '/_authenticated/worker'
     | '/_authenticated/applications/$id'
+    | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
@@ -334,9 +450,11 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicExtensionErrorReportRoute: typeof ApiPublicExtensionErrorReportRoute
   ApiPublicHooksApplyWorkerRoute: typeof ApiPublicHooksApplyWorkerRoute
   ApiPublicHooksCheckHeartbeatRoute: typeof ApiPublicHooksCheckHeartbeatRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
@@ -368,6 +486,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_admin': {
+      id: '/_admin'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -403,6 +528,20 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/privacy': {
+      id: '/_authenticated/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof AuthenticatedPrivacyRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/onboarding': {
+      id: '/_authenticated/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/notifications': {
@@ -447,6 +586,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/billing': {
+      id: '/_authenticated/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof AuthenticatedBillingRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/automation': {
       id: '/_authenticated/automation'
       path: '/automation'
@@ -460,6 +606,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/applications'
       preLoaderRoute: typeof AuthenticatedApplicationsRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/_admin/system': {
+      id: '/_admin/system'
+      path: '/system'
+      fullPath: '/system'
+      preLoaderRoute: typeof AdminSystemRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/plans': {
+      id: '/_admin/plans'
+      path: '/plans'
+      fullPath: '/plans'
+      preLoaderRoute: typeof AdminPlansRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/observability': {
+      id: '/_admin/observability'
+      path: '/observability'
+      fullPath: '/observability'
+      preLoaderRoute: typeof AdminObservabilityRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/flags': {
+      id: '/_admin/flags'
+      path: '/flags'
+      fullPath: '/flags'
+      preLoaderRoute: typeof AdminFlagsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/audit': {
+      id: '/_admin/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/_authenticated/applications/$id': {
       id: '/_authenticated/applications/$id'
@@ -524,8 +705,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksApplyWorkerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/extension/error-report': {
+      id: '/api/public/extension/error-report'
+      path: '/api/public/extension/error-report'
+      fullPath: '/api/public/extension/error-report'
+      preLoaderRoute: typeof ApiPublicExtensionErrorReportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
+
+interface AdminRouteChildren {
+  AdminAuditRoute: typeof AdminAuditRoute
+  AdminFlagsRoute: typeof AdminFlagsRoute
+  AdminObservabilityRoute: typeof AdminObservabilityRoute
+  AdminPlansRoute: typeof AdminPlansRoute
+  AdminSystemRoute: typeof AdminSystemRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAuditRoute: AdminAuditRoute,
+  AdminFlagsRoute: AdminFlagsRoute,
+  AdminObservabilityRoute: AdminObservabilityRoute,
+  AdminPlansRoute: AdminPlansRoute,
+  AdminSystemRoute: AdminSystemRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface AuthenticatedApplicationsRouteChildren {
   AuthenticatedApplicationsIdRoute: typeof AuthenticatedApplicationsIdRoute
@@ -544,12 +750,15 @@ const AuthenticatedApplicationsRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedApplicationsRoute: typeof AuthenticatedApplicationsRouteWithChildren
   AuthenticatedAutomationRoute: typeof AuthenticatedAutomationRoute
+  AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedExtensionRoute: typeof AuthenticatedExtensionRoute
   AuthenticatedFiltersRoute: typeof AuthenticatedFiltersRoute
   AuthenticatedJobsRoute: typeof AuthenticatedJobsRoute
   AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
+  AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
+  AuthenticatedPrivacyRoute: typeof AuthenticatedPrivacyRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSetupRoute: typeof AuthenticatedSetupRoute
   AuthenticatedSourcesRoute: typeof AuthenticatedSourcesRoute
@@ -559,12 +768,15 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedApplicationsRoute: AuthenticatedApplicationsRouteWithChildren,
   AuthenticatedAutomationRoute: AuthenticatedAutomationRoute,
+  AuthenticatedBillingRoute: AuthenticatedBillingRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedExtensionRoute: AuthenticatedExtensionRoute,
   AuthenticatedFiltersRoute: AuthenticatedFiltersRoute,
   AuthenticatedJobsRoute: AuthenticatedJobsRoute,
   AuthenticatedLogsRoute: AuthenticatedLogsRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
+  AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
+  AuthenticatedPrivacyRoute: AuthenticatedPrivacyRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSetupRoute: AuthenticatedSetupRoute,
   AuthenticatedSourcesRoute: AuthenticatedSourcesRoute,
@@ -577,9 +789,11 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicExtensionErrorReportRoute: ApiPublicExtensionErrorReportRoute,
   ApiPublicHooksApplyWorkerRoute: ApiPublicHooksApplyWorkerRoute,
   ApiPublicHooksCheckHeartbeatRoute: ApiPublicHooksCheckHeartbeatRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
@@ -592,3 +806,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

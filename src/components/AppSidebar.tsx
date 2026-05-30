@@ -19,16 +19,24 @@ import {
   User,
   Filter,
   Database,
-  Settings,
   ScrollText,
   Server,
   LogOut,
   Bell,
   FileText,
   Chrome,
+  Sparkles,
+  CreditCard,
+  ShieldCheck,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useRoles } from "@/hooks/useRoles";
+
+const onboarding = [
+  { title: "Getting started", to: "/onboarding", icon: Sparkles },
+];
 
 const pilot = [
   { title: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
@@ -42,6 +50,8 @@ const pilot = [
 const profile = [
   { title: "Profile", to: "/profile", icon: User },
   { title: "Automation", to: "/automation", icon: FileText },
+  { title: "Billing", to: "/billing", icon: CreditCard },
+  { title: "Privacy", to: "/privacy", icon: ShieldCheck },
 ];
 
 const system = [
@@ -51,10 +61,20 @@ const system = [
   { title: "Worker setup", to: "/setup", icon: Server },
 ];
 
+const admin = [
+  { title: "Observability", to: "/admin/observability", icon: Shield },
+  { title: "System", to: "/admin/system", icon: Server },
+  { title: "Audit log", to: "/admin/audit", icon: ScrollText },
+  { title: "Feature flags", to: "/admin/flags", icon: Filter },
+  { title: "Plans", to: "/admin/plans", icon: CreditCard },
+];
+
+
 
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
+  const { isAdmin } = useRoles();
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -104,9 +124,11 @@ export function AppSidebar() {
         </Link>
       </SidebarHeader>
       <SidebarContent className="px-1">
+        {renderGroup("Start", onboarding)}
         {renderGroup("Pilot", pilot)}
         {renderGroup("Profile", profile)}
         {renderGroup("System", system)}
+        {isAdmin && renderGroup("Admin", admin)}
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border/60">
         <Button variant="ghost" size="sm" onClick={signOut} className="justify-start text-muted-foreground hover:text-foreground">
