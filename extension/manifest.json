@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "JobPilot Capture",
+  "version": "1.0.0",
+  "description": "Safely capture jobs you view on LinkedIn, Indeed, Glassdoor, ZipRecruiter, Wellfound and Dice into your JobPilot dashboard. Read-only, runs only in your own browser.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://*.linkedin.com/*",
+    "https://*.indeed.com/*",
+    "https://*.glassdoor.com/*",
+    "https://*.ziprecruiter.com/*",
+    "https://wellfound.com/*",
+    "https://*.wellfound.com/*",
+    "https://*.dice.com/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_icon": "icon.png" },
+  "options_page": "options.html",
+  "icons": { "48": "icon.png", "128": "icon.png" },
+  "content_scripts": [
+    { "matches": ["https://*.linkedin.com/jobs/*"], "js": ["content-linkedin.js"], "run_at": "document_idle" },
+    { "matches": ["https://*.indeed.com/*"], "js": ["content-indeed.js"], "run_at": "document_idle" },
+    { "matches": ["https://*.glassdoor.com/*"], "js": ["content-glassdoor.js"], "run_at": "document_idle" },
+    { "matches": ["https://*.ziprecruiter.com/*"], "js": ["content-ziprecruiter.js"], "run_at": "document_idle" },
+    { "matches": ["https://wellfound.com/*", "https://*.wellfound.com/*"], "js": ["content-wellfound.js"], "run_at": "document_idle" },
+    { "matches": ["https://*.dice.com/*"], "js": ["content-dice.js"], "run_at": "document_idle" }
+  ]
+}

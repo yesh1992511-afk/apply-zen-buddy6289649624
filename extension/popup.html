@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>JobPilot Capture</title>
+<style>
+  :root { color-scheme: dark; }
+  body { width: 320px; margin: 0; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0a0a0a; color: #e5e5e5; padding: 16px; }
+  h1 { font-size: 14px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; }
+  .dot.off { background: #6b7280; box-shadow: none; }
+  .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #222; }
+  .row:last-child { border: 0; }
+  .muted { color: #888; font-size: 11px; }
+  button { width: 100%; margin-top: 12px; padding: 8px; background: #10b981; color: #000; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; }
+  button.secondary { background: #1f1f1f; color: #e5e5e5; }
+  a { color: #10b981; }
+</style>
+</head>
+<body>
+<h1><span class="dot" id="dot"></span> JobPilot Capture</h1>
+<div id="status" class="muted">Loading…</div>
+<div id="stats" style="margin-top: 12px;"></div>
+<button id="toggle">Pause capture</button>
+<button class="secondary" id="options">Settings</button>
+<script src="popup.js"></script>
+</body>
+</html>
