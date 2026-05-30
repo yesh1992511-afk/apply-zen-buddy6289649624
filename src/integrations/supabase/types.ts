@@ -454,6 +454,45 @@ export type Database = {
         }
         Relationships: []
       }
+      jd_analysis_cache: {
+        Row: {
+          analysis: Json
+          cost_usd: number
+          created_at: string
+          dedupe_hash: string
+          hit_count: number
+          id: string
+          last_used_at: string
+          model: string
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          analysis: Json
+          cost_usd?: number
+          created_at?: string
+          dedupe_hash: string
+          hit_count?: number
+          id?: string
+          last_used_at?: string
+          model: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          analysis?: Json
+          cost_usd?: number
+          created_at?: string
+          dedupe_hash?: string
+          hit_count?: number
+          id?: string
+          last_used_at?: string
+          model?: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: []
+      }
       jobs: {
         Row: {
           company: string
@@ -1289,6 +1328,15 @@ export type Database = {
         Returns: boolean
       }
       match_job_to_filters: { Args: { _job_id: string }; Returns: undefined }
+      usage_mtd_by_provider: {
+        Args: { _user_id: string }
+        Returns: {
+          event_count: number
+          provider: string
+          total_cost: number
+          total_units: number
+        }[]
+      }
     }
     Enums: {
       app_role: "owner"
