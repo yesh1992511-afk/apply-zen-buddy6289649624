@@ -473,15 +473,16 @@ function ScreeningAnswers({ value, onChange }: { value: Record<string, string>; 
   );
 }
 
-const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: string; multi?: boolean }[]; title: string }> = {
+type FieldDef = { key: string; label: string; type?: string; multi?: boolean; options?: string[]; dateField?: boolean };
+const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
   experiences: {
     title: "Experience",
     fields: [
       { key: "company", label: "Company" },
       { key: "title", label: "Title" },
       { key: "location", label: "Location" },
-      { key: "start_date", label: "Start (YYYY-MM-DD)", type: "date" },
-      { key: "end_date", label: "End (YYYY-MM-DD)", type: "date" },
+      { key: "start_date", label: "Start date", dateField: true },
+      { key: "end_date", label: "End date (leave empty if current)", dateField: true },
       { key: "bullets", label: "Bullets (one per line)", multi: true },
       { key: "tech", label: "Tech (comma-separated)", multi: true },
     ],
@@ -499,9 +500,9 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
   skills: {
     title: "Skill",
     fields: [
-      { key: "name", label: "Name" },
-      { key: "category", label: "Category" },
-      { key: "proficiency", label: "Proficiency" },
+      { key: "name", label: "Skill name" },
+      { key: "category", label: "Category", options: ["Language", "Framework", "Database", "Cloud / DevOps", "Tool", "Soft skill", "Other"] },
+      { key: "proficiency", label: "Proficiency", options: PROFICIENCY_SKILL },
       { key: "years", label: "Years", type: "number" },
     ],
   },
@@ -509,10 +510,10 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
     title: "Education",
     fields: [
       { key: "school", label: "School" },
-      { key: "degree", label: "Degree" },
-      { key: "field", label: "Field" },
-      { key: "start_date", label: "Start", type: "date" },
-      { key: "end_date", label: "End", type: "date" },
+      { key: "degree", label: "Degree", options: DEGREE },
+      { key: "field", label: "Field of study" },
+      { key: "start_date", label: "Start date", dateField: true },
+      { key: "end_date", label: "End date (or expected)", dateField: true },
       { key: "gpa", label: "GPA" },
       { key: "notes", label: "Notes" },
     ],
@@ -521,7 +522,7 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
     title: "Language",
     fields: [
       { key: "name", label: "Language" },
-      { key: "proficiency", label: "Proficiency (Native, Fluent, Conversational, Basic)" },
+      { key: "proficiency", label: "Proficiency", options: PROFICIENCY_LANGUAGE },
     ],
   },
   certifications: {
@@ -529,8 +530,8 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
     fields: [
       { key: "name", label: "Name" },
       { key: "issuer", label: "Issuer" },
-      { key: "issued_date", label: "Issued", type: "date" },
-      { key: "expiry_date", label: "Expiry", type: "date" },
+      { key: "issued_date", label: "Issued", dateField: true },
+      { key: "expiry_date", label: "Expiry (if any)", dateField: true },
       { key: "credential_id", label: "Credential ID" },
       { key: "url", label: "URL" },
     ],
@@ -539,13 +540,14 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
     title: "Reference",
     fields: [
       { key: "name", label: "Name" },
-      { key: "relationship", label: "Relationship" },
+      { key: "relationship", label: "Relationship", options: ["Manager", "Colleague", "Direct report", "Client", "Professor", "Mentor", "Other"] },
       { key: "company", label: "Company" },
       { key: "email", label: "Email" },
       { key: "phone", label: "Phone" },
     ],
   },
 };
+
 
 function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
   const { user } = useUser();
