@@ -57,6 +57,10 @@ class Lever(Portal):
                 if await cl_field.count():
                     await cl_field.fill(cover_letter_text)
 
+            # Walk any custom screening questions before submit
+            from ..form_walker import safe_autofill
+            await safe_autofill(page, profile)
+
             # Submit
             await pause(1, 2)
             submit = page.locator("button[type='submit'], button:has-text('Submit')").first

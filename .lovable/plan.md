@@ -1,47 +1,74 @@
 # JobPilot — completion log
 
-## Just shipped (this turn)
+## Just shipped (this turn) — closed the two wiring gaps from the audit
 
-### Profile expansion
-- **Migration**: profile table got 47+ new columns (address, work authorization & visa, EEOC demographics with opt-in toggle, compensation, availability, work preferences, social links, `screening_answers` jsonb).
-- **New tables** with full RLS + GRANTs: `languages`, `certifications`, `references_list`.
-- **UI** (`src/routes/_authenticated/profile.tsx`): rebuilt with 15 tabs — Basic, Address, Work auth (with EEOC subsection), Comp & Availability, Preferences, Links, Experience, Projects, Skills, Education, Languages, Certs, References, Screening, Resume LaTeX.
-- **Autofill readiness** progress bar at the top: shows % complete and lists missing critical fields.
-- **Screening answers editor**: one-click presets for the 15 most-asked portal questions ("Authorized to work?", "Notice period?", "Salary expectation?", etc.) + free-form custom keys.
+### Gap 1: duplicate pg_cron jobs → removed
+Unscheduled `jobpilot-check-heartbeat` and `jobpilot-daily-summary` (the
+newer duplicates of `jobpilot-heartbeat-check` / `jobpilot-daily-summary-tick`).
+Each hook now fires exactly once per tick → no more double notifications.
 
-### Worker autofill mapper
-- **`worker/app/apply/profile_map.py`**: 60+ ordered regex rules mapping portal question text → profile field. Handles name parts, address, work auth (sponsorship variants), comp, availability, work prefs, education, links, EEOC (gated by `share_demographics`), background checks. Fallback to fuzzy match against `screening_answers`.
-- **`worker/app/apply/form_walker.py`**: portal-agnostic walker — calls `_label_for` on every visible input/select/radio, runs through the mapper, and fills text inputs / selects the best matching option / clicks matching radio. Never overwrites pre-filled values.
-- **Greenhouse portal** now calls `autofill_form()` after the core fields, so any custom screening question on a Greenhouse application gets answered automatically. Same pattern can be dropped into LinkedIn / Lever / Workday in one line each.
-
-### Dashboard kill-switch
-Already shipped in the prior turn — ON/PAUSED toggle writes `automation_settings.enabled`, 24h counters, heartbeat badge, top jobs, live log feed.
-
-### Phases C, E, F (resume LaTeX→PDF, source test button, cron) — shipped in the prior turn.
+### Gap 2: autofill only on Greenhouse → now on all 5 portals
+- `worker/app/apply/form_walker.py`: added `load_lists(user_id)` + a
+  `safe_autofill(page, profile)` one-call wrapper (loads lists, runs the
+  walker, swallows all exceptions so a screening question never crashes
+  an apply).
+- `greenhouse.py`: switched to shared `safe_autofill`; removed local `_load_lists`.
+- `linkedin.py`: `safe_autofill` inside the multi-step Next/Submit loop —
+  any custom Easy Apply question on any step gets answered.
+- `lever.py`: `safe_autofill` right before the final Submit click.
+- `workday.py`: `safe_autofill` inside the Next/Submit loop (multi-page wizard).
+- `indeed.py`: `safe_autofill` inside the Continue/Submit loop (iframe-aware).
+- `worker/VERSION` → `2026.05.30-autofill-allportals`.
 
 ---
 
-## Phase G — deploy + smoke test (over to you)
+## System wiring — verified end-to-end
+
+- **Worker scheduler** (`main.py`): heartbeat 30s, commands 5s, sources 2m, apply 45s.
+- **Command bus** (`commands.py`): scrape / apply / tailor / tailor_resume /
+  compile_resume / test_source / notify_test / notify_offline /
+  notify_daily_summary all wired.
+- **Frontend triggers** (`src/lib/commands.ts`): one helper per command +
+  `waitForCommand` + `getResumePdfUrl` (5-min signed URL).
+- **Dashboard** (`/dashboard`): live counters (15s poll), kill-switch writes
+  `automation_settings.enabled`, heartbeat freshness badge, daily budget bar,
+  recent log feed. `in_active_window()` honors enabled + run_24_7 + window + tz.
+- **Sources** (`/sources`): per-row "Test fetch" → `triggerTestSource` → `waitForCommand`.
+- **Cron hooks** (`/api/public/hooks/check-heartbeat`, `daily-summary`):
+  unauthenticated public routes; pg_cron hits them every 5 / 15 min.
+- **Resume** (`/profile` Resume tab): LaTeX editor (hidden by default) +
+  PDF preview iframe; Save & recompile enqueues `compile_resume`; tectonic
+  builds the PDF; signed URL served back to the iframe.
+- **Profile** (`/profile`): 15 tabs, readiness bar, screening-answer presets
+  for the 15 most-asked questions. 50+ columns + `languages` / `certifications`
+  / `references_list` tables, all RLS-locked.
+- **Autofill mapper** (`worker/app/apply/profile_map.py`): 60+ regex rules
+  + fuzzy fallback against `screening_answers`. EEOC gated by `share_demographics`.
+
+---
+
+## Phase G — your turn (deploy + smoke test)
 
 ```bash
 scp -r worker root@147.93.47.24:/root/jobpilot/
 ssh root@147.93.47.24 'cd /root/jobpilot/worker && docker compose build && docker compose up -d'
 ```
 
-Then run through:
-
-1. `/profile` → fill out Basic / Address / Work auth / Comp tabs → save → readiness bar climbs to ~100%.
-2. Add 3-5 entries in **Screening** (esp. "Authorized to work", "Notice period", "Salary expectation").
-3. `/profile` Resume tab → upload `.tex` template → PDF preview within ~30 s.
+Smoke checklist:
+1. `/profile` → fill Basic / Address / Work auth / Comp → readiness bar ~100%.
+2. Add 3-5 entries in **Screening** (work auth, notice period, salary).
+3. `/profile` Resume tab → upload `.tex` → PDF preview within ~30s.
 4. `/sources` → "Test fetch" on one source → count > 0.
-5. Plant a fake high-score Greenhouse job, let the bot apply, check that the screenshot shows the custom questions answered.
-6. Offline alert / daily summary checks as before.
-7. Dashboard kill-switch → confirm queue drains and no new applies start.
+5. Plant a fake high-score Greenhouse / Lever / LinkedIn job, let the bot
+   apply, confirm the screenshot shows custom questions answered.
+6. Pause the kill-switch → confirm no new applies start.
+7. Daily summary / offline alert checks.
 
 ---
 
 ## Notes
-- The `profile_map` rule set is additive: any new question variant is one line in `RULES`.
+- Adding a new question variant = one line in `profile_map.RULES`.
 - EEOC fields are never filled unless `share_demographics = true`.
-- New tables follow the same `owner full access` RLS as the existing list tables.
-- One pre-existing linter warning ("Extension in Public" for pg_cron/pg_net) was not introduced by this work and is unsafe to fix in a migration — it's a Supabase platform-level concern.
+- The lone Supabase linter warning ("Extension in Public" for pg_cron / pg_net)
+  is platform-level and was already present before this work — not safe to
+  "fix" via migration.
