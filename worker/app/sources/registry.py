@@ -18,6 +18,12 @@ from .workatastartup import WorkAtAStartup
 from .ats_greenhouse import GreenhouseBoards
 from .ats_lever import LeverBoards
 from .ats_ashby import AshbyBoards
+from .ats_smartrecruiters import SmartRecruitersBoards
+from .ats_workable import WorkableBoards
+from .ats_recruitee import RecruiteeBoards
+from .ats_teamtailor import TeamtailorBoards
+from .builtin import BuiltIn
+from .usajobs import USAJobs
 from ..db import db, user_id
 from ..logger import db_log, log
 from ..pipeline.normalize import normalize
@@ -36,6 +42,9 @@ ADAPTERS: dict[str, Source] = {a.key: a for a in [
     RemoteOK(), WeWorkRemotely(), Arbeitnow(), Remotive(),
     # Startups + direct ATS boards
     WorkAtAStartup(), GreenhouseBoards(), LeverBoards(), AshbyBoards(),
+    SmartRecruitersBoards(), WorkableBoards(), RecruiteeBoards(), TeamtailorBoards(),
+    # US tech boards + federal
+    BuiltIn(), USAJobs(),
 ]}
 
 
