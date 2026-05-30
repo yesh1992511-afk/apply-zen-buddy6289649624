@@ -6,6 +6,7 @@ import { dispatchWorkerCommand, getSystemSnapshot } from "@/lib/admin.functions"
 import { Button } from "@/components/ui/button";
 import { Pause, Play, RefreshCw, RotateCw, Send, Server, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
 
 export const Route = createFileRoute("/admin/system")({
   head: () => ({ meta: [{ title: "System — Admin" }] }),
@@ -19,10 +20,14 @@ type Snapshot = {
   counts: { queued: number; applying: number; needs_review: number };
 };
 
+type CmdKind = "refresh_sources" | "drain_apply_queue" | "test_apply" | "pause" | "resume";
+
 function SystemPage() {
   const fetchSnap = useServerFn(getSystemSnapshot);
   const dispatch = useServerFn(dispatchWorkerCommand);
   const qc = useQueryClient();
+  const [pending, setPending] = useState<CmdKind | null>(null);
+  const [done, setDone] = useState<CmdKind | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin", "system"],
@@ -30,13 +35,21 @@ function SystemPage() {
     refetchInterval: 5_000,
   });
 
-  const send = async (kind: any) => {
+  const send = async (kind: CmdKind) => {
+    setPending(kind);
     try {
       await dispatch({ data: { kind } });
-      toast.success(`Dispatched ${kind}`);
+      toast.success(`Dispatched ${kind.replace(/_/g, " ")}`);
+      setDone(kind);
+      window.setTimeout(() => setDone((d) => (d === kind ? null : d)), 1400);
       qc.invalidateQueries({ queryKey: ["admin", "system"] });
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Command failed");
+    } finally {
+      setPending((p) => (p === kind ? null : p));
+    }
   };
+
 
   if (isLoading) {
     return (
@@ -79,11 +92,11 @@ function SystemPage() {
       <div className="rounded-lg border border-border/60 bg-card p-4">
         <h3 className="text-sm font-semibold mb-3">Command center</h3>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => send("refresh_sources")}><RefreshCw className="mr-1.5 h-3 w-3" />Refresh sources</Button>
-          <Button size="sm" variant="outline" onClick={() => send("drain_apply_queue")}><Send className="mr-1.5 h-3 w-3" />Drain apply queue</Button>
-          <Button size="sm" variant="outline" onClick={() => send("test_apply")}><RotateCw className="mr-1.5 h-3 w-3" />Test apply</Button>
-          <Button size="sm" variant="outline" onClick={() => send("pause")}><Pause className="mr-1.5 h-3 w-3" />Pause worker</Button>
-          <Button size="sm" variant="outline" onClick={() => send("resume")}><Play className="mr-1.5 h-3 w-3" />Resume worker</Button>
+          <Button size="sm" variant="outline" loading={pending === "refresh_sources"} success={done === "refresh_sources"} onClick={() => send("refresh_sources")}><RefreshCw className="mr-1.5 h-3 w-3" />Refresh sources</Button>
+          <Button size="sm" variant="outline" loading={pending === "drain_apply_queue"} success={done === "drain_apply_queue"} onClick={() => send("drain_apply_queue")}><Send className="mr-1.5 h-3 w-3" />Drain apply queue</Button>
+          <Button size="sm" variant="outline" loading={pending === "test_apply"} success={done === "test_apply"} onClick={() => send("test_apply")}><RotateCw className="mr-1.5 h-3 w-3" />Test apply</Button>
+          <Button size="sm" variant="outline" loading={pending === "pause"} success={done === "pause"} onClick={() => send("pause")}><Pause className="mr-1.5 h-3 w-3" />Pause worker</Button>
+          <Button size="sm" variant="outline" loading={pending === "resume"} success={done === "resume"} onClick={() => send("resume")}><Play className="mr-1.5 h-3 w-3" />Resume worker</Button>
         </div>
       </div>
 
