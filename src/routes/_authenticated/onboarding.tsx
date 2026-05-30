@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
+import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
@@ -10,6 +11,7 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
   head: () => ({ meta: [{ title: "Onboarding — JobPilot" }] }),
   component: OnboardingPage,
   errorComponent: ErrorBoundaryRoute,
+  notFoundComponent: () => <NotFoundRoute />,
 });
 
 type StepStatus = { profile: boolean; extension: boolean; gmail: boolean; worker: boolean; filter: boolean; source: boolean; firstApply: boolean };

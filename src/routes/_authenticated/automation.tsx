@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
+import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/lib/useAuth";
@@ -19,6 +20,7 @@ export const Route = createFileRoute("/_authenticated/automation")({
   head: () => ({ meta: [{ title: "Automation — JobPilot" }] }),
   component: AutomationPage,
   errorComponent: ErrorBoundaryRoute,
+  notFoundComponent: () => <NotFoundRoute />,
 });
 
 type Settings = {

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
+import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getBillingOverview } from "@/lib/billing.functions";
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/_authenticated/billing")({
   head: () => ({ meta: [{ title: "Billing — JobPilot" }] }),
   component: BillingPage,
   errorComponent: ErrorBoundaryRoute,
+  notFoundComponent: () => <NotFoundRoute />,
 });
 
 function BillingPage() {
