@@ -5,7 +5,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-type Kind = "scrape" | "apply" | "tailor" | "compile_resume" | "test_source";
+type Kind = "scrape" | "apply" | "tailor" | "tailor_resume" | "compile_resume" | "test_source" | "notify_test";
 
 async function enqueue(kind: Kind, payload: Record<string, unknown>): Promise<string | null> {
   const { data: u } = await supabase.auth.getUser();
@@ -45,21 +45,19 @@ export async function triggerTailor(job_id: string) {
 }
 
 export async function triggerCompileResume(resume_id: string) {
-  const id = await enqueue("compile_resume", { resume_id });
-  if (id) toast.success("Compiling LaTeX → PDF…");
-  return id;
+  return enqueue("compile_resume", { resume_id });
 }
 
 export async function triggerTestSource(source_key: string) {
   const id = await enqueue("test_source", { source_key });
-  if (id) toast.success(`Testing "${source_key}"…`);
+  if (id) toast.success(`Test fetch queued for "${source_key}".`);
   return id;
 }
 
-/** Get a short-lived signed URL for a resume PDF in the `resumes` bucket. */
-export async function getResumePdfUrl(path: string): Promise<string | null> {
-  const { data, error } = await supabase.storage.from("resumes").createSignedUrl(path, 300);
-  if (error || !data) return null;
+/** Get a 5-minute signed URL for a PDF in the `resumes` bucket. */
+export async function getResumePdfUrl(storage_path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from("resumes").createSignedUrl(storage_path, 300);
+  if (error) return null;
   return data.signedUrl;
 }
 

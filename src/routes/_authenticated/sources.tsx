@@ -10,7 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { triggerScrape, triggerTestSource, waitForCommand } from "@/lib/commands";
+import { triggerScrape, triggerTestSource } from "@/lib/commands";
+import { waitForCommand } from "@/lib/commands";
 import { Play, FlaskConical } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/sources")({
@@ -105,15 +106,21 @@ function SourcesPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={async () => {
-                  const id = await triggerTestSource(s.key);
-                  if (id) { await waitForCommand(id, 60_000); load(); }
+                  const cid = await triggerTestSource(s.key);
+                  if (!cid) return;
+                  const res = await waitForCommand(cid, 90_000);
+                  if (res?.status === "done") {
+                    const r = res.result as { ok?: boolean; fetched?: number; new_jobs?: number; error?: string } | null;
+                    if (r?.ok) toast.success(`Fetched ${r.fetched ?? 0} · ${r.new_jobs ?? 0} new`);
+                    else toast.error(`Test failed: ${r?.error ?? "unknown"}`);
+                  } else {
+                    toast.error(`Test failed: ${res?.last_error ?? "timeout"}`);
+                  }
+                  load();
                 }}>
-                  <FlaskConical className="mr-1 h-3 w-3" /> Test
+                  <FlaskConical className="mr-1 h-3 w-3" /> Test fetch
                 </Button>
-                <Button size="sm" variant="outline" onClick={async () => {
-                  const id = await triggerScrape(s.key);
-                  if (id) { await waitForCommand(id, 120_000); load(); }
-                }}>
+                <Button size="sm" variant="outline" onClick={() => triggerScrape(s.key)}>
                   <Play className="mr-1 h-3 w-3" /> Run now
                 </Button>
                 <label className="flex items-center gap-2 text-sm">

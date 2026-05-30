@@ -84,52 +84,63 @@ async def _do_tailor(payload: dict[str, Any]) -> dict[str, Any]:
     db().storage.from_("resumes").upload(
         path, pdf, {"content-type": "application/pdf", "upsert": "true"}
     )
-    db().table("resumes").insert({
+    row = db().table("resumes").insert({
         "user_id": uid, "kind": "tailored", "name": f"preview-{job_id[:8]}",
         "tex_content": tex, "pdf_storage_path": path,
-    }).execute()
-    return {"pdf_path": path}
+    }).execute().data[0]
+    return {"pdf_path": path, "resume_id": row["id"]}
 
 
 async def _do_compile_resume(payload: dict[str, Any]) -> dict[str, Any]:
-    """Compile the .tex stored on a resumes row into a PDF and upload it."""
+    """Compile a resume's tex_content to PDF via tectonic, upload to storage."""
     from .latex.compile import compile_tex
     resume_id = payload.get("resume_id")
     if not resume_id:
         raise ValueError("resume_id required")
     uid = user_id()
-    row = db().table("resumes").select("id,name,tex_content,kind").eq(
+    row = db().table("resumes").select("id,tex_content,kind").eq(
         "id", resume_id
     ).eq("user_id", uid).single().execute().data
-    tex = (row.get("tex_content") or "").strip()
-    if not tex:
+    tex = row.get("tex_content") or ""
+    if not tex.strip():
         raise ValueError("resume has no tex_content")
     pdf = compile_tex(tex)
-    path = f"{uid}/compiled/{resume_id}.pdf"
-    try:
-        db().storage.from_("resumes").remove([path])
-    except Exception:
-        pass
+    path = f"{uid}/{row['kind']}/{resume_id}.pdf"
     db().storage.from_("resumes").upload(
         path, pdf, {"content-type": "application/pdf", "upsert": "true"}
     )
     db().table("resumes").update({"pdf_storage_path": path}).eq(
         "id", resume_id
     ).execute()
-    return {"pdf_path": path, "bytes": len(pdf)}
+    return {"pdf_path": path, "resume_id": resume_id, "bytes": len(pdf)}
 
 
 async def _do_test_source(payload: dict[str, Any]) -> dict[str, Any]:
-    """Run one fetch for a source and report count/error inline."""
+    """One-shot test fetch for a source. Reports count + first error."""
     key = payload.get("source_key")
     if not key:
         raise ValueError("source_key required")
-    await run_source_by_key(key, force=True)
     uid = user_id()
-    s = db().table("sources").select(
-        "last_run_count,last_run_status,last_error,last_run_at"
-    ).eq("user_id", uid).eq("key", key).single().execute().data
-    return {"ok": (s.get("last_run_status") == "success"), **s}
+    before = db().table("jobs").select("id", count="exact").eq(
+        "user_id", uid
+    ).execute().count or 0
+    try:
+        await run_source_by_key(key, force=True)
+    except Exception as e:
+        return {"ok": False, "source_key": key, "error": str(e)[:500]}
+    after = db().table("jobs").select("id", count="exact").eq(
+        "user_id", uid
+    ).execute().count or 0
+    src = db().table("sources").select(
+        "last_run_count,last_run_status,last_error"
+    ).eq("key", key).eq("user_id", uid).single().execute().data or {}
+    return {
+        "ok": (src.get("last_run_status") == "ok"),
+        "source_key": key,
+        "fetched": src.get("last_run_count") or 0,
+        "new_jobs": max(0, after - before),
+        "error": src.get("last_error"),
+    }
 
 
 async def _do_notify_test(payload: dict[str, Any]) -> dict[str, Any]:
@@ -180,6 +191,7 @@ HANDLERS = {
     "scrape": _do_scrape,
     "apply": _do_apply,
     "tailor": _do_tailor,
+    "tailor_resume": _do_tailor,
     "compile_resume": _do_compile_resume,
     "test_source": _do_test_source,
     "notify_test": _do_notify_test,
