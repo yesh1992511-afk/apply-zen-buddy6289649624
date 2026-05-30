@@ -1,19 +1,20 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { NotFoundRoute } from "@/components/NotFoundRoute";
-import { useEffect, useState, useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { toast } from "sonner";
 import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { QueryErrorState } from "@/components/QueryErrorState";
 import { JobDescriptionDialog, type JobDialogJob } from "@/components/JobDescriptionDialog";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
+import { jobsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies, type Job } from "@/lib/queries/jobs";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
   head: () => ({ meta: [{ title: "Jobs — JobPilot" }] }),
@@ -22,26 +23,8 @@ export const Route = createFileRoute("/_authenticated/jobs")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
-type Job = {
-  id: string;
-  title: string;
-  company: string;
-  location: string | null;
-  remote: string | null;
-  url: string;
-  source_key: string;
-  posted_at: string | null;
-  scraped_at: string;
-  score: number;
-  salary_min: number | null;
-  salary_max: number | null;
-  salary_currency: string | null;
-  employment_type: string | null;
-  seniority: string | null;
-  description: string | null;
-  description_html: string | null;
-  status: string;
-};
+// `Job` type is re-exported from the query module.
+
 
 const windows = [
   { label: "1h", hours: 1 },
