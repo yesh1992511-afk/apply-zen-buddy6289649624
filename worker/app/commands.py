@@ -91,6 +91,47 @@ async def _do_tailor(payload: dict[str, Any]) -> dict[str, Any]:
     return {"pdf_path": path}
 
 
+async def _do_compile_resume(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compile the .tex stored on a resumes row into a PDF and upload it."""
+    from .latex.compile import compile_tex
+    resume_id = payload.get("resume_id")
+    if not resume_id:
+        raise ValueError("resume_id required")
+    uid = user_id()
+    row = db().table("resumes").select("id,name,tex_content,kind").eq(
+        "id", resume_id
+    ).eq("user_id", uid).single().execute().data
+    tex = (row.get("tex_content") or "").strip()
+    if not tex:
+        raise ValueError("resume has no tex_content")
+    pdf = compile_tex(tex)
+    path = f"{uid}/compiled/{resume_id}.pdf"
+    try:
+        db().storage.from_("resumes").remove([path])
+    except Exception:
+        pass
+    db().storage.from_("resumes").upload(
+        path, pdf, {"content-type": "application/pdf", "upsert": "true"}
+    )
+    db().table("resumes").update({"pdf_storage_path": path}).eq(
+        "id", resume_id
+    ).execute()
+    return {"pdf_path": path, "bytes": len(pdf)}
+
+
+async def _do_test_source(payload: dict[str, Any]) -> dict[str, Any]:
+    """Run one fetch for a source and report count/error inline."""
+    key = payload.get("source_key")
+    if not key:
+        raise ValueError("source_key required")
+    await run_source_by_key(key, force=True)
+    uid = user_id()
+    s = db().table("sources").select(
+        "last_run_count,last_run_status,last_error,last_run_at"
+    ).eq("user_id", uid).eq("key", key).single().execute().data
+    return {"ok": (s.get("last_run_status") == "success"), **s}
+
+
 async def _do_notify_test(payload: dict[str, Any]) -> dict[str, Any]:
     ok, err = _notify.send_test()
     if not ok:
