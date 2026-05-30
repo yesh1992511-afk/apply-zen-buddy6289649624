@@ -32,7 +32,10 @@ type Job = {
   salary_min: number | null;
   salary_max: number | null;
   salary_currency: string | null;
+  employment_type: string | null;
+  seniority: string | null;
   description: string | null;
+  description_html: string | null;
   status: string;
 };
 
