@@ -70,3 +70,17 @@ def _save_shot(job_id: str, png: bytes) -> str:
     path = f"{user_id()}/{job_id}/{int(time.time())}.png"
     db().storage.from_("screenshots").upload(path, png, {"content-type": "image/png"})
     return path
+
+
+def _load_lists(user_id: str | None) -> dict:
+    """Fetch related rows (experiences/educations/languages/...) the mapper may need."""
+    if not user_id:
+        return {}
+    out: dict = {}
+    for tbl in ("experiences", "educations", "languages", "certifications", "skills", "projects"):
+        try:
+            res = db().table(tbl).select("*").eq("user_id", user_id).execute()
+            out[tbl] = res.data or []
+        except Exception:
+            out[tbl] = []
+    return out
