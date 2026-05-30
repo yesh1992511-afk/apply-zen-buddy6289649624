@@ -41,15 +41,13 @@ function AutomationPage() {
     saveState,
     error,
     errors,
-  } = useAutosaveSection({
+  } = useAutosaveSection<AutomationValues>({
     schema: automationSchema,
-    initial: settings.data
-      ? (pickAutomationFields(settings.data) as AutomationPatch)
-      : null,
+    initial: settings.data ? (pickAutomationFields(settings.data) as AutomationValues) : null,
     onSave: async (patch) => {
-      const crossErr = validateAutomationCross({ ...(s ?? {}), ...patch });
+      const crossErr = validateAutomationCross({ ...(s ?? {}), ...patch } as AutomationPatch);
       if (crossErr) throw new Error(crossErr);
-      await mutation.mutateAsync(patch);
+      await mutation.mutateAsync(patch as AutomationPatch);
     },
   });
 
