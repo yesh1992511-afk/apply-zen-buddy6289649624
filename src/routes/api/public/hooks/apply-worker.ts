@@ -12,6 +12,7 @@ import { supabaseAdmin } from '@/integrations/supabase/client.server';
 import { writeLog } from '@/lib/apply/log.server';
 import { generateTailoredResume, generateCoverLetter, type ProfileSnapshot, type JobSnapshot } from '@/lib/apply/ai.server';
 import { detectPortal } from '@/lib/apply/portal.server';
+import { hasValidApiKey, claimIdempotency } from '@/lib/api-auth.server';
 
 const MAX_PER_RUN = 3; // process up to N queued apps per cron tick
 
@@ -25,6 +26,9 @@ export const Route = createFileRoute('/api/public/hooks/apply-worker')({
 });
 
 async function handle(request: Request) {
+  if (!hasValidApiKey(request)) {
+    return Response.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or missing apikey header' } }, { status: 401 });
+  }
   const url = new URL(request.url);
   const onlyAppId = url.searchParams.get('application_id');
 
