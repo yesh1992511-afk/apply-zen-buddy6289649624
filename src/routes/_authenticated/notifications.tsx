@@ -85,13 +85,12 @@ function NotificationsPage() {
   const isVerified = !!creds?.verified_at && !creds?.last_error;
 
   return (
-    <div className="container mx-auto max-w-4xl space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Notifications</h1>
-        <p className="text-muted-foreground">
-          Email yourself when manual review is needed, a 95+ score job is found, or daily summary.
-        </p>
-      </div>
+    <div className="space-y-6 max-w-4xl">
+      <PageHeader
+        title="Notifications"
+        description="Email yourself when manual review is needed, a 95+ score job is found, or for daily summary."
+      />
+
 
       {/* Gmail credentials */}
       <Card>
