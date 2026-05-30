@@ -105,7 +105,7 @@ export const Route = createFileRoute('/api/public/sources/ingest-extension')({
             seniority: j.seniority ?? null,
             posted_at: j.posted_at ?? null,
             scraped_at: new Date().toISOString(),
-            raw: { via: 'extension', source } as Record<string, unknown>,
+            raw: { via: 'extension', source } as unknown as never,
             status: 'new',
           };
         });
@@ -171,7 +171,7 @@ export const Route = createFileRoute('/api/public/sources/ingest-extension')({
               cadence_minutes: 60,
               config: { via: 'extension' },
               last_run_at: new Date().toISOString(),
-              last_run_status: 'success',
+              last_run_status: 'succeeded',
               last_run_count: inserted,
             },
             { onConflict: 'user_id,key' }
