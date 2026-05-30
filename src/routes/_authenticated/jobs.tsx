@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/jobs")({
   head: () => ({ meta: [{ title: "Jobs — JobPilot" }] }),
   component: JobsPage,
+  errorComponent: ErrorBoundaryRoute,
 });
 
 type Job = {

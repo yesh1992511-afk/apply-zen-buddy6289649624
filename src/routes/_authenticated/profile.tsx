@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import { Plus, Trash2, Upload } from "lucide-react";
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: [{ title: "Profile — JobPilot" }] }),
   component: ProfilePage,
+  errorComponent: ErrorBoundaryRoute,
 });
 
 type Profile = Record<string, unknown> & { user_id: string };
