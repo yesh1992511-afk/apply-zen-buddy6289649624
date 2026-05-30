@@ -38,15 +38,22 @@ type Source = {
 };
 
 const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_status" | "last_run_count" | "last_error">> = [
+  // Paid Apify actors (LinkedIn / Indeed / ZipRecruiter / Glassdoor / Google / Wellfound)
   { key: "apify_linkedin", display_name: "LinkedIn (Apify)", kind: "apify", cadence_minutes: 60, config: { actor_id: "bebity~linkedin-jobs-scraper", maxItems: 50, searchTerms: ["software engineer"], locations: ["United States"], publishedAt: "r86400" } },
   { key: "apify_indeed", display_name: "Indeed (Apify)", kind: "apify", cadence_minutes: 60, config: { actor_id: "misceres~indeed-scraper", maxItems: 50, position: "software engineer", country: "US" } },
   { key: "apify_ziprecruiter", display_name: "ZipRecruiter (Apify)", kind: "apify", cadence_minutes: 120, config: { actor_id: "bebity~zip-recruiter-scraper", maxItems: 50, search: "software engineer" } },
-  { key: "apify_dice", display_name: "Dice (Apify)", kind: "apify", cadence_minutes: 120, config: { actor_id: "epctex~dice-scraper", maxItems: 50, keywords: "software engineer" } },
+  { key: "apify_glassdoor", display_name: "Glassdoor (Apify)", kind: "apify", cadence_minutes: 120, config: { maxItems: 50, keyword: "software engineer", location: "United States" } },
+  { key: "apify_google_jobs", display_name: "Google Jobs (Apify)", kind: "apify", cadence_minutes: 60, config: { maxItems: 50, queries: ["software engineer"], location: "United States" } },
+  { key: "apify_wellfound", display_name: "Wellfound / AngelList (Apify)", kind: "apify", cadence_minutes: 180, config: { maxItems: 50, keywords: ["software engineer"] } },
+  // Free REST / RSS APIs
   { key: "remoteok", display_name: "RemoteOK (free)", kind: "rest", cadence_minutes: 60, config: { keywords: ["python", "typescript"] } },
   { key: "remotive", display_name: "Remotive (free)", kind: "rest", cadence_minutes: 60, config: { search: "software" } },
-  { key: "adzuna", display_name: "Adzuna (free API)", kind: "rest", cadence_minutes: 60, config: { country: "us", what: "software engineer", where: "" } },
-  { key: "jooble", display_name: "Jooble (free API)", kind: "rest", cadence_minutes: 60, config: { keywords: "software engineer", location: "" } },
-  { key: "usajobs", display_name: "USAJobs (free)", kind: "rest", cadence_minutes: 240, config: { keyword: "software" } },
+  { key: "arbeitnow", display_name: "Arbeitnow (free)", kind: "rest", cadence_minutes: 60, config: {} },
+  { key: "weworkremotely", display_name: "We Work Remotely (free)", kind: "rest", cadence_minutes: 120, config: { categories: ["programming"] } },
+  { key: "usajobs", display_name: "USAJobs (federal, free)", kind: "rest", cadence_minutes: 240, config: { keyword: "software" } },
+  { key: "builtin", display_name: "BuiltIn (US tech)", kind: "rest", cadence_minutes: 120, config: { queries: ["software engineer"], locations: ["remote"] } },
+  { key: "workatastartup", display_name: "YC Work At A Startup (free)", kind: "rest", cadence_minutes: 240, config: { query: "software engineer" } },
+  // Direct ATS boards (public APIs, no proxy needed)
   { key: "greenhouse_boards", display_name: "Greenhouse boards", kind: "board", cadence_minutes: 180, config: { companies: ["stripe", "airbnb"] } },
   { key: "lever_boards", display_name: "Lever boards", kind: "board", cadence_minutes: 180, config: { companies: ["netflix"] } },
   { key: "ashby_boards", display_name: "Ashby boards", kind: "board", cadence_minutes: 180, config: { boards: ["openai"] } },
@@ -54,8 +61,8 @@ const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_s
   { key: "workable_boards", display_name: "Workable boards", kind: "board", cadence_minutes: 180, config: { subdomains: [] } },
   { key: "recruitee_boards", display_name: "Recruitee boards", kind: "board", cadence_minutes: 240, config: { companies: [] } },
   { key: "teamtailor_boards", display_name: "Teamtailor boards", kind: "board", cadence_minutes: 240, config: { companies: [], api_keys: {} } },
-  { key: "builtin", display_name: "BuiltIn (US tech)", kind: "rest", cadence_minutes: 120, config: { queries: ["software engineer"], locations: ["remote"] } },
 ];
+
 
 function SourcesPage() {
   const { user } = useUser();
