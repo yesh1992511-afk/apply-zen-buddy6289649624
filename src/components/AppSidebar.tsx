@@ -74,7 +74,7 @@ const admin = [
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const { isAdmin } = useRoles();
+  const { isSuperAdmin } = useRoles();
 
   const signOut = async () => {
     await supabase.auth.signOut();
