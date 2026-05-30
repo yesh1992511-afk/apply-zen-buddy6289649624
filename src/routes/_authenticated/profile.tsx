@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useUser } from "@/lib/useAuth";
-import { Plus, Trash2, Upload } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { ResumeStudio } from "@/components/ResumeStudio";
 
 export const Route = createFileRoute("/_authenticated/profile")({
