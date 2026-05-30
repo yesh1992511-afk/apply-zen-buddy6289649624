@@ -1,10 +1,12 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
-import { Check, Chrome, Mail, Server, Filter, Database, Send, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { Check, Chrome, Mail, Server, Filter, Database, Send, User, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
@@ -14,10 +16,15 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
+
 type StepStatus = { profile: boolean; extension: boolean; gmail: boolean; worker: boolean; filter: boolean; source: boolean; firstApply: boolean };
 
 function OnboardingPage() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState<StepStatus | null>(null);
+  const [onboardedAt, setOnboardedAt] = useState<string | null>(null);
+  const [marking, setMarking] = useState(false);
+
 
   useEffect(() => {
     const load = async () => {
