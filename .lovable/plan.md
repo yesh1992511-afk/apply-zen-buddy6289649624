@@ -1,30 +1,64 @@
 # Goal
 
-Tidy the Dashboard grid so the tiles line up on clean rows with even gutters — no orphan tiles wrapping under the hero, no mismatched heights.
+Give every interactive button across the app a consistent, polished micro-interaction layer — refresh, test, add, save, submit, action chips — so they feel "NC-level" (smooth, responsive, with visible feedback) without changing any business logic.
 
-## Current problem
+## Approach: one shared button enhancement, applied everywhere
 
-The 12-col grid in `src/routes/_authenticated/dashboard.tsx` (around line 188) is misaligned:
+Rather than animating each button file-by-file, add the animation system to the **shared `Button` component** (`src/components/ui/button.tsx`) plus a couple of utility classes. Every button in the app already routes through this component, so the polish lands globally in one edit.
 
-- Hero = `lg:col-span-5 lg:row-span-2` → owns rows 1–2, cols 1–5.
-- Row 1 right side: Worker `col-span-4` + Portal `col-span-3` = 7 cols (fits 6–12). ✓
-- Row 2 right side: 4 × MetricTile `col-span-3` = needs 12 cols but only 7 are free → "Queued" and "Failed" wrap onto a new row under the hero, creating the empty gap you see in the screenshot.
+## Changes
 
-## Fix (CSS-only, no logic change)
+### 1. `src/components/ui/button.tsx`
 
-Edit `src/routes/_authenticated/dashboard.tsx` only:
+- Add a base transition layer: `transition-all duration-200 ease-out active:scale-[0.97] hover:-translate-y-[1px]` to the cva base.
+- Add a subtle hover glow on `default` and `secondary` variants via `hover:shadow-[0_4px_12px_-4px_color-mix(in_oklab,var(--primary)_45%,transparent)]`.
+- Add a new variant `spinning` state (driven by a new `loading?: boolean` prop) that:
+  - replaces the leading icon with a spinning `Loader2` from lucide-react,
+  - sets `disabled` and `aria-busy`,
+  - keeps the button width stable (no jump).
+- Add a new `success?: boolean` prop that briefly swaps the icon to a `Check` with a `scale-in` animation for ~1.2s (used for "Test passed", "Refreshed").
 
-1. **Hero**: drop `lg:row-span-2`, set `lg:col-span-6` (was 5).
-2. **Worker tile**: `lg:col-span-3` (was 4).
-3. **Today by portal**: `lg:col-span-3` (was 3, unchanged).
-   → Row 1 = 6 + 3 + 3 = 12. Clean.
-4. **Metric strip (4 tiles)**: each `lg:col-span-3` (unchanged) → Row 2 = 3+3+3+3 = 12. Clean full-width strip below.
-5. **Tighten vertical gap**: change outer wrapper `space-y-6` → `space-y-5`, grid `gap-4` → `gap-5` for consistent gutters.
-6. **Match heights on row 1**: add `h-full` to Worker + Portal cards so they stretch to the hero's height (hero has more inner content, so this keeps the row visually level).
-7. **Skeleton grid**: mirror the same spans so the loading state doesn't jump when data arrives.
+### 2. `src/styles.css`
 
-No changes to data fetching, server functions, queries, or any other file.
+Add reusable keyframes/utilities (only if not already present):
+- `@keyframes spin-smooth` (1s linear infinite) → `.animate-spin-smooth`
+- `@keyframes pulse-ring` (ping-like halo) → `.btn-pulse` for primary CTAs
+- `@keyframes icon-pop` (scale 0.6 → 1.1 → 1) → `.icon-pop` for success state
+- `.btn-press` utility: `transition-transform active:scale-95`
+- Refresh-specific: `.icon-spin-once` (single 600ms rotate) — applied to refresh icons while a query is fetching.
+
+### 3. Refresh buttons (Dashboard "Refresh", Admin "Refresh", SyncHealthCard "Refresh")
+
+Wire the existing TanStack Query `isFetching` flag to the new `loading` prop on the Button:
+- `src/components/dashboard/SyncHealthCard.tsx`
+- `src/routes/admin/observability.tsx`
+- `src/routes/admin/system.tsx`
+- `src/routes/admin/audit.tsx`
+- `src/routes/_authenticated/dashboard.tsx` (if it has a refresh affordance)
+
+While `isFetching` is true → icon spins, button is `aria-busy`, label stays visible. On success → 1.2s `Check` flash via the `success` prop.
+
+### 4. "Test" / "Run" buttons (Admin → System → Command Center)
+
+`src/routes/admin/system.tsx`:
+- Each dispatch button (`pause`, `resume`, `test_apply`) uses `useMutation` already; pipe `mutation.isPending` → `loading` and `mutation.isSuccess` → brief `success` flash.
+- Add a toast on success/error (using the existing `sonner` or `useToast` already in the project).
+
+### 5. "Add" / "Save" / primary CTAs
+
+No code changes per call site — they inherit the new base animation from the Button component. Where a form is submitting, ensure the submit button passes `loading={form.formState.isSubmitting}` (audit Profile / Filters / Automation forms and add the prop in the same edit).
+
+## Out of scope
+
+- No backend / server-fn changes.
+- No new routes, no new tables.
+- No restyle of the design tokens — only motion + the loading/success affordances.
 
 ## Verify
 
-After the build: load `/dashboard`, confirm hero + Worker + Portal sit on one row, all four metric tiles sit on the next row at equal width, no empty gap between them, and Month-to-date spend / Pipeline funnel / Recent activity rows below are unaffected.
+After build:
+1. `/dashboard` → click "Refresh" on Sync Health → icon spins until data lands, then a green check flashes.
+2. `/admin/system` → click "test_apply" → button shows spinner, then check, then toast.
+3. Any "Save" button → on click, scales down briefly; while submitting, shows spinner.
+4. Hover any primary button → subtle lift + glow; no layout shift.
+5. Keyboard focus rings remain intact (no regression on `focus-visible`).
