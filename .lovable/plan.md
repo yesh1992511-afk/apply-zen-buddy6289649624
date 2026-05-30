@@ -1,143 +1,78 @@
-# JobPilot — End-to-End Testing Playbook
+# Plan: Owner upgrade + US-focused profile with proper inputs
 
-Status check: the platform is feature-complete on paper (web app, extension, FastAPI worker, Supabase schema, admin console, billing, onboarding, audit/observability). It is **not yet validated end-to-end**. Below is the exact order to test, starting from zero (no signup, no SSH).
+## 1. Make you full owner (admin privileges)
 
----
+You're already `owner` (auto-assigned on signup). To unlock the **Admin console** (`/admin/*` — observability, audit, flags, plans, system), I'll also grant you the `admin` role.
 
-## Phase 0 — Pre-flight (5 min)
+- Insert `('your-user-id', 'admin')` into `user_roles`
+- This gives access to every `/admin` route gated by `has_role(uid, 'admin')`
 
-1. Open the **Published URL** (not the preview), not `/login` preview:
-   `https://apply-zen-buddy6289649624.lovable.app`
-2. Confirm **Lovable Cloud** is `ACTIVE_HEALTHY` (I can check with `cloud_status` on demand).
-3. Confirm the published deploy is the latest build (banner / build hash in footer if present).
+## 2. Billing — unlimited on Free for the owner
 
----
+Two clean options. I recommend **Option A** since this is your single-user instance:
 
-## Phase 1 — Auth & Onboarding (web only, 10 min)
+- **A. Owner bypass (recommended):** Any user with role `owner` bypasses plan limits in `billing.functions.ts` / quota checks. Billing page shows "Owner — unlimited" badge instead of plan bars. No DB change to `plans` needed.
+- **B. Edit Free plan:** Update `plans` row `key='free'` → `max_applies_per_day = 9999`, `max_sources = 9999`. Simpler but also affects any future user.
 
-1. **Sign up** as the single owner (email + password). Since `block_extra_signups` enforces 1 user, this is your only chance — pick the real email you want.
-2. Verify email if a confirmation was sent.
-3. Land on `/onboarding` → walk through all 7 steps:
-   profile basics → extension pairing token → Gmail app-password → worker bootstrap script → pick a filter → add 1 source → dry-run.
-4. Confirm sidebar **profile completeness meter** moves to 100%.
-5. Visit `/billing` → confirm 14-day Pro trial seeded.
-6. Visit `/privacy` → click "Export my data" (should return a JSON zip). Don't click delete.
+Going with **A** unless you say otherwise.
 
-✅ Gate: you can log in, profile saved, trial active, data export works.
+## 3. US-focused profile with full option sets
 
----
+Right now most profile fields are free-text. I'll convert the onboarding wizard + profile editor to use **dropdowns / radio / multi-select / date pickers** with US-defaults everywhere companies actually ask.
 
-## Phase 2 — Extension pairing & capture (15 min)
+### Fields converted to option pickers
 
-1. Load `extension/` as unpacked in Chrome (`chrome://extensions` → Developer mode → Load unpacked).
-2. Open extension Options → paste the pairing token from `/extension` page → save.
-3. Set a **cookie passphrase** (you'll need the same one on the VPS later — write it down).
-4. Browse to a LinkedIn job listing while logged in → extension should auto-capture.
-5. Popup should show: pending=0 after sync, captures-today > 0, worker dot = offline (no VPS yet — expected).
-6. In web app `/jobs` → captured job appears within ~10s (realtime).
+| Field | Input type | Options |
+|---|---|---|
+| Country | Select, default **United States** | Full ISO list, US pinned |
+| State | Select | All 50 US states + DC + territories |
+| City | Combobox | Top US metros + free type |
+| Work authorization | Radio | US Citizen / Green Card / H1B / OPT/CPT / TN / L1 / Other / Not authorized |
+| Requires sponsorship now | Radio | Yes / No |
+| Requires sponsorship future | Radio | Yes / No |
+| Visa status | Select | Same as work auth |
+| Visa expiry | **Date picker** (calendar popover) | — |
+| Date of birth | **Date picker** | — |
+| Earliest start date | **Date picker** | — |
+| Gender | Select | Male / Female / Non-binary / Prefer not to say |
+| Pronouns | Select | he/him, she/her, they/them, other, prefer not to say |
+| Ethnicity (EEO) | Select | Standard US EEOC categories |
+| Veteran status | Select | EEOC vet categories |
+| Disability status | Select | Yes / No / Prefer not to say (ADA standard) |
+| LGBTQ+ status | Select | Yes / No / Prefer not to say |
+| Race/ethnicity disclosure | Toggle | — |
+| Remote preference | Radio | Remote / Hybrid / Onsite / Any |
+| Employment types | Multi-select | Full-time / Part-time / Contract / Internship / Temporary |
+| Seniority level | Multi-select | Intern / Entry / Mid / Senior / Lead / Staff / Principal / Director / VP / C-level |
+| Salary period | Select | Yearly / Monthly / Hourly |
+| Salary currency | Select, default **USD** | Major currencies |
+| Notice period | Select | Immediate / 1 wk / 2 wks / 1 mo / 2 mos / 3 mos |
+| Travel willingness | Select | None / Up to 25% / Up to 50% / Up to 75% / 100% |
+| Shift preference | Select | Day / Evening / Night / Rotating / Any |
+| Security clearance | Select | None / Public Trust / Confidential / Secret / Top Secret / TS/SCI |
+| Drivers license | Radio | Yes / No |
+| Own transport | Radio | Yes / No |
+| Has passport | Radio | Yes / No |
+| Industries (desired/excluded) | Multi-select | Standard NAICS-style industry list |
+| Languages → proficiency | Select | Native / Fluent / Professional / Conversational / Basic |
+| Skills → proficiency | Select | Beginner / Intermediate / Advanced / Expert |
+| Education → degree | Select | High School / Associate / Bachelor's / Master's / MBA / PhD / Other |
+| Cover letter tone | Select | Professional / Friendly / Enthusiastic / Concise / Formal |
 
-✅ Gate: extension captures and Supabase receives the job.
+### Date pickers
+Use shadcn `Calendar` inside `Popover` (with `pointer-events-auto`) for every date field — DOB, visa expiry, earliest start, education start/end, experience start/end, certification issued/expiry.
 
----
+### Files touched
+- `src/routes/_authenticated/onboarding.tsx` — wizard steps swapped to dropdowns + calendars
+- `src/routes/_authenticated/profile.tsx` (or wherever profile editor lives) — same input upgrades
+- New `src/lib/profile-options.ts` — central source for all option lists (states, countries, visa types, EEO, industries, etc.)
+- New `src/components/DatePickerField.tsx` — reusable calendar field
+- `src/routes/_authenticated/billing.tsx` — owner badge + bypass display
+- `src/lib/billing.functions.ts` / quota checks — owner role bypass
 
-## Phase 3 — VPS worker bootstrap (30 min)
+## Out of scope (ask if you want them)
+- Editing Free plan limits globally (Option B)
+- Adding non-US states/provinces in the same dropdown
+- Live Stripe checkout (you already said test/single-user)
 
-1. Provision a fresh Ubuntu 22.04 VPS (any 2 vCPU / 4 GB box: Hetzner, DO, Vultr).
-2. SSH in as root, then run the **one-line bootstrap** copied from `/setup` page in the web app. It installs Docker, clones the worker, writes `.env` from your tokens.
-3. Edit `worker/.env` and add:
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (from `/setup`)
-   - `USER_ID` (your auth uid, shown on `/setup`)
-   - `COOKIE_PASSPHRASE` (same as extension)
-   - `LOVABLE_API_KEY` (already configured in cloud, copy from `/setup`)
-   - optional: `APIFY_TOKEN`, `2CAPTCHA_KEY`, proxy creds
-4. `make up` → `make logs` → confirm heartbeat lines every ~30s.
-5. Web `/worker` page → green dot, version visible, last_seen < 1 min.
-6. Extension popup → worker dot turns green.
-
-✅ Gate: worker heartbeats, web + extension both see it online.
-
----
-
-## Phase 4 — Source scraping (20 min)
-
-1. `/sources` → enable **1 free source first** (e.g. `remoteok` or `arbeitnow` — no API key needed).
-2. `make scrape remoteok` on VPS, watch logs.
-3. `/jobs` → new rows appear, `score` populated, filter matching works.
-4. Then enable 1 Apify source (LinkedIn) if you have an Apify token. Confirm scrape.
-5. Test cookie-based scraping: extension `/extension` → "Sync LinkedIn cookies" → on VPS run `python -m app.cli scrape apify:linkedin` and confirm logged-in scraping works (no login wall).
-
-✅ Gate: jobs flowing, scored, deduped.
-
----
-
-## Phase 5 — Apply pipeline (the critical path, 30 min)
-
-1. Make sure your **resume** is uploaded under `/profile` (LaTeX template + markers), **cover letter tone** set.
-2. `/automation` → set max_applies_per_day=2, aggressiveness=1 (low, for testing).
-3. Pick one matched job in `/jobs` → click **"Queue apply"** manually (don't enable autopilot yet).
-4. On VPS: `make apply 1` → watch:
-   - phase progression in `/applications` Kanban: `discovered → scored → tailored → queued → applying → submitted` (or `needs_review`)
-   - screenshots appear in the application detail page timeline
-   - `application_events` rows in DB
-5. Verify the actual portal received the submission (check email confirmation from the portal).
-6. Repeat for each portal you care about (Greenhouse, Lever, Ashby — these are most reliable; Workday/LinkedIn are flakier).
-
-✅ Gate: at least 1 real application submitted end-to-end with screenshot proof.
-
----
-
-## Phase 6 — Autopilot loop (1 hour observation)
-
-1. `/automation` → flip **enabled = true**.
-2. Watch `/dashboard` live activity panel for 30–60 min.
-3. Confirm: scrape → score → queue → apply happens without manual intervention.
-4. Trigger a failure (e.g. block a portal in firewall) → confirm:
-   - error_events row appears in `/admin/observability`
-   - retry with exponential backoff (`next_retry_at` populated)
-   - notification email sent (if `notify_apply_failed` on)
-
-✅ Gate: hands-off autopilot for 1 hour, errors handled gracefully.
-
----
-
-## Phase 7 — Admin / observability / billing (15 min)
-
-1. `/admin/system` → worker fleet view, queue counts, kill-switch works.
-2. `/admin/observability` → resolve a test error, confirm it disappears.
-3. `/admin/audit` → see every mutation you did during testing; export CSV.
-4. `/admin/flags` → toggle a feature flag, confirm it's read on next page load.
-5. `/billing` → simulate end-of-trial (or wait), confirm usage bars match `/admin/system`.
-
-✅ Gate: admin console reflects reality.
-
----
-
-## Phase 8 — Notifications & daily summary (next morning)
-
-1. Wait until your configured `daily_summary_time` → confirm summary email received.
-2. Kill the worker (`make down`) for >5 min → confirm offline alert email.
-
----
-
-## What to do when something fails
-
-| Symptom | First check |
-|---|---|
-| Web blank screen | I run `cloud_status` + dev-server logs |
-| Extension not capturing | DevTools console on the captured page, then extension service-worker logs |
-| Worker can't connect to DB | `worker/.env` SUPABASE_* values, then `make logs` |
-| Apply stuck in `applying` | Application detail page → screenshot timeline → last DOM snapshot |
-| 401 on `/api/public/sources/*` | Pairing token wrong/expired — regenerate from `/extension` |
-
-Ping me at any failed gate with the symptom + which phase — I'll diagnose with logs and DB queries before changing code.
-
----
-
-## What I am NOT claiming is done
-
-- **Real portal coverage**: Greenhouse / Lever / Ashby / Workable are well-tested patterns; LinkedIn EasyApply, Workday, Indeed are best-effort and will need per-tenant tweaks once you hit real jobs.
-- **Stripe live mode**: billing tables + UI exist; Stripe webhook is wired for test mode. Live keys + production webhook still need to be set when you're ready to charge.
-- **2FA / TOTP UI**: backend ready, the enrollment screen is in `/privacy` but not battle-tested.
-- **Multi-portal CAPTCHA solving**: 2captcha is wired but you'll burn credits on hard ones.
-
-Everything else (schema, RLS, audit, RBAC, admin, onboarding, observability, retry/DLQ, idempotency, extension↔web↔worker sync) is implemented and ready for the Phase 1→8 walkthrough above.
+Approve and I'll ship it in one pass.

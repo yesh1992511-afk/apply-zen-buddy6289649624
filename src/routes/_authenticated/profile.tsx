@@ -9,10 +9,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DatePickerField } from "@/components/DatePickerField";
+import {
+  COUNTRIES, US_STATES, US_METROS, WORK_AUTH_US,
+  GENDER, PRONOUNS, ETHNICITY_EEOC, VETERAN_STATUS, DISABILITY_STATUS, LGBTQ_STATUS,
+  REMOTE_PREFERENCE, INDUSTRIES, SALARY_PERIOD, CURRENCIES,
+  NOTICE_PERIOD_WEEKS, TRAVEL_WILLINGNESS, SHIFT_PREFERENCE, SECURITY_CLEARANCE,
+  PROFICIENCY_LANGUAGE, PROFICIENCY_SKILL, DEGREE, COVER_LETTER_TONE, SCREENING_OPTIONS,
+} from "@/lib/profile-options";
+
 
 import { toast } from "sonner";
 import { useUser } from "@/lib/useAuth";
-import { Plus, Trash2, Upload } from "lucide-react";
+import { Plus, Trash2, Upload, X } from "lucide-react";
+
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: [{ title: "Profile — JobPilot" }] }),
@@ -159,12 +170,12 @@ function ProfilePage() {
           <Card><CardContent className="grid gap-4 pt-6 md:grid-cols-2">
             <Field label="Full name" value={getStr("full_name")} onChange={(v) => set("full_name", v)} />
             <Field label="Preferred name" value={getStr("preferred_name")} onChange={(v) => set("preferred_name", v)} />
-            <Field label="Pronouns" value={getStr("pronouns")} onChange={(v) => set("pronouns", v)} />
-            <Field label="Date of birth" type="date" value={getStr("date_of_birth")} onChange={(v) => set("date_of_birth", v || null)} />
+            <SelectField label="Pronouns" value={getStr("pronouns")} onChange={(v) => set("pronouns", v)} options={PRONOUNS} />
+            <DatePickerField label="Date of birth" value={getStr("date_of_birth")} onChange={(v) => set("date_of_birth", v)} endMonth={new Date()} disabled={(d) => d > new Date()} />
             <Field label="Email" value={getStr("email")} onChange={(v) => set("email", v)} />
             <Field label="Phone" value={getStr("phone")} onChange={(v) => set("phone", v)} />
-            <Field label="Nationality" value={getStr("nationality")} onChange={(v) => set("nationality", v)} />
-            <Field label="Timezone" value={getStr("timezone")} onChange={(v) => set("timezone", v)} />
+            <SelectField label="Nationality" value={getStr("nationality")} onChange={(v) => set("nationality", v)} options={COUNTRIES} />
+            <Field label="Timezone (e.g. America/New_York)" value={getStr("timezone")} onChange={(v) => set("timezone", v)} />
             <Field label="Headline" value={getStr("headline")} onChange={(v) => set("headline", v)} className="md:col-span-2" />
             <div className="md:col-span-2">
               <Label>Summary</Label>
@@ -180,52 +191,47 @@ function ProfilePage() {
           <Card><CardContent className="grid gap-4 pt-6 md:grid-cols-2">
             <Field label="Street address" value={getStr("street_address")} onChange={(v) => set("street_address", v)} className="md:col-span-2" />
             <Field label="Address line 2" value={getStr("address_line_2")} onChange={(v) => set("address_line_2", v)} className="md:col-span-2" />
-            <Field label="City" value={getStr("city")} onChange={(v) => set("city", v)} />
-            <Field label="State / region" value={getStr("state_region")} onChange={(v) => set("state_region", v)} />
-            <Field label="Postal code" value={getStr("postal_code")} onChange={(v) => set("postal_code", v)} />
-            <Field label="Country" value={getStr("country")} onChange={(v) => set("country", v)} />
-            <Field label="Location (display)" value={getStr("location")} onChange={(v) => set("location", v)} className="md:col-span-2" />
+            <SelectField label="City (US metro)" value={getStr("city")} onChange={(v) => set("city", v)} options={US_METROS} allowCustom />
+            <SelectField label="State" value={getStr("state_region")} onChange={(v) => set("state_region", v)} options={US_STATES} />
+            <Field label="ZIP / Postal code" value={getStr("postal_code")} onChange={(v) => set("postal_code", v)} />
+            <SelectField label="Country" value={getStr("country") || "United States"} onChange={(v) => set("country", v)} options={COUNTRIES} />
+            <Field label="Display location (e.g. New York, NY)" value={getStr("location")} onChange={(v) => set("location", v)} className="md:col-span-2" />
           </CardContent></Card>
         </TabsContent>
 
         {/* WORK AUTH */}
         <TabsContent value="workauth" className="space-y-4 pt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Work authorization</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">U.S. work authorization</CardTitle></CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <Field label="Primary work auth country (e.g. US, UK, EU, IN)" value={getStr("work_auth_country")} onChange={(v) => set("work_auth_country", v)} />
-              <Field label="Visa status (Citizen, PR, H1B, F1, etc.)" value={getStr("visa_status")} onChange={(v) => set("visa_status", v)} />
-              <Field label="Visa expiry" type="date" value={getStr("visa_expiry")} onChange={(v) => set("visa_expiry", v || null)} />
-              <Field label="Work authorization (legacy)" value={getStr("work_authorization")} onChange={(v) => set("work_authorization", v)} />
-              <div className="md:col-span-2">
-                <Label>Other countries you're authorized to work in (comma-separated)</Label>
-                <Input value={getArr("authorized_countries").join(", ")} onChange={(e) => set("authorized_countries", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
-              </div>
-              <SwitchRow label="Needs sponsorship now" checked={getBool("needs_visa_now")} onChange={(v) => set("needs_visa_now", v)} />
-              <SwitchRow label="Will need sponsorship in the future" checked={getBool("needs_visa_future")} onChange={(v) => set("needs_visa_future", v)} />
-              <SwitchRow label="Requires sponsorship (legacy)" checked={getBool("requires_sponsorship")} onChange={(v) => set("requires_sponsorship", v)} />
-              <SwitchRow label="Has passport" checked={getBool("has_passport")} onChange={(v) => set("has_passport", v)} />
-              <Field label="Passport country" value={getStr("passport_country")} onChange={(v) => set("passport_country", v)} />
-              <SwitchRow label="Driver's license" checked={getBool("drivers_license")} onChange={(v) => set("drivers_license", v)} />
-              <SwitchRow label="Own transport" checked={getBool("has_own_transport")} onChange={(v) => set("has_own_transport", v)} />
-              <Field label="Security clearance (None, Confidential, Secret, TS)" value={getStr("security_clearance")} onChange={(v) => set("security_clearance", v)} />
+              <SelectField label="Work auth country" value={getStr("work_auth_country") || "United States"} onChange={(v) => set("work_auth_country", v)} options={COUNTRIES} />
+              <SelectField label="Visa / work auth status" value={getStr("visa_status")} onChange={(v) => { set("visa_status", v); set("work_authorization", v); }} options={WORK_AUTH_US} />
+              <DatePickerField label="Visa expiry (if applicable)" value={getStr("visa_expiry")} onChange={(v) => set("visa_expiry", v)} />
+              <SelectField label="Do you require sponsorship NOW?" value={getBool("needs_visa_now") ? "Yes" : "No"} onChange={(v) => set("needs_visa_now", v === "Yes")} options={["Yes", "No"]} />
+              <SelectField label="Will you require sponsorship in the FUTURE?" value={getBool("needs_visa_future") ? "Yes" : "No"} onChange={(v) => { set("needs_visa_future", v === "Yes"); set("requires_sponsorship", v === "Yes"); }} options={["Yes", "No"]} />
+              <MultiSelectChips label="Other countries authorized to work in" values={getArr("authorized_countries")} onChange={(arr) => set("authorized_countries", arr)} options={COUNTRIES} className="md:col-span-2" />
+              <SelectField label="Has passport" value={getBool("has_passport") ? "Yes" : "No"} onChange={(v) => set("has_passport", v === "Yes")} options={["Yes", "No"]} />
+              <SelectField label="Passport country" value={getStr("passport_country")} onChange={(v) => set("passport_country", v)} options={COUNTRIES} />
+              <SelectField label="Driver's license" value={getBool("drivers_license") ? "Yes" : "No"} onChange={(v) => set("drivers_license", v === "Yes")} options={["Yes", "No"]} />
+              <SelectField label="Own reliable transportation" value={getBool("has_own_transport") ? "Yes" : "No"} onChange={(v) => set("has_own_transport", v === "Yes")} options={["Yes", "No"]} />
+              <SelectField label="Security clearance" value={getStr("security_clearance")} onChange={(v) => set("security_clearance", v)} options={SECURITY_CLEARANCE} />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">EEOC / voluntary demographics</CardTitle>
-              <CardDescription>Only auto-filled when the share toggle is on. Stored privately and only used for portals that ask.</CardDescription>
+              <CardTitle className="text-base">EEOC / voluntary self-identification</CardTitle>
+              <CardDescription>Standard U.S. employer self-ID. Only auto-filled when the share toggle is on.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
                 <SwitchRow label="Share demographics with portals that ask" checked={getBool("share_demographics")} onChange={(v) => set("share_demographics", v)} />
               </div>
-              <Field label="Gender" value={getStr("gender")} onChange={(v) => set("gender", v)} />
-              <Field label="Ethnicity" value={getStr("ethnicity")} onChange={(v) => set("ethnicity", v)} />
-              <Field label="Veteran status" value={getStr("veteran_status")} onChange={(v) => set("veteran_status", v)} />
-              <Field label="Disability status" value={getStr("disability_status")} onChange={(v) => set("disability_status", v)} />
-              <Field label="LGBTQ+ status" value={getStr("lgbtq_status")} onChange={(v) => set("lgbtq_status", v)} />
+              <SelectField label="Gender" value={getStr("gender")} onChange={(v) => set("gender", v)} options={GENDER} />
+              <SelectField label="Race / ethnicity" value={getStr("ethnicity")} onChange={(v) => set("ethnicity", v)} options={ETHNICITY_EEOC} />
+              <SelectField label="Veteran status" value={getStr("veteran_status")} onChange={(v) => set("veteran_status", v)} options={VETERAN_STATUS} />
+              <SelectField label="Disability status" value={getStr("disability_status")} onChange={(v) => set("disability_status", v)} options={DISABILITY_STATUS} />
+              <SelectField label="LGBTQ+ status" value={getStr("lgbtq_status")} onChange={(v) => set("lgbtq_status", v)} options={LGBTQ_STATUS} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -234,15 +240,15 @@ function ProfilePage() {
         <TabsContent value="comp" className="space-y-4 pt-4">
           <Card><CardContent className="grid gap-4 pt-6 md:grid-cols-2">
             <Field label="Desired salary" type="number" value={getStr("desired_salary")} onChange={(v) => set("desired_salary", v ? Number(v) : null)} />
-            <Field label="Salary period (yearly / hourly)" value={getStr("salary_period")} onChange={(v) => set("salary_period", v)} />
+            <SelectFieldKV label="Salary period" value={getStr("salary_period") || "yearly"} onChange={(v) => set("salary_period", v)} options={SALARY_PERIOD} />
             <Field label="Current salary" type="number" value={getStr("current_salary")} onChange={(v) => set("current_salary", v ? Number(v) : null)} />
-            <Field label="Currency" value={getStr("salary_currency")} onChange={(v) => set("salary_currency", v)} />
+            <SelectField label="Currency" value={getStr("salary_currency") || "USD"} onChange={(v) => set("salary_currency", v)} options={CURRENCIES} />
             <Field label="Salary min (filter)" type="number" value={getStr("salary_min")} onChange={(v) => set("salary_min", v ? Number(v) : null)} />
             <Field label="Salary max (filter)" type="number" value={getStr("salary_max")} onChange={(v) => set("salary_max", v ? Number(v) : null)} />
-            <Field label="Notice period (weeks)" type="number" value={getStr("notice_period_weeks")} onChange={(v) => set("notice_period_weeks", v ? Number(v) : null)} />
-            <Field label="Earliest start date" type="date" value={getStr("earliest_start_date")} onChange={(v) => set("earliest_start_date", v || null)} />
+            <SelectFieldKV label="Notice period" value={getStr("notice_period_weeks")} onChange={(v) => set("notice_period_weeks", v ? Number(v) : null)} options={NOTICE_PERIOD_WEEKS.map((o) => ({ value: String(o.value), label: o.label }))} />
+            <DatePickerField label="Earliest start date" value={getStr("earliest_start_date")} onChange={(v) => set("earliest_start_date", v)} startMonth={new Date()} />
             <Field label="Available hours / week" type="number" value={getStr("available_hours_per_week")} onChange={(v) => set("available_hours_per_week", v ? Number(v) : null)} />
-            <Field label="Cover letter tone" value={getStr("cover_letter_tone")} onChange={(v) => set("cover_letter_tone", v)} />
+            <SelectFieldKV label="Cover letter tone" value={getStr("cover_letter_tone") || "professional"} onChange={(v) => set("cover_letter_tone", v)} options={COVER_LETTER_TONE} />
             <SwitchRow label="Open to full-time" checked={getBool("open_to_fulltime")} onChange={(v) => set("open_to_fulltime", v)} />
             <SwitchRow label="Open to part-time" checked={getBool("open_to_parttime")} onChange={(v) => set("open_to_parttime", v)} />
             <SwitchRow label="Open to contract" checked={getBool("open_to_contract")} onChange={(v) => set("open_to_contract", v)} />
@@ -253,30 +259,19 @@ function ProfilePage() {
         {/* PREFERENCES */}
         <TabsContent value="prefs" className="space-y-4 pt-4">
           <Card><CardContent className="grid gap-4 pt-6 md:grid-cols-2">
-            <Field label="Remote preference (remote / hybrid / onsite / any)" value={getStr("remote_preference")} onChange={(v) => set("remote_preference", v)} />
-            <Field label="Travel willingness (0-25%, 25-50%, …)" value={getStr("travel_willingness")} onChange={(v) => set("travel_willingness", v)} />
-            <Field label="Shift preference (day / night / flexible)" value={getStr("shift_preference")} onChange={(v) => set("shift_preference", v)} />
+            <SelectFieldKV label="Remote preference" value={getStr("remote_preference") || "any"} onChange={(v) => set("remote_preference", v)} options={REMOTE_PREFERENCE} />
+            <SelectField label="Travel willingness" value={getStr("travel_willingness")} onChange={(v) => set("travel_willingness", v)} options={TRAVEL_WILLINGNESS} />
+            <SelectField label="Shift preference" value={getStr("shift_preference")} onChange={(v) => set("shift_preference", v)} options={SHIFT_PREFERENCE} />
             <SwitchRow label="Willing to relocate" checked={getBool("willing_to_relocate")} onChange={(v) => set("willing_to_relocate", v)} />
-            <div className="md:col-span-2">
-              <Label>Preferred locations (comma-separated)</Label>
-              <Input value={getArr("preferred_locations").join(", ")} onChange={(e) => set("preferred_locations", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
-            </div>
-            <div className="md:col-span-2">
-              <Label>Desired titles (comma-separated)</Label>
-              <Input value={getArr("desired_titles").join(", ")} onChange={(e) => set("desired_titles", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
-            </div>
-            <div className="md:col-span-2">
-              <Label>Desired industries</Label>
-              <Input value={getArr("desired_industries").join(", ")} onChange={(e) => set("desired_industries", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
-            </div>
-            <div className="md:col-span-2">
-              <Label>Excluded industries</Label>
-              <Input value={getArr("excluded_industries").join(", ")} onChange={(e) => set("excluded_industries", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
-            </div>
+            <MultiSelectChips label="Preferred locations" values={getArr("preferred_locations")} onChange={(arr) => set("preferred_locations", arr)} options={US_METROS} allowCustom className="md:col-span-2" />
+            <MultiSelectChips label="Desired job titles" values={getArr("desired_titles")} onChange={(arr) => set("desired_titles", arr)} options={["Software Engineer","Senior Software Engineer","Staff Engineer","Frontend Engineer","Backend Engineer","Full Stack Engineer","Data Engineer","ML Engineer","Data Scientist","DevOps Engineer","SRE","Product Manager","Engineering Manager","Designer","Product Designer"]} allowCustom className="md:col-span-2" />
+            <MultiSelectChips label="Desired industries" values={getArr("desired_industries")} onChange={(arr) => set("desired_industries", arr)} options={INDUSTRIES} className="md:col-span-2" />
+            <MultiSelectChips label="Excluded industries" values={getArr("excluded_industries")} onChange={(arr) => set("excluded_industries", arr)} options={INDUSTRIES} className="md:col-span-2" />
+            {/* Employment type & seniority preferences live on filters, not the profile */}
+
           </CardContent></Card>
         </TabsContent>
 
-        {/* LINKS */}
         <TabsContent value="links" className="space-y-4 pt-4">
           <Card><CardContent className="grid gap-4 pt-6 md:grid-cols-2">
             <Field label="LinkedIn URL" value={getStr("linkedin_url")} onChange={(v) => set("linkedin_url", v)} />
@@ -325,6 +320,85 @@ function SwitchRow({ label, checked, onChange }: { label: string; checked: boole
     </label>
   );
 }
+
+function SelectField({
+  label, value, onChange, options, allowCustom, className,
+}: { label: string; value: string; onChange: (v: string) => void; options: string[]; allowCustom?: boolean; className?: string }) {
+  const known = options.includes(value);
+  const showCustom = allowCustom && value && !known;
+  return (
+    <div className={className}>
+      <Label>{label}</Label>
+      <Select value={known ? value : (showCustom ? "__custom__" : "")} onValueChange={(v) => { if (v === "__custom__") onChange(""); else onChange(v); }}>
+        <SelectTrigger className="mt-1"><SelectValue placeholder="Select…" /></SelectTrigger>
+        <SelectContent className="max-h-72">
+          {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+          {allowCustom && <SelectItem value="__custom__">Other / custom…</SelectItem>}
+        </SelectContent>
+      </Select>
+      {showCustom && (
+        <Input className="mt-2" placeholder="Type custom value" value={value} onChange={(e) => onChange(e.target.value)} />
+      )}
+    </div>
+  );
+}
+
+function SelectFieldKV({
+  label, value, onChange, options, className,
+}: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; className?: string }) {
+  return (
+    <div className={className}>
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="mt-1"><SelectValue placeholder="Select…" /></SelectTrigger>
+        <SelectContent className="max-h-72">
+          {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function MultiSelectChips({
+  label, values, onChange, options, allowCustom, className,
+}: { label: string; values: string[]; onChange: (v: string[]) => void; options: string[]; allowCustom?: boolean; className?: string }) {
+  const [custom, setCustom] = useState("");
+  const remaining = options.filter((o) => !values.includes(o));
+  return (
+    <div className={className}>
+      <Label>{label}</Label>
+      <div className="mt-1 flex flex-wrap gap-1.5 rounded-md border border-input bg-transparent p-2 min-h-9">
+        {values.length === 0 && <span className="text-xs text-muted-foreground">None selected</span>}
+        {values.map((v) => (
+          <span key={v} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs">
+            {v}
+            <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} className="text-muted-foreground hover:text-foreground">
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Select value="" onValueChange={(v) => { if (v) onChange([...values, v]); }}>
+          <SelectTrigger className="flex-1"><SelectValue placeholder="Add from list…" /></SelectTrigger>
+          <SelectContent className="max-h-72">
+            {remaining.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+            {remaining.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">All added</div>}
+          </SelectContent>
+        </Select>
+        {allowCustom && (
+          <div className="flex gap-1">
+            <Input placeholder="Custom" value={custom} onChange={(e) => setCustom(e.target.value)} className="w-32" />
+            <Button type="button" size="sm" variant="outline" onClick={() => { if (custom.trim() && !values.includes(custom.trim())) { onChange([...values, custom.trim()]); setCustom(""); } }}>
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 const SCREENING_PRESETS: { key: string; label: string }[] = [
   { key: "authorized_to_work", label: "Are you legally authorized to work in this country?" },
@@ -383,6 +457,7 @@ function ScreeningAnswers({ value, onChange }: { value: Record<string, string>; 
       {entries.length === 0 && <p className="text-center text-sm text-muted-foreground">No screening answers yet.</p>}
       {entries.map(([k, v]) => {
         const preset = SCREENING_PRESETS.find((p) => p.key === k);
+        const opts = SCREENING_OPTIONS[k];
         return (
           <Card key={k}>
             <CardContent className="space-y-2 pt-6">
@@ -391,24 +466,33 @@ function ScreeningAnswers({ value, onChange }: { value: Record<string, string>; 
                 <Button size="sm" variant="ghost" onClick={() => remove(k)}><Trash2 className="h-4 w-4" /></Button>
               </div>
               <p className="text-xs text-muted-foreground">key: <code>{k}</code></p>
-              <Textarea rows={2} value={v} onChange={(e) => update(k, e.target.value)} />
+              {opts ? (
+                <Select value={v} onValueChange={(nv) => update(k, nv)}>
+                  <SelectTrigger><SelectValue placeholder="Select an answer…" /></SelectTrigger>
+                  <SelectContent>{opts.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                </Select>
+              ) : (
+                <Textarea rows={2} value={v} onChange={(e) => update(k, e.target.value)} />
+              )}
             </CardContent>
           </Card>
         );
       })}
+
     </div>
   );
 }
 
-const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: string; multi?: boolean }[]; title: string }> = {
+type FieldDef = { key: string; label: string; type?: string; multi?: boolean; options?: string[]; dateField?: boolean };
+const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
   experiences: {
     title: "Experience",
     fields: [
       { key: "company", label: "Company" },
       { key: "title", label: "Title" },
       { key: "location", label: "Location" },
-      { key: "start_date", label: "Start (YYYY-MM-DD)", type: "date" },
-      { key: "end_date", label: "End (YYYY-MM-DD)", type: "date" },
+      { key: "start_date", label: "Start date", dateField: true },
+      { key: "end_date", label: "End date (leave empty if current)", dateField: true },
       { key: "bullets", label: "Bullets (one per line)", multi: true },
       { key: "tech", label: "Tech (comma-separated)", multi: true },
     ],
@@ -426,9 +510,9 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
   skills: {
     title: "Skill",
     fields: [
-      { key: "name", label: "Name" },
-      { key: "category", label: "Category" },
-      { key: "proficiency", label: "Proficiency" },
+      { key: "name", label: "Skill name" },
+      { key: "category", label: "Category", options: ["Language", "Framework", "Database", "Cloud / DevOps", "Tool", "Soft skill", "Other"] },
+      { key: "proficiency", label: "Proficiency", options: PROFICIENCY_SKILL },
       { key: "years", label: "Years", type: "number" },
     ],
   },
@@ -436,10 +520,10 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
     title: "Education",
     fields: [
       { key: "school", label: "School" },
-      { key: "degree", label: "Degree" },
-      { key: "field", label: "Field" },
-      { key: "start_date", label: "Start", type: "date" },
-      { key: "end_date", label: "End", type: "date" },
+      { key: "degree", label: "Degree", options: DEGREE },
+      { key: "field", label: "Field of study" },
+      { key: "start_date", label: "Start date", dateField: true },
+      { key: "end_date", label: "End date (or expected)", dateField: true },
       { key: "gpa", label: "GPA" },
       { key: "notes", label: "Notes" },
     ],
@@ -448,7 +532,7 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
     title: "Language",
     fields: [
       { key: "name", label: "Language" },
-      { key: "proficiency", label: "Proficiency (Native, Fluent, Conversational, Basic)" },
+      { key: "proficiency", label: "Proficiency", options: PROFICIENCY_LANGUAGE },
     ],
   },
   certifications: {
@@ -456,8 +540,8 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
     fields: [
       { key: "name", label: "Name" },
       { key: "issuer", label: "Issuer" },
-      { key: "issued_date", label: "Issued", type: "date" },
-      { key: "expiry_date", label: "Expiry", type: "date" },
+      { key: "issued_date", label: "Issued", dateField: true },
+      { key: "expiry_date", label: "Expiry (if any)", dateField: true },
       { key: "credential_id", label: "Credential ID" },
       { key: "url", label: "URL" },
     ],
@@ -466,13 +550,14 @@ const SCHEMAS: Record<string, { fields: { key: string; label: string; type?: str
     title: "Reference",
     fields: [
       { key: "name", label: "Name" },
-      { key: "relationship", label: "Relationship" },
+      { key: "relationship", label: "Relationship", options: ["Manager", "Colleague", "Direct report", "Client", "Professor", "Mentor", "Other"] },
       { key: "company", label: "Company" },
       { key: "email", label: "Email" },
       { key: "phone", label: "Phone" },
     ],
   },
 };
+
 
 function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
   const { user } = useUser();
@@ -538,6 +623,27 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
                   </div>
                 );
               }
+              if (f.dateField) {
+                return (
+                  <DatePickerField
+                    key={f.key}
+                    label={f.label}
+                    value={(val as string | null) ?? ""}
+                    onChange={(v) => update(it.id, { [f.key]: v })}
+                  />
+                );
+              }
+              if (f.options) {
+                return (
+                  <SelectField
+                    key={f.key}
+                    label={f.label}
+                    value={(val as string | null) ?? ""}
+                    onChange={(v) => update(it.id, { [f.key]: v })}
+                    options={f.options}
+                  />
+                );
+              }
               return (
                 <div key={f.key}>
                   <Label>{f.label}</Label>
@@ -545,6 +651,7 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
                 </div>
               );
             })}
+
             <div className="md:col-span-2 flex justify-end">
               <Button size="sm" variant="ghost" onClick={() => remove(it.id)}><Trash2 className="h-4 w-4" /></Button>
             </div>
