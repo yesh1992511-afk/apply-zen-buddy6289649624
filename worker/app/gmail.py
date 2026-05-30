@@ -67,12 +67,15 @@ def send_and_log(kind: str, subject: str, body: str, *, job_id: str | None = Non
                  application_id: str | None = None, html: str | None = None,
                  recipient_override: str | None = None) -> bool:
     """Send via Gmail and write to notification_log."""
-    # Resolve recipient
+    # Resolve recipient: explicit override → notification_settings → profile.email → gmail account itself
     settings = db().table("notification_settings").select("recipient_email").eq("user_id", user_id()).maybe_single().execute().data
     recipient = recipient_override or (settings or {}).get("recipient_email")
     if not recipient:
         prof = db().table("profile").select("email").eq("user_id", user_id()).maybe_single().execute().data
         recipient = (prof or {}).get("email")
+    if not recipient:
+        c = _creds()
+        recipient = (c or {}).get("email")
     if not recipient:
         db_log("warn", f"No recipient email for notification kind={kind}", scope="gmail")
         return False
