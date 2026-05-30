@@ -333,13 +333,18 @@ function Dashboard() {
             />
           ) : (
             <div className="-mx-1 max-h-[360px] space-y-0.5 overflow-y-auto pr-1">
-              {recent.map((r) => {
+              {recent.map((r, i) => {
                 const colorCls =
                   r.level === "error" ? "bg-destructive" :
                   r.level === "warn" ? "bg-warning" :
                   r.level === "info" ? "bg-success" : "bg-muted-foreground";
                 return (
-                  <div key={r.id} className="group flex items-start gap-2.5 rounded-md px-1.5 py-1.5 text-sm transition-colors hover:bg-surface-2">
+                  <div
+                    key={r.id}
+                    style={{ animationDelay: `${Math.min(i * 25, 240)}ms` }}
+                    className="row-in group flex items-start gap-2.5 rounded-md px-1.5 py-1.5 text-sm transition-colors hover:bg-surface-2"
+                  >
+
                     <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${colorCls}`} />
                     <span className="font-mono text-[10px] tabular-nums text-muted-foreground/80 whitespace-nowrap pt-1">
                       {new Date(r.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
