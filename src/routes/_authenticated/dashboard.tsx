@@ -13,6 +13,7 @@ import { CountUp } from "@/components/CountUp";
 import { CardSkeleton } from "@/components/skeletons";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { LiveDot } from "@/components/LiveDot";
+import { SyncHealthCard } from "@/components/SyncHealthCard";
 
 
 
@@ -167,6 +168,10 @@ function Dashboard() {
           <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
+
+      <SyncHealthCard />
+
+
 
       {!stats && (
         <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">

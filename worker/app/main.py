@@ -67,24 +67,29 @@ async def tick_heartbeat():
 
 async def realtime_sources_listener():
     """Subscribe to postgres_changes on sources for our user and wake the loop.
-    Falls back silently if realtime is unavailable so the cadence tick still runs."""
-    try:
-        from supabase import create_client
-        client = create_client(settings().SUPABASE_URL, settings().SUPABASE_SERVICE_ROLE_KEY)
-        uid = user_id()
+    Reconnects on failure. Falls back silently — cadence tick still runs."""
+    uid = user_id()
+    while True:
+        try:
+            from supabase import create_client
+            client = create_client(settings().SUPABASE_URL, settings().SUPABASE_SERVICE_ROLE_KEY)
 
-        def _on_change(payload):
-            db_log("info", "sources changed (realtime) — forcing tick", scope="scheduler")
-            _wake.set()
+            def _on_change(payload):
+                db_log("info", "sources changed (realtime) — forcing tick", scope="scheduler")
+                _wake.set()
 
-        channel = client.channel(f"worker-sources-{uid}")
-        channel.on_postgres_changes(
-            event="*", schema="public", table="sources",
-            filter=f"user_id=eq.{uid}", callback=_on_change,
-        ).subscribe()
-        db_log("info", "realtime sources listener subscribed", scope="boot")
-    except Exception as e:
-        log.warning("realtime_listener_failed", error=str(e))
+            channel = client.channel(f"worker-sources-{uid}")
+            channel.on_postgres_changes(
+                event="*", schema="public", table="sources",
+                filter=f"user_id=eq.{uid}", callback=_on_change,
+            ).subscribe()
+            db_log("info", "realtime sources listener subscribed", scope="boot")
+            # Keep the channel alive; supabase-py runs realtime in a background thread.
+            while True:
+                await asyncio.sleep(60)
+        except Exception as e:
+            log.warning("realtime_listener_failed", error=str(e))
+            await asyncio.sleep(15)  # reconnect backoff
 
 
 async def wake_loop():
@@ -107,7 +112,7 @@ async def main():
     sched.add_job(tick_apply, IntervalTrigger(seconds=45), id="apply", max_instances=1)
     sched.start()
     beat()
-    await realtime_sources_listener()
+    asyncio.create_task(realtime_sources_listener())
     asyncio.create_task(wake_loop())
     db_log("info", "scheduler started", scope="boot")
     while True:

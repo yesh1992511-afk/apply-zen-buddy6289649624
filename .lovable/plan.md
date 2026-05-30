@@ -1,95 +1,78 @@
-# End-to-end Sync Overhaul — Extension ↔ Cloud ↔ VPS Worker
+# Polish & verification pass — extension ⇄ backend ⇄ VPS sync
 
-Close every gap you flagged and give the whole system a single nervous system: Supabase Realtime. Plus extension polish (offline queue, popup status, apply button) and the security-sensitive cookie pipe for VPS auto-apply.
+The deep overhaul from the previous turn already shipped: realtime invalidation, offline outbox, apply button, encrypted cookie pipe, realtime worker wake. This pass closes the remaining sharp edges so the loop actually feels live end-to-end, and adds the missing observability so you can *see* it sync.
 
-## Verified current state
-- Extension is read-only capture for 6 sites; `background.js` POSTs to `/api/public/sources/ingest-extension`. No offline queue, no retry, popup is static.
-- Worker writes to `worker_heartbeat` every loop (`heartbeat.py`) and polls `worker_commands` (`commands.py`); reads `sources` on a cadence but only via `run_due_sources()` tick — toggling a source doesn't wake the worker.
-- Realtime publication already covers `logs, worker_commands, worker_heartbeat, applications, jobs`. **`sources` is NOT in the publication** → enable/disable doesn't propagate.
-- Dashboard pages use plain `useQuery` with no realtime invalidation.
-- No `session_cookies` table; worker today must log in fresh on every apply.
+## What's already in place (verified)
 
-## Plan
+- `attachSupabaseAuth` wired in `src/start.ts` ✓
+- Realtime publication includes `sources`, `session_cookies` + `REPLICA IDENTITY FULL` ✓
+- Extension v1.1.0: outbox, retries, dedupe, popup status, apply button, cookie pipe ✓
+- Worker realtime subscription on `sources` with wake_loop ✓
+- `/api/public/sources/{ingest-extension, queue-apply, upload-cookies, worker-status}` all live ✓
 
-### 1. Realtime nervous system (frontend)
-- Add `src/hooks/useRealtimeInvalidate.ts` — one hook that subscribes to a table + filter and invalidates a TanStack Query key on every change. Cleans up on unmount.
-- Wire it into: `dashboard.tsx` (jobs, applications, worker_heartbeat), `sources.tsx` (sources), `applications/index.tsx` + `applications.$id.tsx` (applications, logs), `worker.tsx` (worker_commands, worker_heartbeat).
-- Add a tiny `<LiveDot>` component in the top bar that turns green when `worker_heartbeat.last_seen` is < 90 s old (driven by the realtime hook). Used in dashboard header + popup later.
+## Gaps this pass fixes
 
-### 2. Migration — close realtime + cookie gaps
-Single migration:
-- `ALTER PUBLICATION supabase_realtime ADD TABLE public.sources;`
-- `ALTER TABLE public.sources REPLICA IDENTITY FULL;` (and same for the 5 already-published tables that lack it, so realtime payloads include old rows).
-- New table `public.session_cookies` for the cookie pipe:
-  - columns: `user_id uuid`, `host text` (`linkedin.com`, `indeed.com`, …), `cookies jsonb` (encrypted blob client-side before insert), `updated_at`, `expires_at`.
-  - Unique `(user_id, host)`. RLS owner-only. GRANTs for `authenticated` + `service_role`.
-- New table `public.extension_outbox_dedupe` is NOT needed — extension keeps the queue in `chrome.storage.local`.
-- Index `(user_id, last_seen)` on `worker_heartbeat`.
+### 1. Extension popup never actually calls `status`
+`popup.js` shows a `workerDot` and `qappsEl` but the file is truncated and only renders once — there's no `refreshStatus()` that messages background. Result: dot stays grey, "queued apps" stays blank.
+**Fix:** finish `popup.js` so it sends `{type:"status"}` on open + every 10s, and renders `online`, `last_seen`, `pending`, `queued_apps`.
 
-### 3. Worker reacts to source toggles instantly
-- `worker/app/main.py`: in addition to the cadence tick, open a Supabase realtime subscription on `sources` filtered by `user_id`. On any change, push a `refresh_sources` event into the loop's queue so the next iteration re-reads `sources` and runs anything newly enabled / due.
-- New `worker/app/sessions.py`: helper to load decrypted cookies from `session_cookies` and inject into Playwright context per host. Updated in `worker/app/apply/browser.py` so every adapter that supports cookie auth uses them.
+### 2. Worker realtime listener uses sync supabase-py inside asyncio
+`supabase.create_client(...).channel(...).subscribe()` is synchronous and blocks the event loop on connect; on Python supabase v2 it also needs `realtime.connect()` first or it silently no-ops. Symptom: source toggle does nothing until the 2-minute tick.
+**Fix:** move the realtime client to `AsyncClient` (`acreate_client`) and `await channel.subscribe()`, with a reconnect loop on disconnect.
 
-### 4. Extension — capture, queue, status, apply button
-- **Offline queue + retry** (`background.js`): keep captures in `chrome.storage.local.outbox`. Flush on `online` event and on a 30 s alarm. Exponential backoff (5 s → 5 min). Per-URL dedupe so re-visits don't double-post.
-- **Popup** (`popup.html` + `popup.js`):
-  - Worker dot (green/red) from `worker_heartbeat` via fetch to a new tiny endpoint `/api/public/sources/worker-status`.
-  - "Captures today" + "Pending in queue".
-  - Big "Sync now" button → flushes queue.
-- **Apply button injection** — new `content-apply.js` declared for all 6 hosts. Adds a floating "Apply via JobPilot" button on each job page. Click → POSTs to new server route `/api/public/sources/queue-apply` which inserts an `applications` row with `status='queued'`; worker picks it up.
-- **Cookie pipe** — new content script `content-cookies.js` (host-permissioned, opt-in toggle in `options.html`). On a 12 h alarm, reads `document.cookie` (only what the page exposes), encrypts client-side with a user-supplied passphrase (stored in `chrome.storage.local` only), and POSTs to new server route `/api/public/sources/upload-cookies`. Passphrase never leaves the browser — server stores ciphertext only. Worker uses the same passphrase (set once in `worker/.env`) to decrypt. **The passphrase you'll need to set in two places: the extension Options page and the VPS `.env`.**
+### 3. `run_due_sources(force=True)` doesn't exist
+`wake_loop` passes `force=True` but `registry.run_due_sources()` only takes no args. The wake path raises and is swallowed.
+**Fix:** add `force: bool = False` to `run_due_sources` that bypasses the cadence check when true.
 
-### 5. New server routes
-All under `src/routes/api/public/sources/`:
-- `worker-status.ts` — GET; returns `{ online: bool, last_seen, version }` for caller's user. Token via existing `extension_tokens.token`.
-- `queue-apply.ts` — POST; body `{ token, job }`; upserts `jobs` row (status=`matched`), inserts `applications` row (`queued`).
-- `upload-cookies.ts` — POST; body `{ token, host, ciphertext, expires_at }`; upserts into `session_cookies`. Validates host against whitelist.
-- All four follow the existing `ingest-extension.ts` token-auth pattern (HMAC token from `extension_tokens`), include CORS, validate input with Zod, and update `extension_tokens.last_seen_at` + counters.
+### 4. Dashboard has no "sync health" surface
+Live dot exists but the user can't tell at a glance: extension paired? last capture? worker last_seen? queue depth? cookies fresh?
+**Fix:** add a `<SyncHealthCard>` on the dashboard with 4 chips: Extension (last capture), Worker (heartbeat age), Apply queue (count), Cookies (hosts × freshness). All driven by realtime, no polling.
 
-### 6. Dashboard polish
-- New `worker.tsx` route — surfaces heartbeat, last 50 `worker_commands`, "send command" buttons (`refresh_sources`, `restart`, `dry_run`).
-- Dashboard top bar gets the `<LiveDot>` + "Jobs today / Applies today" counters that tick live via realtime.
-- Sources page rows show a small spinner when `last_run_status` flips to `running`, green check on `success`.
+### 5. Sources toggle has no optimistic feedback
+Toggle flips, but UI waits for realtime echo before showing the new state — feels laggy.
+**Fix:** optimistic update via `queryClient.setQueryData` on the mutation, rollback on error.
 
-### 7. Out of scope
-- No new scrapers / apply adapters (coverage already at ~93%).
-- No payment / billing changes.
-- No design system overhaul.
+### 6. Apply button on job pages has no result feedback
+`content-apply.js` POSTs and… nothing. User doesn't know if it worked.
+**Fix:** show a 3-second toast pill (success ✓ / already queued / error) anchored to the button.
 
-## File map
+### 7. Cookie freshness invisible to worker
+`sessions.py` loads cookies but never logs which hosts were injected or refused. When auto-apply fails on a login wall, you can't tell if cookies were used.
+**Fix:** structured `db_log` on cookie inject (host, count, age_days) and on decrypt failure (bad passphrase / expired).
 
-```
-NEW
-  src/hooks/useRealtimeInvalidate.ts
-  src/components/LiveDot.tsx
-  src/routes/_authenticated/worker.tsx
-  src/routes/api/public/sources/worker-status.ts
-  src/routes/api/public/sources/queue-apply.ts
-  src/routes/api/public/sources/upload-cookies.ts
-  supabase/migrations/<ts>_realtime_and_cookies.sql
-  extension/content-apply.js
-  extension/content-cookies.js
-  extension/crypto.js              (WebCrypto AES-GCM helper)
-  worker/app/sessions.py
+### 8. Extension token rotation has no UI
+If the token leaks, the only recovery is SQL. Add "Rotate token" button on `/extension` settings page (already exists for pairing) that calls a tiny server fn.
 
-EDITED
-  extension/manifest.json          (+ new content scripts, alarms perm)
-  extension/background.js          (outbox, retry, alarms, dedupe)
-  extension/popup.html / popup.js  (status, queue depth, sync btn)
-  extension/options.html / options.js (cookie-pipe opt-in + passphrase)
-  src/routes/__root.tsx            (root realtime listener for worker dot)
-  src/routes/_authenticated/dashboard.tsx
-  src/routes/_authenticated/sources.tsx
-  src/routes/_authenticated/applications.tsx, applications.$id.tsx
-  worker/app/main.py               (realtime sources subscription)
-  worker/app/apply/browser.py      (inject cookies from sessions.py)
-```
+## Out of scope
 
-## Acceptance checks (I'll run after build)
-1. Toggle a source in UI → worker log shows `refresh_sources` within ~2 s.
-2. Capture a LinkedIn job with extension offline → reconnect → row appears in `jobs` table within 30 s and surfaces in dashboard without reload.
-3. Worker dot turns red within 2 min of stopping `worker` on VPS.
-4. Upload cookies via extension → `session_cookies` row exists, ciphertext non-empty → restart worker → applying a LinkedIn job skips login.
-5. Apply button click on Indeed → `applications` row appears in queue live.
+- New scrapers / apply adapters
+- Billing / pricing
+- Visual redesign
+- Adding more job sites to the extension
 
-Ready to build on approval.
+## Files
+
+**Edit (8):**
+- `extension/popup.js` — finish status polling + render
+- `extension/content-apply.js` — toast feedback
+- `worker/app/main.py` — async realtime client + reconnect
+- `worker/app/sources/registry.py` — add `force` arg
+- `worker/app/sessions.py` — structured logs
+- `worker/app/apply/browser.py` — log cookie usage outcome
+- `src/routes/_authenticated/dashboard.tsx` — mount `<SyncHealthCard>`
+- `src/routes/_authenticated/sources.tsx` — optimistic toggle
+
+**Create (3):**
+- `src/components/SyncHealthCard.tsx`
+- `src/lib/extension.functions.ts` — `rotateExtensionToken` server fn
+- `src/routes/_authenticated/extension.tsx` *(only if missing — otherwise edit)*
+
+No DB migrations. No new endpoints. No new env vars.
+
+## Acceptance checks
+
+1. Open extension popup → worker dot turns green within 2s, "queued apps" reflects DB.
+2. Toggle a source in dashboard → worker log shows "sources changed (realtime) — forcing tick" within ~2s, source row updates without manual refresh.
+3. Click "Apply via JobPilot" on a LinkedIn job → toast shows ✓, dashboard Applications list gets new row live.
+4. Disconnect VPS for 90s → dashboard SyncHealthCard worker chip goes amber → red.
+5. Upload cookies via extension options → worker log shows `cookies_injected host=linkedin.com count=N age_days=0` on next apply.

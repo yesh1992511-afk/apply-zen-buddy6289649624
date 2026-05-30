@@ -36,7 +36,7 @@
     return {
       title: title.slice(0, 500),
       company: company.slice(0, 255),
-      url: location ? location.slice(0, 0) : "" || window.location.href,
+      url: window.location.href,
       location: location ? location.slice(0, 500) : null,
       description: description ? description.slice(0, 50_000) : null,
       source: SOURCE,

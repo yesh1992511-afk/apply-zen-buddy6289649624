@@ -1,18 +1,41 @@
-async function render() {
-  const { token, paused, stats, lastResponse } = await chrome.storage.local.get(["token", "paused", "stats", "lastResponse"]);
-  const captureDot = document.getElementById("captureDot");
+// JobPilot Capture — popup
+let pollTimer = null;
+
+async function refreshStatus() {
+  const s = await chrome.runtime.sendMessage({ type: "status" }).catch(() => null);
+  const pendingEl = document.getElementById("pending");
+  const qappsEl = document.getElementById("qapps");
   const workerDot = document.getElementById("workerDot");
   const workerLabel = document.getElementById("workerLabel");
+  if (!pendingEl) return;
+  pendingEl.textContent = s?.pending ?? 0;
+  qappsEl.textContent = typeof s?.queued_apps === "number" ? s.queued_apps : "—";
+  workerDot.classList.remove("on", "warn");
+  if (s?.online) {
+    workerDot.classList.add("on");
+    workerLabel.textContent = "online";
+  } else if (s?.last_seen) {
+    workerDot.classList.add("warn");
+    const ageMin = Math.round((Date.now() - new Date(s.last_seen).getTime()) / 60000);
+    workerLabel.textContent = `stale ${ageMin}m`;
+  } else {
+    workerLabel.textContent = "offline";
+  }
+}
+
+async function render() {
+  const { token, paused, stats, lastResponse } = await chrome.storage.local.get([
+    "token", "paused", "stats", "lastResponse",
+  ]);
+  const captureDot = document.getElementById("captureDot");
   const status = document.getElementById("status");
   const statsEl = document.getElementById("stats");
   const toggle = document.getElementById("toggle");
-  const pendingEl = document.getElementById("pending");
-  const qappsEl = document.getElementById("qapps");
   const syncBtn = document.getElementById("sync");
 
   if (!token) {
     captureDot.classList.remove("on");
-    status.innerHTML = 'Not paired. Click <strong>Settings</strong> below to paste your pairing token.';
+    status.innerHTML = 'Not paired. Click <strong>Settings</strong> to paste your pairing token.';
     statsEl.innerHTML = "";
     toggle.style.display = "none";
     syncBtn.style.display = "none";
@@ -45,26 +68,13 @@ async function render() {
     await refreshStatus();
     syncBtn.disabled = false;
     syncBtn.textContent = "Sync now";
-    render();
   };
 
   await refreshStatus();
-
-  async function refreshStatus() {
-    const s = await chrome.runtime.sendMessage({ type: "status" });
-    pendingEl.textContent = s?.pending ?? 0;
-    qappsEl.textContent = typeof s?.queued_apps === "number" ? s.queued_apps : "—";
-    workerDot.classList.remove("on", "warn");
-    if (s?.online) {
-      workerDot.classList.add("on");
-      workerLabel.textContent = "online";
-    } else if (s?.last_seen) {
-      workerDot.classList.add("warn");
-      workerLabel.textContent = "stale";
-    } else {
-      workerLabel.textContent = "offline";
-    }
-  }
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(refreshStatus, 10_000);
 }
+
 document.getElementById("options").onclick = () => chrome.runtime.openOptionsPage();
+window.addEventListener("unload", () => pollTimer && clearInterval(pollTimer));
 render();

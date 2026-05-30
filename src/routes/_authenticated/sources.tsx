@@ -150,8 +150,13 @@ function SourcesPage() {
   };
 
   const update = async (id: string, patch: Partial<Source>) => {
+    const prev = sources;
+    setSources((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     const { error } = await supabase.from("sources").update(patch as never).eq("id", id);
-    if (error) toast.error(error.message);
+    if (error) {
+      setSources(prev);
+      toast.error(error.message);
+    }
   };
 
   const remove = async (id: string) => {
