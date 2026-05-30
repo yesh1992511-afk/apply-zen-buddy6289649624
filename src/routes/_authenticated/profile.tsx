@@ -26,7 +26,6 @@ import {
 import { toast } from "sonner";
 import { useUser } from "@/lib/useAuth";
 import { Plus, Trash2, Upload, X } from "lucide-react";
-import { HtmlResume } from "@/components/HtmlResume";
 
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -311,7 +310,7 @@ function ProfilePage() {
 
         <TabsContent value="screening"><ScreeningAnswers value={(p.screening_answers as Record<string, string>) ?? {}} onChange={(v) => set("screening_answers", v)} /></TabsContent>
 
-        <TabsContent value="resume" className="space-y-4 pt-4"><HtmlResume /><details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">Advanced: LaTeX templates (requires worker)</summary><div className="pt-3"><ResumeUploader /></div></details></TabsContent>
+        <TabsContent value="resume"><ResumeUploader /></TabsContent>
       </Tabs>
     </div>
   );
