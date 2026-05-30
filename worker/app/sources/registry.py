@@ -17,6 +17,7 @@ from .remotive import Remotive
 from .workatastartup import WorkAtAStartup
 from .ats_greenhouse import GreenhouseBoards
 from .ats_lever import LeverBoards
+from .ats_ashby import AshbyBoards
 from ..db import db, user_id
 from ..logger import db_log, log
 from ..pipeline.normalize import normalize
@@ -34,7 +35,7 @@ ADAPTERS: dict[str, Source] = {a.key: a for a in [
     # Free remote-first APIs
     RemoteOK(), WeWorkRemotely(), Arbeitnow(), Remotive(),
     # Startups + direct ATS boards
-    WorkAtAStartup(), GreenhouseBoards(), LeverBoards(),
+    WorkAtAStartup(), GreenhouseBoards(), LeverBoards(), AshbyBoards(),
 ]}
 
 

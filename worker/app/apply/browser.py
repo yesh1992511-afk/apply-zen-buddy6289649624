@@ -54,7 +54,9 @@ def pick_fingerprint(portal_key: str) -> dict:
 @asynccontextmanager
 async def new_browser(portal_key: str = "default", headless: bool = True, fingerprint: dict | None = None):
     fp = fingerprint or pick_fingerprint(portal_key)
-    proxy = playwright_proxy()
+    # Only use the residential proxy on portals that need it (LinkedIn, Workday, etc.).
+    # Free ATSes (Greenhouse, Lever, Ashby) save us residential-GB cost.
+    proxy = playwright_proxy(portal_key)
     profile_dir = PROFILE_ROOT / portal_key
     profile_dir.mkdir(parents=True, exist_ok=True)
 
