@@ -116,7 +116,14 @@ function FiltersPage() {
           </CardContent>
         </Card>
       ))}
-      {items.length === 0 && <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No filters yet.</CardContent></Card>}
+      {items.length === 0 && (
+        <EmptyState
+          icon={FilterIcon}
+          title="No filters yet"
+          description="Create a filter to control which jobs appear in your feed and qualify for auto-apply."
+          action={<Button onClick={add} className="bg-gradient-emerald"><Plus className="mr-1 h-4 w-4" /> Create first filter</Button>}
+        />
+      )}
     </div>
   );
 }
