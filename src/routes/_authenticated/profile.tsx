@@ -266,8 +266,8 @@ function ProfilePage() {
             <MultiSelectChips label="Desired job titles" values={getArr("desired_titles")} onChange={(arr) => set("desired_titles", arr)} options={["Software Engineer","Senior Software Engineer","Staff Engineer","Frontend Engineer","Backend Engineer","Full Stack Engineer","Data Engineer","ML Engineer","Data Scientist","DevOps Engineer","SRE","Product Manager","Engineering Manager","Designer","Product Designer"]} allowCustom className="md:col-span-2" />
             <MultiSelectChips label="Desired industries" values={getArr("desired_industries")} onChange={(arr) => set("desired_industries", arr)} options={INDUSTRIES} className="md:col-span-2" />
             <MultiSelectChips label="Excluded industries" values={getArr("excluded_industries")} onChange={(arr) => set("excluded_industries", arr)} options={INDUSTRIES} className="md:col-span-2" />
-            <MultiSelectChips label="Employment types" values={getArr("employment_types_pref") as string[]} onChange={(arr) => set("employment_types_pref", arr)} options={EMPLOYMENT_TYPES} className="md:col-span-2" />
-            <MultiSelectChips label="Seniority levels" values={getArr("seniority_pref") as string[]} onChange={(arr) => set("seniority_pref", arr)} options={SENIORITY} className="md:col-span-2" />
+            {/* Employment type & seniority preferences live on filters, not the profile */}
+
           </CardContent></Card>
         </TabsContent>
 
