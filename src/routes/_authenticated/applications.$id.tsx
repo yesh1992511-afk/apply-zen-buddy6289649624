@@ -38,7 +38,9 @@ type AppRow = {
   resume_id: string | null;
   cover_letter_id: string | null;
   attempts: number;
+  retry_count: number | null;
   last_error: string | null;
+  dlq_reason: string | null;
   queued_at: string;
   started_at: string | null;
   applied_at: string | null;
@@ -54,6 +56,7 @@ type AppRow = {
 type ResumeRow = { id: string; name: string; pdf_storage_path: string | null; kind: string };
 
 const ACTIVE_STATUSES = new Set(["queued", "applying", "optimizing", "generating_resume", "generating_cover", "submitting", "filling_form"]);
+const RETRYABLE_STATUSES = new Set(["failed", "needs_review", "error", "dlq"]);
 
 function ApplicationDetailPage() {
   const { id } = Route.useParams();
@@ -66,6 +69,11 @@ function ApplicationDetailPage() {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [tab, setTab] = useState("form");
   const [loading, setLoading] = useState(true);
+
+  const eventsQuery = useQuery(applicationEventsQueryOptions(id));
+  const retryMutation = useRetryApplication();
+  const canRetry = app ? RETRYABLE_STATUSES.has(app.status) || !!app.last_error || !!app.dlq_reason : false;
+
 
   // Initial load
   useEffect(() => {
