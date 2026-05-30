@@ -109,7 +109,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
             user_id: userId,
             kind: `source.${tier}`,
             source_key: `tier:${tier}:shard:${shard}`,
-            status: 'success',
+            status: 'succeeded',
             items_in: totalIn,
             items_out: totalOut,
             errors: totalErr,
