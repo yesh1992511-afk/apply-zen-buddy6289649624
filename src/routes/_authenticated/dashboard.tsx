@@ -176,6 +176,24 @@ function Dashboard() {
         </Link>
       </div>
 
+      {isSyncing && (
+        <div
+          aria-live="polite"
+          className="relative overflow-hidden rounded-xl border border-primary/30 bg-card px-4 py-2.5 flex items-center gap-3"
+        >
+          <RefreshCw className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
+          <span className="text-xs font-medium text-muted-foreground">
+            Syncing latest activity…
+          </span>
+          <div className="flex-1 flex items-center gap-2 ml-2">
+            <Skeleton className="h-2 flex-1 max-w-[120px]" />
+            <Skeleton className="h-2 flex-1 max-w-[80px]" />
+            <Skeleton className="h-2 flex-1 max-w-[100px]" />
+          </div>
+          <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent shimmer" />
+        </div>
+      )}
+
       <SyncHealthCard />
 
 
