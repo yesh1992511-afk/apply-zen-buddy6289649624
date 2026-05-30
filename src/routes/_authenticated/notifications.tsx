@@ -384,7 +384,7 @@ function NotificationsPage() {
         <CardContent>
           {data?.log && data.log.length > 0 ? (
             <div className="divide-y">
-              {data.log.map((n: any) => (
+              {(data.log as NotificationLogEntry[]).map((n) => (
                 <div key={n.id} className="flex items-center justify-between py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-sm">
