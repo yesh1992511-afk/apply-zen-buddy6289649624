@@ -34,12 +34,8 @@ export function hasValidApiKey(request: Request): boolean {
  * Insert an idempotency record. Returns true on first-time, false if the key
  * was already seen within the dedupe window. Errors return true (fail-open).
  */
-export async function claimIdempotency(opts: {
-  supabaseAdmin: { from: (t: string) => { insert: (row: unknown) => Promise<{ error: { code?: string } | null }> } };
-  key: string;
-  kind: string;
-  userId?: string;
-}): Promise<boolean> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function claimIdempotency(opts: { supabaseAdmin: any; key: string; kind: string; userId?: string }): Promise<boolean> {
   try {
     const { error } = await opts.supabaseAdmin.from("worker_invocations").insert({
       idempotency_key: opts.key,
@@ -47,7 +43,6 @@ export async function claimIdempotency(opts: {
       user_id: opts.userId ?? null,
     });
     if (!error) return true;
-    // 23505 = unique_violation -> already claimed
     if (error.code === "23505") return false;
     return true;
   } catch {
