@@ -10,8 +10,9 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { triggerScrape } from "@/lib/commands";
-import { Play } from "lucide-react";
+import { triggerScrape, triggerTestSource } from "@/lib/commands";
+import { waitForCommand } from "@/lib/commands";
+import { Play, FlaskConical } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/sources")({
   head: () => ({ meta: [{ title: "Sources — JobPilot" }] }),
