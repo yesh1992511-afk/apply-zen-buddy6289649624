@@ -184,7 +184,13 @@ function JobsPage() {
         <Button variant="outline" onClick={load} disabled={loading}>{loading ? "…" : "Refresh"}</Button>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading && jobs.length === 0 ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-[180px] shimmer rounded-xl" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={Briefcase}
           title="No matched jobs in this window"
@@ -192,16 +198,18 @@ function JobsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((j) => {
+          {filtered.map((j, idx) => {
             const isSel = selected.has(j.id);
             return (
               <div
                 key={j.id}
+                style={{ animationDelay: `${Math.min(idx * 30, 360)}ms` }}
                 className={cn(
-                  "group relative flex flex-col overflow-hidden rounded-xl border bg-card p-4 transition-all hover:shadow-elegant",
+                  "group relative flex flex-col overflow-hidden rounded-xl border bg-card p-4 transition-all hover:shadow-elegant row-in lift",
                   isSel ? "border-primary ring-1 ring-primary/40 bg-primary/5" : "border-border/60",
                 )}
               >
+
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
