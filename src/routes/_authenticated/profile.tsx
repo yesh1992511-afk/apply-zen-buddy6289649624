@@ -456,6 +456,7 @@ function ScreeningAnswers({ value, onChange }: { value: Record<string, string>; 
       {entries.length === 0 && <p className="text-center text-sm text-muted-foreground">No screening answers yet.</p>}
       {entries.map(([k, v]) => {
         const preset = SCREENING_PRESETS.find((p) => p.key === k);
+        const opts = SCREENING_OPTIONS[k];
         return (
           <Card key={k}>
             <CardContent className="space-y-2 pt-6">
@@ -464,11 +465,19 @@ function ScreeningAnswers({ value, onChange }: { value: Record<string, string>; 
                 <Button size="sm" variant="ghost" onClick={() => remove(k)}><Trash2 className="h-4 w-4" /></Button>
               </div>
               <p className="text-xs text-muted-foreground">key: <code>{k}</code></p>
-              <Textarea rows={2} value={v} onChange={(e) => update(k, e.target.value)} />
+              {opts ? (
+                <Select value={v} onValueChange={(nv) => update(k, nv)}>
+                  <SelectTrigger><SelectValue placeholder="Select an answer…" /></SelectTrigger>
+                  <SelectContent>{opts.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                </Select>
+              ) : (
+                <Textarea rows={2} value={v} onChange={(e) => update(k, e.target.value)} />
+              )}
             </CardContent>
           </Card>
         );
       })}
+
     </div>
   );
 }
