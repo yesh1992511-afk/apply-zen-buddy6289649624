@@ -126,7 +126,7 @@ function JobsPage() {
               className="pl-9 bg-surface-2 border-border/60"
             />
           </div>
-          <Button variant="outline" onClick={load} disabled={loading} aria-label="Refresh jobs">{loading ? "…" : "Refresh"}</Button>
+          <Button variant="outline" onClick={() => jobsQuery.refetch()} disabled={jobsQuery.isFetching} aria-label="Refresh jobs">{jobsQuery.isFetching ? "…" : "Refresh"}</Button>
         </div>
         {savedFilters.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 pt-1">
