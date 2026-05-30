@@ -11,9 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
-import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminSystemRouteImport } from './routes/admin/system'
+import { Route as AdminPlansRouteImport } from './routes/admin/plans'
+import { Route as AdminObservabilityRouteImport } from './routes/admin/observability'
+import { Route as AdminFlagsRouteImport } from './routes/admin/flags'
+import { Route as AdminAuditRouteImport } from './routes/admin/audit'
 import { Route as AuthenticatedWorkerRouteImport } from './routes/_authenticated/worker'
 import { Route as AuthenticatedSourcesRouteImport } from './routes/_authenticated/sources'
 import { Route as AuthenticatedSetupRouteImport } from './routes/_authenticated/setup'
@@ -29,11 +35,6 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
-import { Route as AdminSystemRouteImport } from './routes/_admin/system'
-import { Route as AdminPlansRouteImport } from './routes/_admin/plans'
-import { Route as AdminObservabilityRouteImport } from './routes/_admin/observability'
-import { Route as AdminFlagsRouteImport } from './routes/_admin/flags'
-import { Route as AdminAuditRouteImport } from './routes/_admin/audit'
 import { Route as AuthenticatedApplicationsIdRouteImport } from './routes/_authenticated/applications.$id'
 import { Route as ApiPublicSourcesWorkerStatusRouteImport } from './routes/api/public/sources/worker-status'
 import { Route as ApiPublicSourcesUploadCookiesRouteImport } from './routes/api/public/sources/upload-cookies'
@@ -55,18 +56,49 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: '/_authenticated',
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/_admin',
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSystemRoute = AdminSystemRouteImport.update({
+  id: '/system',
+  path: '/system',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPlansRoute = AdminPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminObservabilityRoute = AdminObservabilityRouteImport.update({
+  id: '/observability',
+  path: '/observability',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminFlagsRoute = AdminFlagsRouteImport.update({
+  id: '/flags',
+  path: '/flags',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AuthenticatedWorkerRoute = AuthenticatedWorkerRouteImport.update({
   id: '/worker',
@@ -145,31 +177,6 @@ const AuthenticatedApplicationsRoute =
     path: '/applications',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AdminSystemRoute = AdminSystemRouteImport.update({
-  id: '/system',
-  path: '/system',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminPlansRoute = AdminPlansRouteImport.update({
-  id: '/plans',
-  path: '/plans',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminObservabilityRoute = AdminObservabilityRouteImport.update({
-  id: '/observability',
-  path: '/observability',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminFlagsRoute = AdminFlagsRouteImport.update({
-  id: '/flags',
-  path: '/flags',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminAuditRoute = AdminAuditRouteImport.update({
-  id: '/audit',
-  path: '/audit',
-  getParentRoute: () => AdminRoute,
-} as any)
 const AuthenticatedApplicationsIdRoute =
   AuthenticatedApplicationsIdRouteImport.update({
     id: '/$id',
@@ -232,13 +239,9 @@ const ApiPublicExtensionErrorReportRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/audit': typeof AdminAuditRoute
-  '/flags': typeof AdminFlagsRoute
-  '/observability': typeof AdminObservabilityRoute
-  '/plans': typeof AdminPlansRoute
-  '/system': typeof AdminSystemRoute
   '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
   '/billing': typeof AuthenticatedBillingRoute
@@ -254,6 +257,12 @@ export interface FileRoutesByFullPath {
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
   '/worker': typeof AuthenticatedWorkerRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/flags': typeof AdminFlagsRoute
+  '/admin/observability': typeof AdminObservabilityRoute
+  '/admin/plans': typeof AdminPlansRoute
+  '/admin/system': typeof AdminSystemRoute
+  '/admin/': typeof AdminIndexRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
@@ -269,11 +278,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/audit': typeof AdminAuditRoute
-  '/flags': typeof AdminFlagsRoute
-  '/observability': typeof AdminObservabilityRoute
-  '/plans': typeof AdminPlansRoute
-  '/system': typeof AdminSystemRoute
   '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
   '/billing': typeof AuthenticatedBillingRoute
@@ -289,6 +293,12 @@ export interface FileRoutesByTo {
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
   '/worker': typeof AuthenticatedWorkerRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/flags': typeof AdminFlagsRoute
+  '/admin/observability': typeof AdminObservabilityRoute
+  '/admin/plans': typeof AdminPlansRoute
+  '/admin/system': typeof AdminSystemRoute
+  '/admin': typeof AdminIndexRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
@@ -303,15 +313,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_admin': typeof AdminRouteWithChildren
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/_admin/audit': typeof AdminAuditRoute
-  '/_admin/flags': typeof AdminFlagsRoute
-  '/_admin/observability': typeof AdminObservabilityRoute
-  '/_admin/plans': typeof AdminPlansRoute
-  '/_admin/system': typeof AdminSystemRoute
   '/_authenticated/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/_authenticated/automation': typeof AuthenticatedAutomationRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
@@ -327,6 +332,12 @@ export interface FileRoutesById {
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/sources': typeof AuthenticatedSourcesRoute
   '/_authenticated/worker': typeof AuthenticatedWorkerRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/flags': typeof AdminFlagsRoute
+  '/admin/observability': typeof AdminObservabilityRoute
+  '/admin/plans': typeof AdminPlansRoute
+  '/admin/system': typeof AdminSystemRoute
+  '/admin/': typeof AdminIndexRoute
   '/_authenticated/applications/$id': typeof AuthenticatedApplicationsIdRoute
   '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
@@ -342,13 +353,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/login'
     | '/reset-password'
-    | '/audit'
-    | '/flags'
-    | '/observability'
-    | '/plans'
-    | '/system'
     | '/applications'
     | '/automation'
     | '/billing'
@@ -364,6 +371,12 @@ export interface FileRouteTypes {
     | '/setup'
     | '/sources'
     | '/worker'
+    | '/admin/audit'
+    | '/admin/flags'
+    | '/admin/observability'
+    | '/admin/plans'
+    | '/admin/system'
+    | '/admin/'
     | '/applications/$id'
     | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
@@ -379,11 +392,6 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/reset-password'
-    | '/audit'
-    | '/flags'
-    | '/observability'
-    | '/plans'
-    | '/system'
     | '/applications'
     | '/automation'
     | '/billing'
@@ -399,6 +407,12 @@ export interface FileRouteTypes {
     | '/setup'
     | '/sources'
     | '/worker'
+    | '/admin/audit'
+    | '/admin/flags'
+    | '/admin/observability'
+    | '/admin/plans'
+    | '/admin/system'
+    | '/admin'
     | '/applications/$id'
     | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
@@ -412,15 +426,10 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/_admin'
     | '/_authenticated'
+    | '/admin'
     | '/login'
     | '/reset-password'
-    | '/_admin/audit'
-    | '/_admin/flags'
-    | '/_admin/observability'
-    | '/_admin/plans'
-    | '/_admin/system'
     | '/_authenticated/applications'
     | '/_authenticated/automation'
     | '/_authenticated/billing'
@@ -436,6 +445,12 @@ export interface FileRouteTypes {
     | '/_authenticated/setup'
     | '/_authenticated/sources'
     | '/_authenticated/worker'
+    | '/admin/audit'
+    | '/admin/flags'
+    | '/admin/observability'
+    | '/admin/plans'
+    | '/admin/system'
+    | '/admin/'
     | '/_authenticated/applications/$id'
     | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
@@ -450,8 +465,8 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRouteWithChildren
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  AdminRoute: typeof AdminRouteWithChildren
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPublicExtensionErrorReportRoute: typeof ApiPublicExtensionErrorReportRoute
@@ -481,18 +496,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_admin': {
-      id: '/_admin'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -501,6 +516,48 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/system': {
+      id: '/admin/system'
+      path: '/system'
+      fullPath: '/admin/system'
+      preLoaderRoute: typeof AdminSystemRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/plans': {
+      id: '/admin/plans'
+      path: '/plans'
+      fullPath: '/admin/plans'
+      preLoaderRoute: typeof AdminPlansRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/observability': {
+      id: '/admin/observability'
+      path: '/observability'
+      fullPath: '/admin/observability'
+      preLoaderRoute: typeof AdminObservabilityRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/flags': {
+      id: '/admin/flags'
+      path: '/flags'
+      fullPath: '/admin/flags'
+      preLoaderRoute: typeof AdminFlagsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/audit': {
+      id: '/admin/audit'
+      path: '/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/_authenticated/worker': {
       id: '/_authenticated/worker'
@@ -607,41 +664,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApplicationsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_admin/system': {
-      id: '/_admin/system'
-      path: '/system'
-      fullPath: '/system'
-      preLoaderRoute: typeof AdminSystemRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/_admin/plans': {
-      id: '/_admin/plans'
-      path: '/plans'
-      fullPath: '/plans'
-      preLoaderRoute: typeof AdminPlansRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/_admin/observability': {
-      id: '/_admin/observability'
-      path: '/observability'
-      fullPath: '/observability'
-      preLoaderRoute: typeof AdminObservabilityRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/_admin/flags': {
-      id: '/_admin/flags'
-      path: '/flags'
-      fullPath: '/flags'
-      preLoaderRoute: typeof AdminFlagsRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/_admin/audit': {
-      id: '/_admin/audit'
-      path: '/audit'
-      fullPath: '/audit'
-      preLoaderRoute: typeof AdminAuditRouteImport
-      parentRoute: typeof AdminRoute
-    }
     '/_authenticated/applications/$id': {
       id: '/_authenticated/applications/$id'
       path: '/$id'
@@ -715,24 +737,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AdminRouteChildren {
-  AdminAuditRoute: typeof AdminAuditRoute
-  AdminFlagsRoute: typeof AdminFlagsRoute
-  AdminObservabilityRoute: typeof AdminObservabilityRoute
-  AdminPlansRoute: typeof AdminPlansRoute
-  AdminSystemRoute: typeof AdminSystemRoute
-}
-
-const AdminRouteChildren: AdminRouteChildren = {
-  AdminAuditRoute: AdminAuditRoute,
-  AdminFlagsRoute: AdminFlagsRoute,
-  AdminObservabilityRoute: AdminObservabilityRoute,
-  AdminPlansRoute: AdminPlansRoute,
-  AdminSystemRoute: AdminSystemRoute,
-}
-
-const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
-
 interface AuthenticatedApplicationsRouteChildren {
   AuthenticatedApplicationsIdRoute: typeof AuthenticatedApplicationsIdRoute
 }
@@ -787,10 +791,30 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
+interface AdminRouteChildren {
+  AdminAuditRoute: typeof AdminAuditRoute
+  AdminFlagsRoute: typeof AdminFlagsRoute
+  AdminObservabilityRoute: typeof AdminObservabilityRoute
+  AdminPlansRoute: typeof AdminPlansRoute
+  AdminSystemRoute: typeof AdminSystemRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAuditRoute: AdminAuditRoute,
+  AdminFlagsRoute: AdminFlagsRoute,
+  AdminObservabilityRoute: AdminObservabilityRoute,
+  AdminPlansRoute: AdminPlansRoute,
+  AdminSystemRoute: AdminSystemRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRouteWithChildren,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  AdminRoute: AdminRouteWithChildren,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ApiPublicExtensionErrorReportRoute: ApiPublicExtensionErrorReportRoute,
@@ -806,3 +830,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
