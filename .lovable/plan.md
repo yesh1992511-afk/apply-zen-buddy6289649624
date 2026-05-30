@@ -1,192 +1,143 @@
+# JobPilot — End-to-End Testing Playbook
 
-# Enterprise-Grade Pass
-
-This app already has solid bones (27 tables, extension, worker, realtime, heartbeat, command bus). It's missing the connective tissue and polish that distinguish "indie SaaS" from "MNC-grade tool." Note: the DB enforces single-user (`block_extra_signups`), so RBAC = internal admin/owner/viewer roles, not multi-tenant teams.
-
----
-
-## 1. Observability & Audit (foundation — everything else depends on this)
-
-**New tables**
-- `audit_log` — actor, action, entity_type, entity_id, before/after JSON, ip, user_agent, ts. Append-only.
-- `request_traces` — trace_id, span_id, parent, route, duration_ms, status, error. For end-to-end timeline.
-- `error_events` — fingerprint, message, stack, route, count, first_seen, last_seen, resolved. Sentry-lite.
-
-**Wiring**
-- Server-fn middleware `withAudit({entity, action})` writes to `audit_log` on every mutation.
-- Worker emits trace spans per pipeline stage (discover → score → tailor → apply → confirm).
-- Extension errors POST to `/api/public/extension/error-report` with trace_id.
-
-**UI**
-- `/admin/observability` — error feed, slow-trace list, audit log table with filters (actor, action, date, entity).
-- Per-application **timeline view** stitching logs + traces + worker events + screenshots.
-- SLA panel: ingest→matched p50/p95, matched→applied p50/p95, worker uptime %.
+Status check: the platform is feature-complete on paper (web app, extension, FastAPI worker, Supabase schema, admin console, billing, onboarding, audit/observability). It is **not yet validated end-to-end**. Below is the exact order to test, starting from zero (no signup, no SSH).
 
 ---
 
-## 2. Security & Compliance
+## Phase 0 — Pre-flight (5 min)
 
-**Auth hardening**
-- Enable HIBP leaked-password check via `configure_auth`.
-- 2FA (TOTP) via `supabase.auth.mfa` — enroll flow + challenge on sign-in.
-- Active sessions panel (list devices, revoke).
-- Re-auth gate on sensitive actions (cookie upload, secret rotation, data export).
-
-**Secrets & cookies**
-- Rotate extension token UI (already partially scaffolded — finish it).
-- `session_cookies`: add `last_used_at`, `rotation_due_at`, age warning chip.
-- Cookie passphrase strength meter; failed-decrypt counter triggers re-upload prompt.
-
-**Data rights (GDPR-style)**
-- `POST /api/public/account/export` → zip of all user data (jobs, apps, profile, logs).
-- Soft-delete + 30-day purge for `account/delete`.
-- `/settings/privacy` page with toggles + export/delete buttons.
-
-**Linter sweep**
-- Run `supabase--linter` and fix every finding before shipping.
-- Audit RLS on all 27 tables for `auth.uid()` scoping consistency.
+1. Open the **Published URL** (not the preview), not `/login` preview:
+   `https://apply-zen-buddy6289649624.lovable.app`
+2. Confirm **Lovable Cloud** is `ACTIVE_HEALTHY` (I can check with `cloud_status` on demand).
+3. Confirm the published deploy is the latest build (banner / build hash in footer if present).
 
 ---
 
-## 3. RBAC & Admin Console (single-user-aware)
+## Phase 1 — Auth & Onboarding (web only, 10 min)
 
-**Roles** (already have `app_role` + `user_roles`)
-- Extend enum: `owner`, `admin`, `viewer`. Owner = full, admin = ops without billing, viewer = read-only.
-- `has_role()` already exists — wire it into route guards (`_admin.tsx` layout).
+1. **Sign up** as the single owner (email + password). Since `block_extra_signups` enforces 1 user, this is your only chance — pick the real email you want.
+2. Verify email if a confirmation was sent.
+3. Land on `/onboarding` → walk through all 7 steps:
+   profile basics → extension pairing token → Gmail app-password → worker bootstrap script → pick a filter → add 1 source → dry-run.
+4. Confirm sidebar **profile completeness meter** moves to 100%.
+5. Visit `/billing` → confirm 14-day Pro trial seeded.
+6. Visit `/privacy` → click "Export my data" (should return a JSON zip). Don't click delete.
 
-**`/admin` console** (new layout route)
-- `/admin/system` — worker fleet, queue depth, kill-switch (writes `worker_commands` kind=`pause`).
-- `/admin/users` — single-user, but shows role, last-login, MFA status, session count.
-- `/admin/feature-flags` — new table `feature_flags(key, enabled, rollout_pct, payload)`.
-- `/admin/audit` — read-only mirror of audit_log with export to CSV.
-
----
-
-## 4. Billing & Plans (usage-metered)
-
-- Enable Lovable's built-in Stripe payments (`enable_stripe_payments`).
-- New tables: `plans`, `subscriptions`, `usage_quotas`, `invoices_cache`.
-- Plans: Free (10 applies/day), Pro (100/day + cookie sync), Team (500/day + admin console).
-- Quota guard middleware on apply path: read `automation_settings.max_applies_per_day` + plan cap, hard-stop at lower of the two with toast + upgrade prompt.
-- `/billing` page: plan card, usage bars (applies, AI tokens, captures), invoice list, upgrade/cancel.
-- Trial: 14-day Pro on signup.
+✅ Gate: you can log in, profile saved, trial active, data export works.
 
 ---
 
-## 5. Onboarding (guided)
+## Phase 2 — Extension pairing & capture (15 min)
 
-New `/onboarding` flow route + checklist persisted on `profile.onboarding_state jsonb`.
+1. Load `extension/` as unpacked in Chrome (`chrome://extensions` → Developer mode → Load unpacked).
+2. Open extension Options → paste the pairing token from `/extension` page → save.
+3. Set a **cookie passphrase** (you'll need the same one on the VPS later — write it down).
+4. Browse to a LinkedIn job listing while logged in → extension should auto-capture.
+5. Popup should show: pending=0 after sync, captures-today > 0, worker dot = offline (no VPS yet — expected).
+6. In web app `/jobs` → captured job appears within ~10s (realtime).
 
-Steps:
-1. **Profile basics** (name, location, work auth) — required fields with completeness %.
-2. **Connect extension** — show token, "Open Chrome Web Store" + manual install zip + live "Detected!" indicator via realtime.
-3. **Connect Gmail** — IMAP/SMTP form, "Test send" button.
-4. **Provision worker** — copy-paste install command for VPS + live heartbeat check.
-5. **Pick filter preset** — 4 starter filters (SWE, PM, Designer, Data).
-6. **First source** — enable LinkedIn or Indeed.
-7. **Dry run** — kick a `test_apply` command, show result.
-
-Profile-completeness meter (%) in sidebar until 100%.
+✅ Gate: extension captures and Supabase receives the job.
 
 ---
 
-## 6. Apply Pipeline Phases (formal state machine)
+## Phase 3 — VPS worker bootstrap (30 min)
 
-Today `applications.status` is a flat enum. Upgrade to phased pipeline:
+1. Provision a fresh Ubuntu 22.04 VPS (any 2 vCPU / 4 GB box: Hetzner, DO, Vultr).
+2. SSH in as root, then run the **one-line bootstrap** copied from `/setup` page in the web app. It installs Docker, clones the worker, writes `.env` from your tokens.
+3. Edit `worker/.env` and add:
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (from `/setup`)
+   - `USER_ID` (your auth uid, shown on `/setup`)
+   - `COOKIE_PASSPHRASE` (same as extension)
+   - `LOVABLE_API_KEY` (already configured in cloud, copy from `/setup`)
+   - optional: `APIFY_TOKEN`, `2CAPTCHA_KEY`, proxy creds
+4. `make up` → `make logs` → confirm heartbeat lines every ~30s.
+5. Web `/worker` page → green dot, version visible, last_seen < 1 min.
+6. Extension popup → worker dot turns green.
 
-```
-discovered → scored → tailored → queued → applying → submitted
-                                                   ↓
-                                          needs_review / failed → retry
-                                                   ↓
-                                          follow_up_sent → replied
-                                                   ↓
-                                          interview → offer / rejected
-```
-
-**Schema**
-- New `application_events(application_id, phase, status, payload, ts)` — full state-machine log.
-- `applications.phase` column (USER-DEFINED enum).
-- `applications.retry_count`, `applications.next_retry_at`, `applications.idempotency_key`.
-
-**Worker**
-- Idempotency: hash(user_id, job_url, day) — refuse duplicate submits.
-- Dead-letter queue: 3 failures → `needs_review`, surface in dashboard.
-- Exponential backoff between retries.
-
-**UI**
-- `/applications` becomes a Kanban with the 8 columns above, drag to override phase.
-- Per-app stepper (already have `ApplyStepper.tsx`) shows full phase history with timestamps.
-- Follow-up scheduler: auto-send polite ping after N days with no reply.
+✅ Gate: worker heartbeats, web + extension both see it online.
 
 ---
 
-## 7. Professional UI Polish (MNC look)
+## Phase 4 — Source scraping (20 min)
 
-**Design system tokens** (audit `src/styles.css`)
-- Density modes: comfortable / compact (toggle in settings, persisted).
-- Elevation scale (`--shadow-1..6`), motion tokens (`--ease-in-out-emphasized`, durations).
-- Status colors mapped to semantic tokens: `--status-success/warning/error/info/queued/running`.
+1. `/sources` → enable **1 free source first** (e.g. `remoteok` or `arbeitnow` — no API key needed).
+2. `make scrape remoteok` on VPS, watch logs.
+3. `/jobs` → new rows appear, `score` populated, filter matching works.
+4. Then enable 1 Apify source (LinkedIn) if you have an Apify token. Confirm scrape.
+5. Test cookie-based scraping: extension `/extension` → "Sync LinkedIn cookies" → on VPS run `python -m app.cli scrape apify:linkedin` and confirm logged-in scraping works (no login wall).
 
-**Components**
-- `DataTable`: column visibility, sort, multi-filter, saved views, CSV export, infinite scroll. Use for /jobs, /applications, /logs, /admin/audit.
-- `GlobalSearch` (⌘K) — search jobs, apps, sources, logs, settings; already have `CommandPalette` — wire real results.
-- `Breadcrumbs` in `PageHeader`.
-- Standardize: empty states, error states, loading skeletons (already have skeletons.tsx — apply consistently).
-- Toast policy: success quiet, error verbose with copy-stack button.
-
-**Accessibility**
-- WCAG AA pass: focus rings, ARIA labels, keyboard nav for Kanban & DataTable, `prefers-reduced-motion`.
-- Dark mode parity audit.
-
-**i18n scaffold**
-- `react-i18next` set up with `en` locale; extract strings from sidebar, headers, errors. Don't translate yet, just wire it.
-
-**Topbar**
-- Global: env badge (Preview/Prod), worker dot, queue depth, notifications bell, ⌘K hint, user menu.
+✅ Gate: jobs flowing, scored, deduped.
 
 ---
 
-## 8. End-to-End Wiring Hardening
+## Phase 5 — Apply pipeline (the critical path, 30 min)
 
-| Surface | Issue | Fix |
-|---|---|---|
-| Extension → backend | No idempotency on capture | URL+day hash dedup at API layer |
-| Backend → worker | Toggle latency | Already realtime; add ack write-back so UI shows "worker acknowledged in 1.2s" |
-| Worker → backend | Retries lost on restart | Persistent retry queue in `application_events`, worker reads on boot |
-| Apply success | No screenshot proof timeline | Stream screenshots into `applications.screenshots` ordered with `application_events` |
-| Cookies → worker | Silent decrypt failure | Already added log; add UI alert "Re-upload cookies for linkedin.com" |
-| Gmail | No delivery confirmation | Worker polls inbox for the auto-reply, marks `application_events.phase=replied` |
-| Notifications | One-shot only | Idempotency key on `notification_log` to prevent double-send on retry |
-| All HTTP | No request_id | Inject `x-request-id` in middleware, log everywhere, surface in error toasts |
+1. Make sure your **resume** is uploaded under `/profile` (LaTeX template + markers), **cover letter tone** set.
+2. `/automation` → set max_applies_per_day=2, aggressiveness=1 (low, for testing).
+3. Pick one matched job in `/jobs` → click **"Queue apply"** manually (don't enable autopilot yet).
+4. On VPS: `make apply 1` → watch:
+   - phase progression in `/applications` Kanban: `discovered → scored → tailored → queued → applying → submitted` (or `needs_review`)
+   - screenshots appear in the application detail page timeline
+   - `application_events` rows in DB
+5. Verify the actual portal received the submission (check email confirmation from the portal).
+6. Repeat for each portal you care about (Greenhouse, Lever, Ashby — these are most reliable; Workday/LinkedIn are flakier).
+
+✅ Gate: at least 1 real application submitted end-to-end with screenshot proof.
 
 ---
 
-## Sequencing (build order)
+## Phase 6 — Autopilot loop (1 hour observation)
 
-1. **Audit + trace + error tables** (foundation — everything writes to these)
-2. **Apply pipeline phases** schema migration (unblocks Kanban + retry/idempotency)
-3. **Admin console + RBAC route guards**
-4. **Security hardening** (MFA, HIBP, sessions, GDPR export)
-5. **Billing + quotas**
-6. **Onboarding flow**
-7. **Professional UI polish + DataTable + ⌘K + topbar**
-8. **Wiring fixes from §8 table**
-9. **Linter sweep + a11y pass + verification**
+1. `/automation` → flip **enabled = true**.
+2. Watch `/dashboard` live activity panel for 30–60 min.
+3. Confirm: scrape → score → queue → apply happens without manual intervention.
+4. Trigger a failure (e.g. block a portal in firewall) → confirm:
+   - error_events row appears in `/admin/observability`
+   - retry with exponential backoff (`next_retry_at` populated)
+   - notification email sent (if `notify_apply_failed` on)
 
-## Technical notes
+✅ Gate: hands-off autopilot for 1 hour, errors handled gracefully.
 
-- All new tables follow the 4-step migration: CREATE → GRANT → ENABLE RLS → POLICY.
-- `audit_log`, `error_events`, `application_events` get `REPLICA IDENTITY FULL` and join `supabase_realtime` so the new admin views are live.
-- `withAudit` middleware sits next to `requireSupabaseAuth` so every mutating server-fn gets audited free.
-- Kanban uses `@dnd-kit` (already in many TanStack apps; will `bun add` if missing).
-- Stripe is the built-in Lovable integration, no BYOK.
-- Single-user invariant preserved: signup still blocked; RBAC roles are assigned to the one user manually via admin console.
+---
 
-## Out of scope
+## Phase 7 — Admin / observability / billing (15 min)
 
-- New scrapers / new job sites
-- Visual redesign (we polish, we don't redesign)
-- Mobile app
-- Multi-tenant teams (DB blocks it)
-- AI model swaps
+1. `/admin/system` → worker fleet view, queue counts, kill-switch works.
+2. `/admin/observability` → resolve a test error, confirm it disappears.
+3. `/admin/audit` → see every mutation you did during testing; export CSV.
+4. `/admin/flags` → toggle a feature flag, confirm it's read on next page load.
+5. `/billing` → simulate end-of-trial (or wait), confirm usage bars match `/admin/system`.
+
+✅ Gate: admin console reflects reality.
+
+---
+
+## Phase 8 — Notifications & daily summary (next morning)
+
+1. Wait until your configured `daily_summary_time` → confirm summary email received.
+2. Kill the worker (`make down`) for >5 min → confirm offline alert email.
+
+---
+
+## What to do when something fails
+
+| Symptom | First check |
+|---|---|
+| Web blank screen | I run `cloud_status` + dev-server logs |
+| Extension not capturing | DevTools console on the captured page, then extension service-worker logs |
+| Worker can't connect to DB | `worker/.env` SUPABASE_* values, then `make logs` |
+| Apply stuck in `applying` | Application detail page → screenshot timeline → last DOM snapshot |
+| 401 on `/api/public/sources/*` | Pairing token wrong/expired — regenerate from `/extension` |
+
+Ping me at any failed gate with the symptom + which phase — I'll diagnose with logs and DB queries before changing code.
+
+---
+
+## What I am NOT claiming is done
+
+- **Real portal coverage**: Greenhouse / Lever / Ashby / Workable are well-tested patterns; LinkedIn EasyApply, Workday, Indeed are best-effort and will need per-tenant tweaks once you hit real jobs.
+- **Stripe live mode**: billing tables + UI exist; Stripe webhook is wired for test mode. Live keys + production webhook still need to be set when you're ready to charge.
+- **2FA / TOTP UI**: backend ready, the enrollment screen is in `/privacy` but not battle-tested.
+- **Multi-portal CAPTCHA solving**: 2captcha is wired but you'll burn credits on hard ones.
+
+Everything else (schema, RLS, audit, RBAC, admin, onboarding, observability, retry/DLQ, idempotency, extension↔web↔worker sync) is implemented and ready for the Phase 1→8 walkthrough above.
