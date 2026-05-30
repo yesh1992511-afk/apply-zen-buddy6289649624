@@ -54,7 +54,7 @@ function Dashboard() {
       supabase.from("worker_heartbeat").select("last_seen,version").maybeSingle(),
       supabase.from("automation_settings").select("enabled,max_applies_per_day,run_24_7,daily_start,daily_end").maybeSingle(),
       supabase.from("logs").select("id,ts,level,scope,message").order("ts", { ascending: false }).limit(12),
-      supabase.from("applications").select("portal").gte("applied_at", sinceIso).eq("status", "applied"),
+      supabase.from("applications").select("jobs(source_key)").gte("applied_at", sinceIso).eq("status", "applied"),
     ]).then(([j, m, a, f, q, t, hb, auto, lg, portals]) => {
       setStats({
         jobsToday: j.count ?? 0,
@@ -69,8 +69,9 @@ function Dashboard() {
       setAutomation(auto.data ?? null);
       setRecent((lg.data ?? []) as LogRow[]);
       const counts: Record<string, number> = {};
-      ((portals.data ?? []) as { portal: string | null }[]).forEach((row) => {
-        const p = row.portal ?? "other";
+      const rows = (portals.data ?? []) as Array<{ jobs: { source_key: string | null } | null }>;
+      rows.forEach((row) => {
+        const p = row.jobs?.source_key ?? "other";
         counts[p] = (counts[p] ?? 0) + 1;
       });
       setPerPortal(counts);
