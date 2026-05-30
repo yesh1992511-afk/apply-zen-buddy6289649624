@@ -18,7 +18,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/PageHeader";
-import { toast } from "sonner";
+import { SavedIndicator, type SaveState } from "@/components/SavedIndicator";
+import { FieldError } from "@/components/FieldError";
+import { toastError, toastSaved } from "@/lib/toast";
+import { notificationsSchema, gmailSchema } from "@/lib/validation/settings";
 import { CheckCircle2, XCircle, Mail, ExternalLink } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/notifications")({
@@ -27,6 +30,26 @@ export const Route = createFileRoute("/_authenticated/notifications")({
   errorComponent: ErrorBoundaryRoute,
   notFoundComponent: () => <NotFoundRoute />,
 });
+
+type NotificationSettingsRow = {
+  recipient_email: string | null;
+  notify_manual_review: boolean;
+  notify_apply_failed: boolean;
+  notify_worker_offline: boolean;
+  notify_high_score: boolean;
+  high_score_threshold: number;
+  daily_summary_enabled: boolean;
+  daily_summary_time: string;
+};
+type GmailCreds = { email: string; verified_at: string | null; last_error: string | null } | null;
+type NotificationLogEntry = {
+  id: string;
+  kind: string;
+  subject: string;
+  status: string;
+  last_error: string | null;
+  created_at: string;
+};
 
 function NotificationsPage() {
   const qc = useQueryClient();
@@ -40,52 +63,95 @@ function NotificationsPage() {
 
   const [email, setEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
-  const [settings, setSettings] = useState<any>(null);
+  const [settings, setSettings] = useState<NotificationSettingsRow | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [credsErrors, setCredsErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (data?.settings) setSettings(data.settings);
-    if (data?.creds?.email) setEmail(data.creds.email);
+    if (data?.settings) setSettings(data.settings as NotificationSettingsRow);
+    if (data?.creds?.email) setEmail((data.creds as { email: string }).email);
   }, [data]);
 
   const saveCredsMutation = useMutation({
     mutationFn: () => saveCreds({ data: { email, app_password: appPassword } }),
     onSuccess: () => {
-      toast.success("Gmail credentials saved. Click 'Send test' to verify.");
+      toastSaved("Gmail credentials saved. Click 'Send test' to verify.");
       setAppPassword("");
+      setCredsErrors({});
       qc.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: (e: any) => toast.error(e?.message || "Failed to save"),
+    onError: (e: Error) => toastError(e),
   });
 
   const deleteCredsMutation = useMutation({
     mutationFn: () => deleteCreds({}),
     onSuccess: () => {
-      toast.success("Credentials removed");
+      toastSaved("Credentials removed");
       setEmail("");
       qc.invalidateQueries({ queryKey: ["notifications"] });
     },
+    onError: (e: Error) => toastError(e),
   });
 
   const testMutation = useMutation({
     mutationFn: () => sendTest({}),
     onSuccess: () => {
-      toast.success("Test queued — check your inbox in a few seconds");
+      toastSaved("Test queued — check your inbox in a few seconds");
       setTimeout(() => qc.invalidateQueries({ queryKey: ["notifications"] }), 8000);
     },
+    onError: (e: Error) => toastError(e),
   });
 
   const saveSettingsMutation = useMutation({
-    mutationFn: (patch: any) => saveSettings({ data: patch }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
-    onError: (e: any) => toast.error(e?.message || "Save failed"),
+    mutationFn: (patch: Partial<NotificationSettingsRow>) => saveSettings({ data: patch }),
+    onMutate: () => setSaveState("saving"),
+    onSuccess: () => {
+      setSaveState("saved");
+      setTimeout(() => setSaveState((s) => (s === "saved" ? "idle" : s)), 1800);
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (e: Error) => {
+      setSaveState("error");
+      toastError(e);
+    },
   });
 
-  const update = (patch: any) => {
-    setSettings({ ...settings, ...patch });
+  const validateAndUpdate = (patch: Partial<NotificationSettingsRow>) => {
+    const next = { ...(settings ?? {}), ...patch } as NotificationSettingsRow;
+    setSettings(next);
+    const result = notificationsSchema.safeParse(next);
+    if (!result.success) {
+      const map: Record<string, string> = {};
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0] ?? "_");
+        if (!map[key]) map[key] = issue.message;
+      }
+      setErrors(map);
+      setSaveState("dirty");
+      return;
+    }
+    setErrors({});
+    setSaveState("dirty");
     saveSettingsMutation.mutate(patch);
   };
 
-  const creds = data?.creds;
+  const handleSaveCreds = () => {
+    const result = gmailSchema.safeParse({ email, app_password: appPassword });
+    if (!result.success) {
+      const map: Record<string, string> = {};
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0] ?? "_");
+        if (!map[key]) map[key] = issue.message;
+      }
+      setCredsErrors(map);
+      return;
+    }
+    setCredsErrors({});
+    saveCredsMutation.mutate();
+  };
+
+  const creds = data?.creds as GmailCreds;
   const isVerified = !!creds?.verified_at && !creds?.last_error;
 
   return (
@@ -94,7 +160,6 @@ function NotificationsPage() {
         title="Notifications"
         description="Email yourself when manual review is needed, a 95+ score job is found, or for daily summary."
       />
-
 
       {/* Gmail credentials */}
       <Card>
@@ -128,7 +193,8 @@ function NotificationsPage() {
             >
               myaccount.google.com/apppasswords <ExternalLink className="h-3 w-3" />
             </a>
-            . The worker uses it via IMAP (read OTPs) + SMTP (send notifications). Requires 2-Step Verification enabled on your Google account.
+            . The worker uses it via IMAP (read OTPs) + SMTP (send notifications). Requires 2-Step
+            Verification enabled on your Google account.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -141,6 +207,7 @@ function NotificationsPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
+              <FieldError message={credsErrors.email} />
             </div>
             <div>
               <Label>App Password (16 chars)</Label>
@@ -150,6 +217,7 @@ function NotificationsPage() {
                 value={appPassword}
                 onChange={(e) => setAppPassword(e.target.value)}
               />
+              <FieldError message={credsErrors.app_password} />
             </div>
           </div>
           {creds?.last_error && (
@@ -157,7 +225,7 @@ function NotificationsPage() {
           )}
           <div className="flex gap-2">
             <Button
-              onClick={() => saveCredsMutation.mutate()}
+              onClick={handleSaveCreds}
               disabled={!email || !appPassword || saveCredsMutation.isPending}
             >
               {saveCredsMutation.isPending ? "Saving…" : creds ? "Update" : "Save"}
@@ -185,9 +253,14 @@ function NotificationsPage() {
       {/* Notification toggles */}
       {settings && (
         <Card>
-          <CardHeader>
-            <CardTitle>When to notify me</CardTitle>
-            <CardDescription>Where to send: {settings.recipient_email || "(your account email)"}</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle>When to notify me</CardTitle>
+              <CardDescription>
+                Where to send: {settings.recipient_email || "(your account email)"}
+              </CardDescription>
+            </div>
+            <SavedIndicator state={saveState} />
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -196,58 +269,73 @@ function NotificationsPage() {
                 type="email"
                 value={settings.recipient_email || ""}
                 onChange={(e) => setSettings({ ...settings, recipient_email: e.target.value })}
-                onBlur={() => saveSettingsMutation.mutate({ recipient_email: settings.recipient_email })}
+                onBlur={() => validateAndUpdate({ recipient_email: settings.recipient_email })}
                 placeholder="alerts@example.com"
               />
+              <FieldError message={errors.recipient_email} />
             </div>
 
             <ToggleRow
               label="Manual review needed"
               desc="Captcha, 2FA, or odd question blocks the bot"
               checked={settings.notify_manual_review}
-              onChange={(v) => update({ notify_manual_review: v })}
+              onChange={(v) => validateAndUpdate({ notify_manual_review: v })}
             />
             <ToggleRow
               label="High-score job found"
               desc={`When a job scores ≥ ${settings.high_score_threshold}`}
               checked={settings.notify_high_score}
-              onChange={(v) => update({ notify_high_score: v })}
+              onChange={(v) => validateAndUpdate({ notify_high_score: v })}
             >
-              <Input
-                type="number"
-                min={50}
-                max={100}
-                className="w-20"
-                value={settings.high_score_threshold}
-                onChange={(e) => setSettings({ ...settings, high_score_threshold: +e.target.value })}
-                onBlur={() => saveSettingsMutation.mutate({ high_score_threshold: settings.high_score_threshold })}
-              />
+              <div className="flex flex-col items-end">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className="w-20"
+                  value={settings.high_score_threshold}
+                  onChange={(e) =>
+                    setSettings({ ...settings, high_score_threshold: +e.target.value })
+                  }
+                  onBlur={() =>
+                    validateAndUpdate({ high_score_threshold: settings.high_score_threshold })
+                  }
+                />
+                <FieldError message={errors.high_score_threshold} />
+              </div>
             </ToggleRow>
             <ToggleRow
               label="Apply failed (after retries)"
               desc="Final failure after all retry attempts"
               checked={settings.notify_apply_failed}
-              onChange={(v) => update({ notify_apply_failed: v })}
+              onChange={(v) => validateAndUpdate({ notify_apply_failed: v })}
             />
             <ToggleRow
               label="Worker offline >10 min"
               desc="VPS or worker process crashed"
               checked={settings.notify_worker_offline}
-              onChange={(v) => update({ notify_worker_offline: v })}
+              onChange={(v) => validateAndUpdate({ notify_worker_offline: v })}
             />
             <ToggleRow
               label="Daily summary"
               desc={`Sent daily at ${(settings.daily_summary_time || "20:00").slice(0, 5)} UTC`}
               checked={settings.daily_summary_enabled}
-              onChange={(v) => update({ daily_summary_enabled: v })}
+              onChange={(v) => validateAndUpdate({ daily_summary_enabled: v })}
             >
-              <Input
-                type="time"
-                className="w-32"
-                value={(settings.daily_summary_time || "20:00").slice(0, 5)}
-                onChange={(e) => setSettings({ ...settings, daily_summary_time: e.target.value + ":00" })}
-                onBlur={() => saveSettingsMutation.mutate({ daily_summary_time: settings.daily_summary_time })}
-              />
+              <div className="flex flex-col items-end">
+                <Input
+                  type="time"
+                  className="w-32"
+                  value={(settings.daily_summary_time || "20:00").slice(0, 5)}
+                  onChange={(e) =>
+                    setSettings({ ...settings, daily_summary_time: e.target.value + ":00" })
+                  }
+                  onBlur={() =>
+                    validateAndUpdate({ daily_summary_time: settings.daily_summary_time })
+                  }
+                />
+                <FieldError message={errors.daily_summary_time} />
+              </div>
             </ToggleRow>
           </CardContent>
         </Card>
@@ -259,12 +347,23 @@ function NotificationsPage() {
             <CardTitle className="flex items-center gap-2 text-base">
               <Mail className="h-4 w-4 text-primary" /> Daily digest preview
             </CardTitle>
-            <CardDescription>What lands in your inbox at {(settings.daily_summary_time || "20:00").slice(0, 5)} UTC.</CardDescription>
+            <CardDescription>
+              What lands in your inbox at {(settings.daily_summary_time || "20:00").slice(0, 5)}{" "}
+              UTC.
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <div className="border-b border-border/30 bg-background/60 px-5 py-3 text-xs text-muted-foreground">
-              <div><span className="text-muted-foreground/70">From: </span>JobPilot &lt;{creds?.email || "you@gmail.com"}&gt;</div>
-              <div><span className="text-muted-foreground/70">Subject: </span><span className="text-foreground font-medium">Your JobPilot digest — 24 matched · 7 applied</span></div>
+              <div>
+                <span className="text-muted-foreground/70">From: </span>JobPilot &lt;
+                {creds?.email || "you@gmail.com"}&gt;
+              </div>
+              <div>
+                <span className="text-muted-foreground/70">Subject: </span>
+                <span className="text-foreground font-medium">
+                  Your JobPilot digest — 24 matched · 7 applied
+                </span>
+              </div>
             </div>
             <div className="p-5 space-y-3 text-sm">
               <div className="font-heading text-base font-semibold">Yesterday in one glance</div>
@@ -274,18 +373,26 @@ function NotificationsPage() {
                   { label: "Applied", value: "7", tone: "text-success" },
                   { label: "Needs review", value: "2", tone: "text-warning" },
                 ].map((m) => (
-                  <div key={m.label} className="rounded-lg border border-border/40 bg-surface-1 p-3">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80">{m.label}</div>
-                    <div className={`mt-1 font-heading text-2xl font-bold tabular-nums ${m.tone}`}>{m.value}</div>
+                  <div
+                    key={m.label}
+                    className="rounded-lg border border-border/40 bg-surface-1 p-3"
+                  >
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+                      {m.label}
+                    </div>
+                    <div className={`mt-1 font-heading text-2xl font-bold tabular-nums ${m.tone}`}>
+                      {m.value}
+                    </div>
                   </div>
                 ))}
               </div>
-              <div className="text-xs text-muted-foreground italic">+ top 5 high-score matches and any failures requiring attention.</div>
+              <div className="text-xs text-muted-foreground italic">
+                + top 5 high-score matches and any failures requiring attention.
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
-
 
       {/* Recent notifications */}
       <Card>
@@ -295,11 +402,14 @@ function NotificationsPage() {
         <CardContent>
           {data?.log && data.log.length > 0 ? (
             <div className="divide-y">
-              {data.log.map((n: any) => (
+              {(data.log as NotificationLogEntry[]).map((n) => (
                 <div key={n.id} className="flex items-center justify-between py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-sm">
-                      <Badge variant={n.status === "sent" ? "default" : "secondary"} className="text-xs">
+                      <Badge
+                        variant={n.status === "sent" ? "default" : "secondary"}
+                        className="text-xs"
+                      >
                         {n.kind}
                       </Badge>
                       <span className="truncate font-medium">{n.subject}</span>

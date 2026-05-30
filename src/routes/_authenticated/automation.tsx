@@ -1,20 +1,39 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { NotFoundRoute } from "@/components/NotFoundRoute";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useUser } from "@/lib/useAuth";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "sonner";
-import { Check, Loader2, Save } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/PageHeader";
-import { cn } from "@/lib/utils";
+import { SectionCard } from "@/components/SectionCard";
+import { FieldError } from "@/components/FieldError";
+import { QueryErrorState } from "@/components/QueryErrorState";
+import { useAutosaveSection } from "@/hooks/useAutosaveSection";
+import {
+  automationQueryOptions,
+  filtersListQueryOptions,
+  useUpdateAutomation,
+  type AutomationSettings,
+} from "@/lib/queries/automation";
+import {
+  automationSchema,
+  validateAutomationCross,
+  type AutomationPatch,
+} from "@/lib/validation/settings";
+import type { z } from "zod";
+import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+
+type AutomationValues = z.infer<typeof automationSchema>;
 
 export const Route = createFileRoute("/_authenticated/automation")({
   head: () => ({ meta: [{ title: "Automation — JobPilot" }] }),
@@ -23,149 +42,225 @@ export const Route = createFileRoute("/_authenticated/automation")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
-type Settings = {
-  user_id: string;
-  enabled: boolean;
-  run_24_7: boolean;
-  daily_start: string | null;
-  daily_end: string | null;
-  timezone: string | null;
-  max_applies_per_day: number;
-  parallelism: number;
-  aggressiveness: number;
-  exclude_companies: string[];
-  captcha_provider: string | null;
-  proxy_provider: string | null;
-  ai_resume_model: string | null;
-  ai_reasoning_model: string | null;
-  active_filter_id: string | null;
-};
-
 function AutomationPage() {
-  const { user } = useUser();
-  const [s, setS] = useState<Settings | null>(null);
-  const [filters, setFilters] = useState<Array<{ id: string; name: string }>>([]);
-  const [saving, setSaving] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
+  const settings = useQuery(automationQueryOptions());
+  const filters = useQuery(filtersListQueryOptions());
+  const mutation = useUpdateAutomation();
 
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("automation_settings").select("*").eq("user_id", user.id).maybeSingle().then(({ data }) => setS(data as Settings));
-    supabase.from("filters").select("id, name").then(({ data }) => setFilters(data ?? []));
-  }, [user]);
+  useRealtimeInvalidate({ table: "automation_settings", queryKey: ["automation_settings"] });
 
-  const save = async () => {
-    if (!s || !user) return;
-    setSaving(true);
-    const { error } = await supabase.from("automation_settings").update({
-      ...s,
-      exclude_companies: s.exclude_companies ?? [],
-    }).eq("user_id", user.id);
-    setSaving(false);
-    if (error) toast.error(error.message);
-    else {
-      setJustSaved(true);
-      toast.success("Saved");
-      setTimeout(() => setJustSaved(false), 1800);
-    }
-  };
+  const {
+    values: s,
+    set,
+    flush,
+    saveState,
+    error,
+    errors,
+  } = useAutosaveSection<AutomationValues>({
+    schema: automationSchema,
+    initial: settings.data ? (pickAutomationFields(settings.data) as AutomationValues) : null,
+    onSave: async (patch) => {
+      const crossErr = validateAutomationCross({ ...(s ?? {}), ...patch } as AutomationPatch);
+      if (crossErr) throw new Error(crossErr);
+      await mutation.mutateAsync(patch as AutomationPatch);
+    },
+  });
 
-  if (!s) return <div className="text-muted-foreground">Loading…</div>;
-  const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS({ ...s, [k]: v });
-
-  const SaveBtn = (
-    <Button
-      onClick={save}
-      disabled={saving}
-      className={cn(
-        "gap-1.5 transition-all ease-apple-spring",
-        justSaved
-          ? "bg-success text-success-foreground shadow-glow"
-          : saving
-            ? "bg-warning/80 text-warning-foreground"
-            : "bg-gradient-emerald shadow-glow disabled:shadow-none",
-      )}
-    >
-      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : justSaved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-      {saving ? "Saving…" : justSaved ? "Saved" : "Save changes"}
-    </Button>
-  );
+  if (settings.isError) {
+    return <QueryErrorState error={settings.error as Error} onRetry={() => settings.refetch()} />;
+  }
+  if (!s) {
+    return <div className="text-muted-foreground">Loading…</div>;
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
         title="Automation"
-        description="Master controls for the autopilot worker."
-        actions={SaveBtn}
+        description="Master controls for the autopilot worker. Changes save automatically."
       />
 
-
-      <Card>
-        <CardHeader><CardTitle>Master switch</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <label className="flex items-center justify-between">
+      <SectionCard
+        title="Master switch"
+        description="Stop or start the whole worker, and define when it can run."
+        saveState={saveState}
+        error={error}
+      >
+        <Row
+          label="Worker enabled"
+          desc="Master kill switch. When off, the worker stops scraping & applying."
+        >
+          <Switch checked={!!s.enabled} onCheckedChange={(v) => set("enabled", v)} />
+        </Row>
+        <Row label="24/7 mode" desc="If off, the worker only runs inside the daily window.">
+          <Switch checked={!!s.run_24_7} onCheckedChange={(v) => set("run_24_7", v)} />
+        </Row>
+        {!s.run_24_7 && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <div className="font-medium">Worker enabled</div>
-              <div className="text-xs text-muted-foreground">Master kill switch. When off, the worker stops scraping & applying.</div>
+              <Label>Daily start</Label>
+              <Input
+                type="time"
+                value={(s.daily_start ?? "08:00").slice(0, 5)}
+                onChange={(e) => set("daily_start", e.target.value)}
+                onBlur={flush}
+              />
+              <FieldError message={errors.daily_start} />
             </div>
-            <Switch checked={s.enabled} onCheckedChange={(v) => set("enabled", v)} />
-          </label>
-          <label className="flex items-center justify-between">
             <div>
-              <div className="font-medium">24/7 mode</div>
-              <div className="text-xs text-muted-foreground">If off, the worker only runs inside the daily window.</div>
+              <Label>Daily end</Label>
+              <Input
+                type="time"
+                value={(s.daily_end ?? "22:00").slice(0, 5)}
+                onChange={(e) => set("daily_end", e.target.value)}
+                onBlur={flush}
+              />
+              <FieldError message={errors.daily_end} />
             </div>
-            <Switch checked={s.run_24_7} onCheckedChange={(v) => set("run_24_7", v)} />
-          </label>
-          {!s.run_24_7 && (
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Daily start</Label><Input type="time" value={s.daily_start ?? "08:00"} onChange={(e) => set("daily_start", e.target.value)} /></div>
-              <div><Label>Daily end</Label><Input type="time" value={s.daily_end ?? "22:00"} onChange={(e) => set("daily_end", e.target.value)} /></div>
-            </div>
-          )}
-          <div><Label>Timezone</Label><Input value={s.timezone ?? ""} onChange={(e) => set("timezone", e.target.value)} placeholder="UTC, America/New_York, etc." /></div>
-        </CardContent>
-      </Card>
+          </div>
+        )}
+        <div>
+          <Label>Timezone</Label>
+          <Input
+            value={s.timezone ?? ""}
+            onChange={(e) => set("timezone", e.target.value)}
+            onBlur={flush}
+            placeholder="UTC, America/New_York, etc."
+          />
+          <FieldError message={errors.timezone} />
+        </div>
+      </SectionCard>
 
-      <Card>
-        <CardHeader><CardTitle>Apply behavior</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label>Max applies per day: <span className="text-primary">{s.max_applies_per_day}</span></Label>
-            <Slider value={[s.max_applies_per_day]} min={1} max={200} step={1} onValueChange={(v) => set("max_applies_per_day", v[0])} />
-          </div>
-          <div>
-            <Label>Parallelism (concurrent browsers): <span className="text-primary">{s.parallelism}</span></Label>
-            <Slider value={[s.parallelism]} min={1} max={8} step={1} onValueChange={(v) => set("parallelism", v[0])} />
-          </div>
-          <div>
-            <Label>Aggressiveness: <span className="text-primary">{s.aggressiveness}/5</span></Label>
-            <CardDescription className="mb-2">1 = slow, human-like, Easy Apply only · 5 = max throughput, all portals, parallel</CardDescription>
-            <Slider value={[s.aggressiveness]} min={1} max={5} step={1} onValueChange={(v) => set("aggressiveness", v[0])} />
-          </div>
-          <div>
-            <Label>Active filter (jobs that match this filter are auto-eligible)</Label>
-            <Select value={s.active_filter_id ?? ""} onValueChange={(v) => set("active_filter_id", v || null)}>
-              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-              <SelectContent>
-                {filters.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Globally excluded companies (comma-separated)</Label>
-            <Input defaultValue={(s.exclude_companies ?? []).join(", ")} onBlur={(e) => set("exclude_companies", e.target.value.split(",").map((x) => x.trim()).filter(Boolean))} />
-          </div>
-        </CardContent>
-      </Card>
+      <SectionCard
+        title="Throughput"
+        description="How aggressively the worker applies."
+        saveState={saveState}
+        error={error}
+      >
+        <div>
+          <Label className="flex items-center justify-between">
+            <span>Max applies per day</span>
+            <Badge variant="secondary" className="tabular-nums">
+              {s.max_applies_per_day}
+            </Badge>
+          </Label>
+          <Slider
+            value={[s.max_applies_per_day ?? 50]}
+            min={1}
+            max={500}
+            step={1}
+            onValueChange={(v) => set("max_applies_per_day", v[0])}
+            onValueCommit={flush}
+            className="mt-2"
+          />
+          <FieldError message={errors.max_applies_per_day} />
+        </div>
+        <div>
+          <Label className="flex items-center justify-between">
+            <span>Parallelism (concurrent browsers)</span>
+            <Badge variant="secondary" className="tabular-nums">
+              {s.parallelism}
+            </Badge>
+          </Label>
+          <Slider
+            value={[s.parallelism ?? 2]}
+            min={1}
+            max={10}
+            step={1}
+            onValueChange={(v) => set("parallelism", v[0])}
+            onValueCommit={flush}
+            className="mt-2"
+          />
+          <FieldError message={errors.parallelism} />
+        </div>
+        <div>
+          <Label className="flex items-center justify-between">
+            <span>Aggressiveness</span>
+            <Badge variant="secondary" className="tabular-nums">
+              {s.aggressiveness}/5
+            </Badge>
+          </Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            1 = slow, human-like, Easy Apply only · 5 = max throughput, all portals, parallel.
+          </p>
+          <Slider
+            value={[s.aggressiveness ?? 3]}
+            min={1}
+            max={5}
+            step={1}
+            onValueChange={(v) => set("aggressiveness", v[0])}
+            onValueCommit={flush}
+            className="mt-2"
+          />
+          <FieldError message={errors.aggressiveness} />
+        </div>
+      </SectionCard>
 
-      <Card>
-        <CardHeader><CardTitle>Anti-detection & AI providers</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2">
+      <SectionCard
+        title="Targeting"
+        description="Which jobs the worker is allowed to consider."
+        saveState={saveState}
+        error={error}
+      >
+        <div>
+          <Label>Active filter</Label>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Jobs matching this filter are auto-eligible for the worker.
+          </p>
+          <Select
+            value={s.active_filter_id ?? ""}
+            onValueChange={(v) => {
+              set("active_filter_id", (v || null) as AutomationValues["active_filter_id"]);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+              {(filters.data ?? []).map((f) => (
+                <SelectItem key={f.id} value={f.id}>
+                  {f.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Globally excluded companies</Label>
+          <Input
+            defaultValue={(s.exclude_companies ?? []).join(", ")}
+            onBlur={(e) => {
+              const list = e.target.value
+                .split(",")
+                .map((x) => x.trim())
+                .filter(Boolean);
+              set("exclude_companies", list);
+              flush();
+            }}
+            placeholder="comma-separated"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Companies listed here are skipped even if they match a filter.
+          </p>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Anti-detection & AI providers"
+        description="Which providers the worker calls under the hood."
+        saveState={saveState}
+        error={error}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label>Captcha provider</Label>
-            <Select value={s.captcha_provider ?? ""} onValueChange={(v) => set("captcha_provider", v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={s.captcha_provider ?? ""}
+              onValueChange={(v) => set("captcha_provider", v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="2captcha">2Captcha</SelectItem>
                 <SelectItem value="capsolver">CapSolver</SelectItem>
@@ -176,7 +271,9 @@ function AutomationPage() {
           <div>
             <Label>Proxy provider</Label>
             <Select value={s.proxy_provider ?? ""} onValueChange={(v) => set("proxy_provider", v)}>
-              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="iproyal">IPRoyal</SelectItem>
                 <SelectItem value="brightdata">BrightData</SelectItem>
@@ -186,15 +283,50 @@ function AutomationPage() {
             </Select>
           </div>
           <div>
-            <Label>AI resume model (OpenAI)</Label>
-            <Input value={s.ai_resume_model ?? ""} onChange={(e) => set("ai_resume_model", e.target.value)} placeholder="openai/gpt-5" />
+            <Label>AI resume model</Label>
+            <Input
+              value={s.ai_resume_model ?? ""}
+              onChange={(e) => set("ai_resume_model", e.target.value)}
+              onBlur={flush}
+              placeholder="openai/gpt-5"
+            />
           </div>
           <div>
-            <Label>AI reasoning model (DeepSeek)</Label>
-            <Input value={s.ai_reasoning_model ?? ""} onChange={(e) => set("ai_reasoning_model", e.target.value)} placeholder="deepseek/deepseek-reasoner" />
+            <Label>AI reasoning model</Label>
+            <Input
+              value={s.ai_reasoning_model ?? ""}
+              onChange={(e) => set("ai_reasoning_model", e.target.value)}
+              onBlur={flush}
+              placeholder="deepseek/deepseek-reasoner"
+            />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
+}
+
+function Row({
+  label,
+  desc,
+  children,
+}: {
+  label: string;
+  desc: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-surface-1/40 p-3">
+      <div className="min-w-0 flex-1">
+        <div className="font-medium">{label}</div>
+        <div className="text-xs text-muted-foreground">{desc}</div>
+      </div>
+      {children}
+    </label>
+  );
+}
+
+function pickAutomationFields(s: AutomationSettings): AutomationValues {
+  const { user_id: _u, ...rest } = s;
+  return rest as unknown as AutomationValues;
 }
