@@ -517,7 +517,7 @@ function SourcesPage() {
         );
       })()}
 
-
+      {sources.length === 0 ? (
         <EmptyState
           icon={Database}
           title="No sources yet"
