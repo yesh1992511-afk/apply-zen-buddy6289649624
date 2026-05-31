@@ -39,6 +39,7 @@ import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
 import { Route as AuthenticatedApplicationsIdRouteImport } from './routes/_authenticated/applications.$id'
+import { Route as ApiPublicWorkerEnvRouteImport } from './routes/api/public/worker.env'
 import { Route as ApiPublicSourcesWorkerStatusRouteImport } from './routes/api/public/sources/worker-status'
 import { Route as ApiPublicSourcesUploadCookiesRouteImport } from './routes/api/public/sources/upload-cookies'
 import { Route as ApiPublicSourcesRunTierRouteImport } from './routes/api/public/sources/run-tier'
@@ -202,6 +203,11 @@ const AuthenticatedApplicationsIdRoute =
     path: '/$id',
     getParentRoute: () => AuthenticatedApplicationsRoute,
   } as any)
+const ApiPublicWorkerEnvRoute = ApiPublicWorkerEnvRouteImport.update({
+  id: '/api/public/worker/env',
+  path: '/api/public/worker/env',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSourcesWorkerStatusRoute =
   ApiPublicSourcesWorkerStatusRouteImport.update({
     id: '/api/public/sources/worker-status',
@@ -295,6 +301,7 @@ export interface FileRoutesByFullPath {
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
   '/api/public/sources/upload-cookies': typeof ApiPublicSourcesUploadCookiesRoute
   '/api/public/sources/worker-status': typeof ApiPublicSourcesWorkerStatusRoute
+  '/api/public/worker/env': typeof ApiPublicWorkerEnvRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -334,6 +341,7 @@ export interface FileRoutesByTo {
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
   '/api/public/sources/upload-cookies': typeof ApiPublicSourcesUploadCookiesRoute
   '/api/public/sources/worker-status': typeof ApiPublicSourcesWorkerStatusRoute
+  '/api/public/worker/env': typeof ApiPublicWorkerEnvRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -376,6 +384,7 @@ export interface FileRoutesById {
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
   '/api/public/sources/upload-cookies': typeof ApiPublicSourcesUploadCookiesRoute
   '/api/public/sources/worker-status': typeof ApiPublicSourcesWorkerStatusRoute
+  '/api/public/worker/env': typeof ApiPublicWorkerEnvRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -418,6 +427,7 @@ export interface FileRouteTypes {
     | '/api/public/sources/run-tier'
     | '/api/public/sources/upload-cookies'
     | '/api/public/sources/worker-status'
+    | '/api/public/worker/env'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -457,6 +467,7 @@ export interface FileRouteTypes {
     | '/api/public/sources/run-tier'
     | '/api/public/sources/upload-cookies'
     | '/api/public/sources/worker-status'
+    | '/api/public/worker/env'
   id:
     | '__root__'
     | '/'
@@ -498,6 +509,7 @@ export interface FileRouteTypes {
     | '/api/public/sources/run-tier'
     | '/api/public/sources/upload-cookies'
     | '/api/public/sources/worker-status'
+    | '/api/public/worker/env'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -516,6 +528,7 @@ export interface RootRouteChildren {
   ApiPublicSourcesRunTierRoute: typeof ApiPublicSourcesRunTierRoute
   ApiPublicSourcesUploadCookiesRoute: typeof ApiPublicSourcesUploadCookiesRoute
   ApiPublicSourcesWorkerStatusRoute: typeof ApiPublicSourcesWorkerStatusRoute
+  ApiPublicWorkerEnvRoute: typeof ApiPublicWorkerEnvRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -730,6 +743,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApplicationsIdRouteImport
       parentRoute: typeof AuthenticatedApplicationsRoute
     }
+    '/api/public/worker/env': {
+      id: '/api/public/worker/env'
+      path: '/api/public/worker/env'
+      fullPath: '/api/public/worker/env'
+      preLoaderRoute: typeof ApiPublicWorkerEnvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/sources/worker-status': {
       id: '/api/public/sources/worker-status'
       path: '/api/public/sources/worker-status'
@@ -890,6 +910,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicSourcesRunTierRoute: ApiPublicSourcesRunTierRoute,
   ApiPublicSourcesUploadCookiesRoute: ApiPublicSourcesUploadCookiesRoute,
   ApiPublicSourcesWorkerStatusRoute: ApiPublicSourcesWorkerStatusRoute,
+  ApiPublicWorkerEnvRoute: ApiPublicWorkerEnvRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
