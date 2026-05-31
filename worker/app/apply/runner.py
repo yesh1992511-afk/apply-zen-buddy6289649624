@@ -151,11 +151,11 @@ async def process_queue(limit: int = 3) -> None:
     apps = await _next_queued(limit)
     if not apps:
         return
-    # Serial-by-default; aggressiveness 5 → parallel up to 2.
+    # Honor user-set parallelism (1-10). Cap at 5 hard to keep portals happy.
     s = db().table("automation_settings").select("parallelism, aggressiveness, max_applies_per_day").eq(
         "user_id", user_id()
     ).single().execute().data or {}
-    parallel = min(int(s.get("parallelism") or 1), 2 if (s.get("aggressiveness") or 3) >= 4 else 1)
+    parallel = max(1, min(int(s.get("parallelism") or 1), 5))
 
     # Respect daily cap
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
