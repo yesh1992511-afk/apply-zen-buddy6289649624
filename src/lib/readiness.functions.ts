@@ -99,12 +99,16 @@ export const getSystemReadiness = createServerFn({ method: "GET" })
 
     // 5. Proxy
     const proxy = (secrets ?? []).find((s) => s.category === "proxy" && s.status === "set");
+    const provider = (settings as { proxy_provider?: string | null } | null)?.proxy_provider ?? "decodo";
+    const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1);
     checks.push({
       key: "proxy",
       label: "Residential proxy",
       status: proxy ? "ok" : "warn",
-      detail: proxy ? `Configured (${proxy.name})` : "Optional but strongly recommended for LinkedIn/Indeed",
-      href: "/setup",
+      detail: proxy
+        ? `Configured (${providerLabel} — ${proxy.name})`
+        : `${providerLabel} selected but no proxy secret set — strongly recommended for LinkedIn/Indeed`,
+      href: "/automation",
     });
 
     // 6. Worker heartbeat
