@@ -132,7 +132,10 @@ function WorkerPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-2xl border border-border/60 bg-card p-5">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Last seen</div>
-          <div className="mt-2 font-heading text-2xl tabular-nums">{ageStr}</div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className={"inline-block h-2 w-2 rounded-full " + hbTone + (ageMs < 30_000 ? " animate-pulse" : "")} />
+            <span className="font-heading text-2xl tabular-nums">{ageStr}</span>
+          </div>
         </div>
         <div className="rounded-2xl border border-border/60 bg-card p-5">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Version</div>
