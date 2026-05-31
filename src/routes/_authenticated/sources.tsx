@@ -12,8 +12,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { triggerScrape, triggerTestSource } from "@/lib/commands";
 import { waitForCommand } from "@/lib/commands";
-import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2, Target } from "lucide-react";
+import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2, Target, KeyRound, PackagePlus } from "lucide-react";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+import { PACKS, configFieldFor, mergePackIntoConfig } from "@/lib/sources/curated-packs";
 
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
@@ -97,6 +98,7 @@ function SourcesPage() {
   const [lastIngestResult, setLastIngestResult] = useState<string | null>(null);
   const [target, setTarget] = useState<JobTarget>(DEFAULT_TARGET);
   const [applyingTarget, setApplyingTarget] = useState(false);
+  const [secretNames, setSecretNames] = useState<Set<string>>(new Set());
 
   const load = () => {
     supabase.from("sources").select("*").order("display_name").then(({ data }) => setSources((data ?? []) as Source[]));
@@ -117,9 +119,24 @@ function SourcesPage() {
           });
         }
       });
+    supabase.from("secrets_meta").select("name,status").then(({ data }) => {
+      const names = new Set((data ?? []).filter((s) => s.status === "set").map((s) => s.name));
+      setSecretNames(names);
+    });
   };
   useEffect(() => { load(); }, []);
   useRealtimeInvalidate({ table: "sources", onChange: load });
+
+  const loadPack = async (s: Source) => {
+    const field = configFieldFor(s.key);
+    if (!field) { toast.error("Pack not supported for this source"); return; }
+    const { config, added } = mergePackIntoConfig(s.key as keyof typeof PACKS.cybersecurity.data, s.config, "cybersecurity");
+    if (added === 0) { toast.info("All companies in the pack are already configured"); return; }
+    const { error } = await supabase.from("sources").update({ config } as never).eq("id", s.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Added ${added} compan${added === 1 ? "y" : "ies"} to ${s.display_name}`);
+    load();
+  };
 
 
   // First-visit autopilot: if the user has zero sources, seed + enable everything
@@ -448,6 +465,58 @@ function SourcesPage() {
         </div>
       </div>
 
+      {(() => {
+        const enabledApify = sources.filter((s) => s.enabled && s.kind === "apify");
+        const enabledUsajobs = sources.find((s) => s.enabled && s.key === "usajobs");
+        const missing: Array<{ key: string; label: string; unlocks: string; href: string }> = [];
+        if (enabledApify.length > 0 && !secretNames.has("APIFY_TOKEN")) {
+          missing.push({
+            key: "APIFY_TOKEN",
+            label: "APIFY_TOKEN",
+            unlocks: `${enabledApify.length} Apify source${enabledApify.length === 1 ? "" : "s"} (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google Jobs, Wellfound)`,
+            href: "https://console.apify.com/account/integrations",
+          });
+        }
+        if (enabledUsajobs && (!secretNames.has("USAJOBS_API_KEY") || !secretNames.has("USAJOBS_USER_AGENT_EMAIL"))) {
+          missing.push({
+            key: "USAJOBS",
+            label: "USAJOBS_API_KEY + USAJOBS_USER_AGENT_EMAIL",
+            unlocks: "USAJobs (federal cybersecurity roles, free)",
+            href: "https://developer.usajobs.gov/apirequest/Index",
+          });
+        }
+        if (missing.length === 0) return null;
+        return (
+          <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+            <div className="flex items-start gap-3">
+              <KeyRound className="mt-0.5 h-5 w-5 text-warning shrink-0" />
+              <div className="min-w-0 flex-1">
+                <h4 className="font-heading font-semibold text-sm">Missing scraper keys — some portals are dark</h4>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  These sources are enabled but can't run until you add the required keys in Setup → Secrets.
+                </p>
+                <ul className="mt-3 space-y-2 text-xs">
+                  {missing.map((m) => (
+                    <li key={m.key} className="rounded-md border border-border/60 bg-card p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <code className="font-mono text-[11px] font-semibold text-foreground">{m.label}</code>
+                        <a
+                          href={m.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] font-medium text-primary hover:underline"
+                        >Where to get it →</a>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Unlocks: {m.unlocks}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {sources.length === 0 ? (
         <EmptyState
           icon={Database}
@@ -529,6 +598,11 @@ function SourcesPage() {
                     <Button size="sm" variant="outline" onClick={() => triggerScrape(s.key)} className="gap-1.5">
                       <Play className="h-3 w-3" /> Run now
                     </Button>
+                    {s.kind === "board" && configFieldFor(s.key) && (
+                      <Button size="sm" variant="outline" onClick={() => loadPack(s)} className="gap-1.5" title="Merge curated cybersecurity company pack into this source">
+                        <PackagePlus className="h-3 w-3" /> Load pack
+                      </Button>
+                    )}
                     <div className="flex items-center gap-2 rounded-full bg-surface-2 px-2.5 py-1">
                       <span className={`text-[10px] font-semibold uppercase tracking-wider ${s.enabled ? "text-success" : "text-muted-foreground"}`}>
                         {s.enabled ? "ON" : "OFF"}
