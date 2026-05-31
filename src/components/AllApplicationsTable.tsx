@@ -182,7 +182,9 @@ export function AllApplicationsTable() {
         </div>
       </div>
 
-      {query.isLoading ? (
+      {view === "kanban" ? (
+        <AllApplicationsKanban bucket={tab} search={search} />
+      ) : query.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-14 shimmer rounded-lg" />
