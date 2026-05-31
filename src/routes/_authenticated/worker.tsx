@@ -107,6 +107,14 @@ function WorkerPage() {
 
   const ageMs = hb?.last_seen ? Date.now() - new Date(hb.last_seen).getTime() : Infinity;
   const ageStr = hb?.last_seen ? `${Math.round(ageMs / 1000)}s ago` : "never";
+  const hbTone = ageMs < 30_000 ? "bg-emerald-500" : ageMs < 5 * 60_000 ? "bg-amber-500" : "bg-red-500";
+  const fmtDur = (a: string, b: string | null) => {
+    if (!b) return "running…";
+    const ms = new Date(b).getTime() - new Date(a).getTime();
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${Math.round(ms / 1000 / 60)}m`;
+  };
 
   return (
     <div className="space-y-6 max-w-[1200px]">
