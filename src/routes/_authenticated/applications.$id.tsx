@@ -12,7 +12,7 @@ import { PortalBadge } from "@/components/PortalBadge";
 import { ApplicationTimeline } from "@/components/ApplicationTimeline";
 import { applicationEventsQueryOptions, useRetryApplication } from "@/lib/queries/applications";
 import { timeAgo } from "@/lib/timeAgo";
-import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2, RefreshCw, History } from "lucide-react";
+import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2, RefreshCw, History, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -51,8 +51,19 @@ type AppRow = {
     title: string; company: string; url: string; source_key: string;
     location: string | null; remote: string | null; posted_at: string | null;
     scraped_at: string;
+    description: string | null; description_html: string | null;
   } | null;
 };
+
+function sanitizeJdHtml(html: string): string {
+  // Strip script/iframe/style tags and inline event handlers before injecting.
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "");
+}
 
 type ResumeRow = { id: string; name: string; pdf_storage_path: string | null; kind: string };
 
@@ -69,7 +80,7 @@ function ApplicationDetailPage() {
   const [resumeUrl, setResumeUrl] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [coverBody, setCoverBody] = useState<string | null>(null);
-  const [tab, setTab] = useState("form");
+  const [tab, setTab] = useState("jd");
   const [loading, setLoading] = useState(true);
 
   const eventsQuery = useQuery(applicationEventsQueryOptions(id));
@@ -83,7 +94,7 @@ function ApplicationDetailPage() {
     (async () => {
       const { data, error } = await supabase
         .from("applications")
-        .select("id, status, job_id, resume_id, cover_letter_id, attempts, retry_count, last_error, dlq_reason, queued_at, started_at, applied_at, finished_at, screenshots, field_fills, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at)")
+        .select("id, status, job_id, resume_id, cover_letter_id, attempts, retry_count, last_error, dlq_reason, queued_at, started_at, applied_at, finished_at, screenshots, field_fills, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at, description, description_html)")
         .eq("id", id)
         .maybeSingle();
       if (cancelled) return;
@@ -259,6 +270,7 @@ function ApplicationDetailPage() {
           <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2">View</div>
           <nav className="rounded-xl border border-border/60 bg-card overflow-hidden">
             {[
+              { v: "jd", label: "Job description", icon: Briefcase },
               { v: "form", label: "Form", icon: ClipboardList },
               { v: "timeline", label: "Timeline", icon: History },
               { v: "resume", label: "Resume", icon: FileText },
@@ -296,11 +308,19 @@ function ApplicationDetailPage() {
           <LiveActivityPanel logs={logs} active={isActive} />
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="hidden">
+              <TabsTrigger value="jd">Job description</TabsTrigger>
               <TabsTrigger value="form">Form</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="resume">Resume</TabsTrigger>
               <TabsTrigger value="cover">Cover</TabsTrigger>
             </TabsList>
+            <TabsContent value="jd" className="mt-0">
+              <JobDescriptionPanel
+                html={app.job?.description_html ?? null}
+                text={app.job?.description ?? null}
+                url={app.job?.url ?? null}
+              />
+            </TabsContent>
             <TabsContent value="form" className="mt-0">
               <FormFillTable rows={fillRows} isActive={isActive} />
             </TabsContent>
@@ -359,6 +379,34 @@ function PdfViewer({ url, title, isGenerating }: { url: string | null; title: st
         </>
       ) : (
         <p className="text-sm text-muted-foreground italic">Not generated yet.</p>
+      )}
+    </div>
+  );
+}
+
+function JobDescriptionPanel({ html, text, url }: { html: string | null; text: string | null; url: string | null }) {
+  const hasContent = !!(html && html.trim()) || !!(text && text.trim());
+  return (
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-border/40 flex items-center justify-between">
+        <h3 className="text-sm font-medium">Job description</h3>
+        {url && (
+          <a href={url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+            View original <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </div>
+      {!hasContent ? (
+        <div className="p-8 text-center text-sm text-muted-foreground italic">
+          No description was captured for this job.
+        </div>
+      ) : html && html.trim() ? (
+        <div
+          className="prose prose-sm dark:prose-invert max-w-none p-5 leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: sanitizeJdHtml(html) }}
+        />
+      ) : (
+        <pre className="whitespace-pre-wrap p-5 text-sm leading-relaxed font-sans">{text}</pre>
       )}
     </div>
   );

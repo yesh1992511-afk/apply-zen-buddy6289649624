@@ -137,6 +137,24 @@ async def process_one(app: dict[str, Any]) -> None:
         except Exception as e:
             log.warning("cover_letter_failed", error=str(e))
 
+        # Persist cover letter so the /applications/:id Cover tab can render it.
+        if cl:
+            try:
+                cl_row = db().table("cover_letters").insert({
+                    "user_id": user_id(),
+                    "job_id": app["job_id"],
+                    "name": f"{job.get('company') or 'Company'} — {job.get('title') or 'Role'}",
+                    "body": cl,
+                    "kind": "tailored",
+                    "tone": tone,
+                }).execute().data
+                if cl_row:
+                    db().table("applications").update(
+                        {"cover_letter_id": cl_row[0]["id"]}
+                    ).eq("id", app["id"]).execute()
+            except Exception as e:
+                log.warning("cover_letter_persist_failed", error=str(e))
+
         await _save_resume(app["id"], pdf, tex)
 
         try:
