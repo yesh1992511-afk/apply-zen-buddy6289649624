@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, ClipboardList, CheckCheck, AlertCircle, Inbox } from "lucide-react";
+import { Search, CheckCheck, AlertCircle, Inbox, LayoutGrid, Table as TableIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/timeAgo";
 import { EmptyState } from "@/components/EmptyState";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+import { AllApplicationsKanban } from "@/components/AllApplicationsKanban";
 import {
   applicationsListQueryOptions,
   bucketOf,
