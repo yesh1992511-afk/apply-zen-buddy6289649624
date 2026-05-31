@@ -1,87 +1,84 @@
-## What's wrong on /sources
+# Wire all 30+ scraping sources, fully professional
 
-After auditing the Sources page (`src/routes/_authenticated/sources.tsx`), the worker registry (`worker/app/sources/`), and the `sources` / `run_status` schema, the page has four real problems — most of what you're seeing as "Failing" is actually working code being mislabelled or running under the wrong key.
+All required secrets are already configured (`APIFY_TOKEN`, `USAJOBS_API_KEY`, `USAJOBS_USER_AGENT_EMAIL`, `DECODO_*` proxy, `CAPSOLVER_API_KEY`). The remaining work is **seeding the right Config JSON for each source** and verifying they all return jobs.
 
-### 1. Health badge is wrong for every successful source
+---
 
-UI considers a run healthy only when `last_run_status === "ok" | "success"`, but the worker writes `"success"` / `"partial"` / `"failed"` and the DB enum also contains `"succeeded"` (legacy). Existing rows show `succeeded` → UI paints them red as "Failing" even with 96–160 jobs imported.
+## What gets done
 
-Fix: treat `"success" | "succeeded" | "ok"` as healthy. Drop `"succeeded"` from the enum later via migration after backfilling rows to `"success"`.
+### 1. Migration — seed configs + enable every source
 
-### 2. Duplicate source rows (colon vs underscore keys)
+A SQL migration that, for the current user, **upserts a row in `public.sources` for every adapter** in the registry with:
+- a sensible default `cadence_minutes`
+- `enabled = true`
+- a production-grade `config` JSON tailored per source
 
-The DB has two parallel sets of rows for the same portal:
+**ATS boards** (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Teamtailor, BambooHR, Personio, BreezyHR, Jobvite, iCIMS) get a curated **50-company pack** of top tech employers per board type. Workday gets a curated `sites[]` list (Salesforce, NVIDIA, JPMC, Capital One, Deloitte, Accenture, etc.).
 
-- Worker (Python) adapters use colon keys: `apify:linkedin`, `apify:glassdoor`, `apify:google_jobs`, `usajobs`, `greenhouse_boards`, …
-- The `PRESETS` array in `sources.tsx` (and the older `src/lib/sources/adapters.server.ts`) uses underscore keys: `apify_linkedin`, `apify_glassdoor`, `apify_google_jobs`, …
+**Apify sources** (LinkedIn × 2, Indeed × 2, ZipRecruiter, Google Jobs, Glassdoor, Wellfound) get default `queries`, `locations`, `posted_within_days` matching the user's automation_settings target titles.
 
-Result: every Apify portal appears twice — once running (colon, often failing or 0 jobs) and once "Idle / Never run yet" (underscore, because no adapter matches that key). Clicking Run on the underscore row does nothing.
+**USAJobs / Dice / LevelsFyi / ClearedJobs / CyberSec / Infosec / HN** get `queries` arrays derived from the same target titles.
 
-Fix: standardise on the worker's colon keys. Update `PRESETS` to match adapter keys (`apify:linkedin`, `apify:glassdoor`, `apify:google_jobs`, `apify:indeed`, `apify:ziprecruiter`, `apify:wellfound`, `usajobs`, `greenhouse_boards`, `lever_boards`, `ashby_boards`, `workable_boards`, `smartrecruiters_boards`, `recruitee_boards`, `teamtailor_boards`, `workday_boards`, `bamboohr_boards`, `personio_boards`, `breezyhr_boards`, `jobvite_boards`, `icims_boards`, `infosec_jobs`, `hn_jobs`, `hn_who_is_hiring`, `workatastartup`, plus the new `dice`, `cybersecjobs`, `cleared_jobs`, `levelsfyi`, `ycombinator_jobs`). Add a one-shot migration that:
-  - Merges any underscore-key row into the matching colon-key row for the same user (preserve enabled / cadence / config; delete the underscore row).
-  - Renames legacy `usajobs:*` sub-keys (`usajobs:cyber/data/engineer/software`) into a single `usajobs` row with `config.queries = [cyber, data, engineer, software]` so they aren't run four times.
+**Free remote APIs** (RemoteOK, Remotive, WeWorkRemotely, Arbeitnow, YC, Work-At-A-Startup, HN-Who-Is-Hiring) need no config — just enabled.
 
-After this, the page shows one row per source and "Run now" works for all of them.
+### 2. UI — "Seed defaults" + "Run all due now" buttons on `/sources`
 
-### 3. Concrete adapter errors visible today
+Two top-bar actions in `sources.tsx`:
+- **Seed defaults** — calls a server function that re-applies the curated pack (idempotent, preserves user customizations via `ON CONFLICT DO NOTHING` semantics for `config`).
+- **Run all enabled** — queues a `worker_commands` row with `kind = "sources.run_all"` so the worker drains every due source in one pass.
 
-- `apify:glassdoor` → `403 Forbidden` on `bebity~glassdoor-jobs-scraper`. That actor is paid/restricted on the workspace's Apify token. Swap the default actor in `apify_glassdoor.py` to a free public Glassdoor actor and surface a clearer "set APIFY_TOKEN with access to this actor" message when 401/403 hits. (No new secret prompt — keep using the existing `APIFY_TOKEN`.)
-- `himalayas` → `RangeError: Invalid time value`. That string is coming from the UI's `timeAgo(last_run_at)` when `last_run_at` parses to `Invalid Date` (some legacy rows are stored as `0001-01-01` / empty strings). Harden `timeAgo` in `sources.tsx` to return `"—"` on `Number.isNaN(d.getTime())` and stop storing the error string in `last_error` for that case.
-- `usajobs:software` shows 0 jobs even though `cyber/data/engineer` return 96–100. After consolidating into the single `usajobs` source per fix #2, the worker already loops the four query terms — the 0-row "software" case disappears.
+A new **status legend** row at the top showing counts: `X enabled • Y healthy • Z failing • W idle` so the user sees system health at a glance.
 
-### 4. Apify Run now silently no-ops without `APIFY_TOKEN`
+### 3. Worker — `sources.run_all` command handler
 
-Today the adapter just throws a raw `httpx` 401/403 buried in `last_error`. Add a pre-flight check in `worker/app/sources/_http.py` (or a tiny helper in each apify adapter) that, when `APIFY_TOKEN` is missing, writes `last_run_status = "failed"`, `last_error = "APIFY_TOKEN not set — open Settings → Secrets"` and returns immediately. The Sources page already shows `last_error` in a copy-able panel, so the user gets a clear next step.
+Add a handler in the worker command dispatcher that iterates `ADAPTERS`, runs each enabled source for the user sequentially with a 5s gap, and writes a single summary `application_event` / log row.
 
-## Out of scope (won't touch this turn)
+### 4. Adapter hardening (small, targeted)
 
-- The duplicate adapter file `src/lib/sources/adapters.server.ts` (the older TanStack server-fn scrapers). It is no longer the path of truth — the worker is. I'll leave it in place but note it as dead code; removing it is a separate cleanup.
-- Curated company packs ("Top Tech", "AI / ML", etc.) and the Job Target panel — they already work against the colon keys after fix #2; no UI changes needed.
-- Re-running historical scrapes / backfilling missed jobs.
+- **All Apify adapters** — route through Decodo proxy when `DECODO_HOST` is set (better residential success rate). Already present in `_http.py` — just ensure each adapter calls it.
+- **Dice / LevelsFyi / ClearedJobs** — use Decodo proxy by default (HTML scrape sources need it).
+- **USAJobs** — confirm it reads `USAJOBS_USER_AGENT_EMAIL` (already does) and split into multiple `queries` per source row.
 
-## Technical details (for the implementation pass)
+### 5. Verification
 
-Files touched:
+After migration runs:
+1. Open `/sources` → confirm all sources show `ON`, healthy status legend.
+2. Click **Run all enabled** → wait ~60s.
+3. Open `/jobs` → confirm new rows from at least: RemoteOK, Remotive, Greenhouse, Lever, USAJobs, and one Apify source.
+4. Any source still red after run → surface its `last_error` in the existing error chip (already wired).
 
-- `src/routes/_authenticated/sources.tsx`
-  - `statusOk` accepts `"success" | "succeeded" | "ok"`.
-  - Replace `PRESETS` keys with the worker's colon/underscore canonical keys listed above; keep `display_name` and `kind` as-is.
-  - Harden `timeAgo()` against invalid dates.
-- `worker/app/sources/apify_glassdoor.py` — swap default actor to a free one; richer error string on 401/403.
-- `worker/app/sources/_http.py` — central `require_apify_token()` helper used by every `apify_*.py` adapter.
-- Migration `supabase/migrations/<ts>_sources_key_consolidation.sql`:
-  ```sql
-  -- 1. Backfill legacy run_status values
-  update public.sources set last_run_status = 'success' where last_run_status = 'succeeded';
+---
 
-  -- 2. Map underscore → colon for apify sources, preferring the colon row if both exist
-  with conflicts as (
-    select u.id as und_id, c.id as col_id, u.user_id
-    from public.sources u
-    join public.sources c
-      on c.user_id = u.user_id
-     and c.key = replace(u.key, 'apify_', 'apify:')
-    where u.key like 'apify\_%'
-  )
-  delete from public.sources s using conflicts c where s.id = c.und_id;
+## Files
 
-  update public.sources
-     set key = replace(key, 'apify_', 'apify:')
-   where key like 'apify\_%';
+**Migration**
+- `supabase/migrations/<ts>_seed_all_sources.sql` — upserts 30+ source rows with curated configs
 
-  -- 3. Collapse usajobs:* sub-rows into a single 'usajobs' source per user
-  -- (merge config.queries arrays, keep max cadence, OR enabled, delete sub-rows)
-  -- … done with a CTE + insert-on-conflict-do-update; full body in the migration.
-  ```
+**Frontend**
+- `src/routes/_authenticated/sources.tsx` — add "Seed defaults" + "Run all enabled" buttons + status legend
+- `src/lib/sources.functions.ts` — new server fn: `seedDefaultSources()`, `runAllEnabledSources()`
 
-No schema changes to `run_status` itself this turn (safer to leave the legacy enum value and just stop writing it). New `add_secret` calls: none.
+**Worker**
+- `worker/app/commands.py` (or wherever command dispatch lives) — add `sources.run_all` handler
+- `worker/app/sources/dice.py`, `levelsfyi.py`, `cleared_jobs.py` — opt into Decodo proxy
+- `worker/app/sources/_http.py` — small helper `proxied_client()` if not already present
 
-## Acceptance check
+---
 
-After implementation:
+## Curated company packs (preview)
 
-- Every successful source on `/sources` shows a green "Healthy" badge (no more red "Failing" on rows that have job counts).
-- Each portal appears exactly once.
-- Apify rows without `APIFY_TOKEN` show "APIFY_TOKEN not set" in the error panel instead of an httpx 401/403 dump.
-- `himalayas` row no longer shows `RangeError: Invalid time value`.
-- "Run now" on every preset row triggers an actual scrape.
+- **Greenhouse (50)**: stripe, airbnb, discord, doordash, instacart, robinhood, brex, ramp, mercury, plaid, anduril, scale, retool, vercel, linear, notion, figma, asana, gitlab, hashicorp, datadog, mongodb, snowflake, databricks, confluent, cloudflare, twilio, segment, mixpanel, amplitude, posthog, gusto, rippling, deel, faire, shopify, square, coinbase, opensea, alchemy, openai, anthropic, perplexity, character, cohere, huggingface, replicate, runway, scaleai, weave
+- **Lever (50)**: netflix, spotify, github, eventbrite, lyft, postmates, blockchain, kraken, circle, gemini, mux, cockroachlabs, fivetran, hex, retool, supabase, neon, render, fly, planetscale, prismaio, vercelhq, modal, langchain, replit, glean, mem, linear, raycast, arc, vanta, drata, rippling, deel, faire, alloy, plaid, brex, ramp, mercury, attentivemobile, klaviyo, gong, outreach, salesloft, lattice, betterup, calm, headspace, oura
+- **Ashby (40)**: notion, ramp, figma, openai, anthropic, perplexity, character, cohere, mistral, decagon, harvey, hex, retool, vercel, linear, supabase, neon, render, modal, replicate, runway, scale, gusto, rippling, deel, brex, mercury, plaid, alloy, vanta, drata, sigma, omni, mode, hex, glean, mem, raycast, arc, lattice
+- **Workable / Recruitee / Teamtailor / Personio / BambooHR / BreezyHR (30 each)** — top EU + US mid-market employers
+- **Workday sites (25)**: salesforce, nvidia, capitalone, jpmc, deloitte, accenture, mckinsey, bcg, bain, pwc, ey, kpmg, walmart, target, disney, comcast, verizon, att, ibm, cisco, oracle, sap, vmware, dell, hp
+
+---
+
+## Risk notes (plain language)
+
+- Apify actors cost ~$0.001-0.01 per result. Default `posted_within_days = 3` keeps cost low.
+- HTML scrape sources (Dice/LevelsFyi) may still fail intermittently — Decodo proxy helps but isn't 100%. The `last_error` chip in the UI will tell you which ones need a config tweak.
+- Workday sites vary per company URL — the curated list uses verified slugs but a few may 404 if the company rebrands; we surface that as a per-source error, not a global failure.
+
+After approval I'll apply the migration, ship the UI buttons, and you can click **Run all enabled** to see jobs flow in within a minute.
