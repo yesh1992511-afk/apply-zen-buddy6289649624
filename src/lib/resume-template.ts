@@ -68,9 +68,12 @@ export const TEX_PREAMBLE = String.raw`\documentclass[letterpaper,11pt]{article}
 export function escapeTex(input: string | null | undefined): string {
   if (input == null) return "";
   const s = String(input);
+  // Use a placeholder for backslash so the {} it expands into don't get
+  // re-escaped by the next regex.
   return s
-    .replace(/\\/g, "\\textbackslash{}")
+    .replace(/\\/g, "\u0000")
     .replace(/([&%$#_{}])/g, "\\$1")
+    .replace(/\u0000/g, "\\textbackslash{}")
     .replace(/~/g, "\\textasciitilde{}")
     .replace(/\^/g, "\\textasciicircum{}");
 }

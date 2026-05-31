@@ -37,7 +37,9 @@ export const syncResumeFromProfile = createServerFn({ method: "POST" })
     };
 
     const tex = renderResumeTex(data);
-    const slug = slugifyName(data.profile.full_name || "resume");
+    const prof = data.profile as ResumeData["profile"] & { first_name?: string | null; last_name?: string | null };
+    const composed = [prof.first_name, prof.last_name].filter(Boolean).join(" ").trim();
+    const slug = slugifyName(composed || prof.full_name || "resume");
 
     // Determine next version
     const { data: existing } = await supabase

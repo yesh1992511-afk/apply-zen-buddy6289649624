@@ -1,91 +1,65 @@
-## Goal
-Add a **Sync to Resume** button at the top-right of `/profile` that:
-1. Renders the user's profile data into your LaTeX template
-2. Saves a versioned `.tex` to the `resumes` table + `resumes` storage bucket
-3. Offers a one-click **Download PDF** action that compiles on-demand
+# Add First/Last Name + Audit Sync Resume
 
----
+## 1. Database — add first/last name columns
 
-## 1. LaTeX template + renderer (server-side)
-
-**New file: `src/lib/resume-template.ts`**
-- Exports the LaTeX preamble + section formatting commands from your `.tex` file as a constant (the lines 1–62 boilerplate stays identical).
-- Exports `escapeTex(s)` that escapes `& % $ # _ { } ~ ^ \` and converts newlines.
-- Exports `formatDateRange(start, end)` → `"Jan 2025 -- Present"`.
-
-**New file: `src/lib/resume-render.server.ts`** (server-only helper)
-- `renderResumeTex(data)` builds the full `.tex` string by interpolating:
-  - **Header**: `full_name` (uppercased), `city, state_region`, `phone`, `email`, `linkedin_url`
-  - **Professional Summary**: `profile.summary` (verbatim, escaped)
-  - **Professional Experience**: each row from `experiences` → `\resumeSubheading{company}{date_range}{title}{location}` + bullet items split from `description` on newlines
-  - **Cybersecurity Projects / Projects**: each row from `projects` → project heading block + tech stack italic line + bullets
-  - **Technical Skills**: rows from `skills` grouped by `category` → one `\item \textbf{category:} comma,list`
-  - **Certifications**: rows from `certifications` → `\item \textbf{name} (year)`
-  - **Education**: rows from `educations` → `\resumeSubheading{school}{date_range}{degree | GPA}{location}`
-  - **Publications**: rows from `publications` → `\item authors. "title." venue, date. url. description`
-- Sections render with empty-state guard (skipped if no rows).
-
-## 2. Server function: sync + PDF compile
-
-**New file: `src/lib/resume.functions.ts`**
-
-```ts
-export const syncResumeFromProfile = createServerFn({ method: 'POST' })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    // 1. load profile + all 6 child tables
-    // 2. compute completion %, throw if < 80
-    // 3. render tex
-    // 4. slugify full_name → "yeswanth_reddy_chilakala"
-    // 5. find existing default-synced resumes for user, compute next vN
-    // 6. upload tex to resumes/{user_id}/{slug}_v{n}.tex
-    // 7. insert into resumes (kind='synced', is_default=true on first, name='yeswanth_reddy_chilakala_v3')
-    //    unset is_default on prior synced rows
-    // 8. return { id, name, storage_path }
-  })
-
-export const compileResumePdf = createServerFn({ method: 'POST' })
-  .middleware([requireSupabaseAuth])
-  .inputValidator(z.object({ resume_id: z.string().uuid() }))
-  .handler(async ({ data, context }) => {
-    // 1. fetch resume (RLS ensures ownership)
-    // 2. POST tex to https://latexonline.cc/compile (text=...)
-    // 3. upload pdf to resumes/{user_id}/{slug}_v{n}.pdf
-    // 4. update resumes.pdf_storage_path
-    // 5. return signed URL valid 60s
-  })
+Migration on `public.profile`:
+```sql
+ALTER TABLE public.profile
+  ADD COLUMN IF NOT EXISTS first_name TEXT,
+  ADD COLUMN IF NOT EXISTS last_name  TEXT;
 ```
+Backfill from existing `full_name` (first token → first_name, rest → last_name) so existing rows aren't blank.
 
-**Compile strategy**: use **latexonline.cc** (free, public, no key) — `GET https://latexonline.cc/compile?text=<urlencoded tex>` returns a PDF. Falls back gracefully with an error toast if the service is down.
+## 2. Profile UI (`src/routes/_authenticated/profile.tsx`)
 
-## 3. UI changes
+In the **Basic** section, add two inputs **before** "Full name":
+- First name → `first_name`
+- Last name  → `last_name`
 
-**Edit: `src/routes/_authenticated/profile.tsx`**
-- Add `useProfileCompletion()` hook that returns `0–100` based on filled fields across profile + presence of ≥1 row in experiences/projects/skills/educations.
-- Add top-right action group next to the page title:
-  - Badge: `Completion: 87%`
-  - Button **Sync to Resume** (disabled with tooltip "Profile must be ≥80% complete" if below 80)
-  - On success: toast "Saved as yeswanth_reddy_chilakala_v3" + link "View in Resumes"
+Auto-sync behavior: when both first & last are filled and `full_name` is empty (or matches the previous auto-value), set `full_name = first + " " + last`. Keeps `full_name` populated for everywhere else that already reads it.
 
-**Edit: `src/routes/_authenticated/resumes.tsx`**
-- For each resume row, add a **Download PDF** button that calls `compileResumePdf`, then triggers browser download from the returned signed URL.
-- Add **Download .tex** button (uses existing `storage_path` signed URL).
-- Show a "Synced" badge for `kind='synced'` rows; mark `is_default` with a star.
+Add `first_name` + `last_name` to the completion-percentage field list so the 80% gate reflects them.
 
-## 4. Database
+## 3. Resume filename (`src/lib/resume.functions.ts` + `resume-template.ts`)
 
-No schema change needed — `resumes` table already has `tex_content`, `storage_path`, `pdf_storage_path`, `is_default`, `kind`, `name`. Only changes:
-- Add a `kind` value `'synced'` (free-text already).
-- Storage bucket `resumes` already exists; ensure folder convention `{user_id}/...`.
+Change slug source from `full_name` → `${first_name}_${last_name}` when both exist, otherwise fall back to slugified `full_name`. Result: `yeswanth_reddy_chilakala_v1.tex`. Versioning logic (`_v1`, `_v2`, …) unchanged.
 
-## 5. Out of scope
-- AI rewriting / tailoring per job
-- Editing tex in-browser
-- Multiple template choices (only your provided template)
-- ATS scoring
+Also pass `first_name`/`last_name` into the renderer so the LaTeX **header name** uses `"First Last"` exactly as entered (not uppercased mash of full_name).
 
----
+## 4. Audit & fix Sync Resume end-to-end
 
-**Files touched:**
-- new: `src/lib/resume-template.ts`, `src/lib/resume-render.server.ts`, `src/lib/resume.functions.ts`
-- edit: `src/routes/_authenticated/profile.tsx`, `src/routes/_authenticated/resumes.tsx`
+Walk the full path and fix issues found:
+
+**a. Profile completeness gate** — verify `useProfileCompletion` counts the right fields, no off-by-one, and the button tooltip shows the live percentage.
+
+**b. Pre-sync flush** — confirm pending edits in the profile form actually `flush()` before `syncResumeFromProfile` reads the DB (race condition risk).
+
+**c. Renderer (`resume-render.server.ts`)** — for each section, verify:
+- empty sections are omitted (no stray `\section{}` blocks),
+- `escapeTex` handles `& % $ # _ { } ~ ^ \`,
+- dates render consistently (`MMM YYYY`, "Present" for current roles),
+- bullets, tech arrays, and multi-line summary survive escaping,
+- Publications section uses new template block (added last turn).
+
+**d. Storage + DB write** — verify `.tex` uploads to `resumes/{user_id}/{slug}_v{n}.tex`, row inserted with `kind='synced'`, `name = ${slug}_v${n}`, `is_default` left alone unless first sync.
+
+**e. Resume page (`resume.tsx`)** — confirm:
+- synced rows show "SYNCED" badge,
+- Download .tex works (signed URL),
+- Download PDF button compiles via `compileResumeToPdf` and triggers browser download with `${slug}.pdf` filename,
+- error toasts surface compile failures from latexonline.cc.
+
+**f. Repeat sync** — second click produces `_v2`, doesn't overwrite v1.
+
+## Out of scope
+- Renaming `full_name` column (kept for back-compat).
+- AI-tailored resumes (separate feature).
+- Switching PDF compiler.
+
+## Files touched
+- New migration (profile columns + backfill)
+- `src/routes/_authenticated/profile.tsx` (2 new fields, completion list)
+- `src/lib/resume-template.ts` (slug helper update)
+- `src/lib/resume-render.server.ts` (header uses first/last)
+- `src/lib/resume.functions.ts` (filename from first_last)
+- `src/routes/_authenticated/resume.tsx` (only if audit finds bugs)
