@@ -197,6 +197,8 @@ function Dashboard() {
         </div>
       )}
 
+      <ReadinessBanner />
+
       <SyncHealthCard />
 
 
