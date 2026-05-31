@@ -81,6 +81,7 @@ export type Database = {
           cover_letter_id: string | null
           created_at: string
           dlq_reason: string | null
+          field_fills: Json
           finished_at: string | null
           generated_resume_id: string | null
           id: string
@@ -105,6 +106,7 @@ export type Database = {
           cover_letter_id?: string | null
           created_at?: string
           dlq_reason?: string | null
+          field_fills?: Json
           finished_at?: string | null
           generated_resume_id?: string | null
           id?: string
@@ -129,6 +131,7 @@ export type Database = {
           cover_letter_id?: string | null
           created_at?: string
           dlq_reason?: string | null
+          field_fills?: Json
           finished_at?: string | null
           generated_resume_id?: string | null
           id?: string
