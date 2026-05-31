@@ -12,7 +12,7 @@ import { PortalBadge } from "@/components/PortalBadge";
 import { ApplicationTimeline } from "@/components/ApplicationTimeline";
 import { applicationEventsQueryOptions, useRetryApplication } from "@/lib/queries/applications";
 import { timeAgo } from "@/lib/timeAgo";
-import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2, RefreshCw, History } from "lucide-react";
+import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2, RefreshCw, History, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
