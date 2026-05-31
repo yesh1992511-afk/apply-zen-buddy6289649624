@@ -406,6 +406,8 @@ function JobsPage() {
         </div>
       )}
 
+      <AllApplicationsTable />
+
       <JobDescriptionDialog
         job={dialogJob}
         open={!!dialogJob}
