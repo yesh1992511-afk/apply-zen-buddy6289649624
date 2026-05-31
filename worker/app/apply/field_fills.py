@@ -22,18 +22,22 @@ def start(application_id: str | None) -> None:
     _app_id.set(application_id)
 
 
-def record(label: str, value: Any, source: str) -> None:
+def record(label: str, value: Any, source: str, needs_review: bool = False) -> None:
     led = _ledger.get()
     if led is None:
         return
     s = "" if value is None else str(value)
     if len(s) > 500:
         s = s[:500] + "…"
-    led.append({
+    entry: dict[str, Any] = {
         "label": (label or "")[:200],
         "value": s,
         "source": source,
-    })
+    }
+    if needs_review:
+        entry["needs_review"] = True
+    led.append(entry)
+
 
 
 def flush() -> None:
