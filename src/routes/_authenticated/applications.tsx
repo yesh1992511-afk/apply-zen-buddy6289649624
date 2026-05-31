@@ -64,7 +64,7 @@ function ApplicationsPage() {
   const load = useCallback(() => {
     supabase
       .from("applications")
-      .select("id, status, phase, job_id, attempts, retry_count, last_error, queued_at, applied_at, job:jobs(title, company, url)")
+      .select("id, status, phase, job_id, attempts, retry_count, last_error, dlq_reason, queued_at, applied_at, job:jobs(title, company, url)")
       .order("queued_at", { ascending: false })
       .limit(500)
       .then(({ data }) => {
@@ -75,6 +75,19 @@ function ApplicationsPage() {
   useEffect(() => { load(); }, [load]);
   useRealtimeInvalidate({ table: "applications", onChange: load });
   useRealtimeInvalidate({ table: "application_events", onChange: load });
+
+  const retryFn = useServerFn(retryApplication);
+  const discardFn = useServerFn(discardApplication);
+  const retryMut = useMutation({
+    mutationFn: (id: string) => retryFn({ data: { id } }),
+    onSuccess: () => { toast.success("Re-queued"); load(); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Retry failed"),
+  });
+  const discardMut = useMutation({
+    mutationFn: (id: string) => discardFn({ data: { id } }),
+    onSuccess: () => { toast.success("Discarded"); load(); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Discard failed"),
+  });
 
   // Back-compat: derive phase from legacy status when phase is missing/discovered
   const phaseOf = (a: App): Phase => {
