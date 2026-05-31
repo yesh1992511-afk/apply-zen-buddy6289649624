@@ -1,59 +1,44 @@
-## Goal
+# Fix "1638 scraped, 0 matched" problem
 
-Let you test the full pipeline end-to-end with a small budget: scrape until **N matched jobs** are collected, then stop scraping and **auto-queue applies** for those N jobs in the background.
+Doing all three fixes you asked about.
 
-## How you'll use it
+## 1. Immediate unblock (loosen active filter + rescore)
 
-On **Automation → Test Mode** (new card at top):
-- Toggle **Test mode** on
-- Set **Stop after N matched jobs** (slider 1–10, default 2)
-- Pick a source from a dropdown (defaults to first enabled)
-- Click **Run test**
+Update the active "Cybersecurity — USA" filter:
+- `posted_within_hours`: 24 → 168 (last 7 days)
+- `min_score`: 35 → 20
 
-The worker will:
-1. Scrape that one source, inserting matched jobs one-by-one
-2. As soon as N matched jobs exist for this run, stop fetching more
-3. Immediately enqueue `apply` commands for those N jobs
-4. Surface progress as toasts + a small live status line ("Scraped 2/2 matched · Applying 1/2…")
+Then run `rescore_all_jobs_for_user` so the existing 1638 jobs get re-evaluated and matches start showing up on the Jobs page right away.
 
-When the run finishes (or you toggle test mode off), normal scraping/applying resumes.
+## 2. Diagnosis banner on Jobs page
 
-## Changes
+Add a banner at the top of `src/routes/_authenticated/jobs.tsx` that shows when `scraped > 0` but `matched = 0`:
 
-### 1. New `worker_commands` kind: `test_run`
-Payload: `{ source_key: string, match_limit: number }`.
-Frontend enqueues it via a new `triggerTestRun()` in `src/lib/commands.ts`.
+> "Scraped 1638 jobs but matched 0. Most sources aren't returning security roles. [Loosen filter] [Re-score all jobs] [Disable noisy sources]"
 
-### 2. Worker handler (`worker/app/commands.py` + new `worker/app/test_run.py`)
-- Calls `run_source_by_key(source_key)` but passes a `match_limit` through to `_run_source` in `worker/app/sources/registry.py`
-- In the insert loop: `if matched_count >= match_limit: break`
-- After scraping stops: select the N newly-inserted matched job IDs and insert `applications` rows (status=`queued`) + enqueue one `apply` command per job
-- Writes progress into the `worker_commands.result` JSONB so the UI can poll
+Buttons trigger the same actions inline so the user can self-serve next time without asking.
 
-### 3. UI — `src/routes/_authenticated/automation.tsx`
-New `SectionCard` titled **Test Mode** at the top:
-- Switch: enable test mode (purely UI state, not persisted)
-- `Slider` 1–10 for match limit
-- `Select` of user's enabled sources (from `sources` table)
-- `Button` "Run test" → calls `triggerTestRun({ source_key, match_limit })`, then polls `waitForCommand(id)` and shows toasts: "Scraping…", "Matched 2/2 — queueing applies", "Test done: 2 queued, see Applications"
-- Disabled while a test is running
+## 3. One-click "disable noisy sources" on Sources page
 
-No schema changes required (reuses `worker_commands`, `jobs`, `applications`).
+Add a button at the top of `src/routes/_authenticated/sources.tsx`:
 
-### 4. Safety
-- Test runs ignore `automation_settings.max_applies_per_day` (clearly labeled as "test, bypasses daily cap")
-- Hard cap: `match_limit` clamped to 10
-- Stops on first error and reports it in the toast
+> "Disable sources that don't pre-filter by keyword"
 
-## Files
+Disables these for the current user (sets `enabled=false`):
+- `arbeitnow`, `weworkremotely`, `usajobs`, `remoteok`
+- ATS boards without security focus: `stripe`, `airbnb`, `netflix`, `openai`, `square`, `bosch`
 
-- `worker/app/commands.py` — dispatch `test_run`
-- `worker/app/test_run.py` — new orchestrator
-- `worker/app/sources/registry.py` — add optional `match_limit` to `_run_source` / `run_source_by_key`
-- `src/lib/commands.ts` — add `triggerTestRun` + `Kind` union entry
-- `src/routes/_authenticated/automation.tsx` — add Test Mode card
-- `src/lib/queries/automation.ts` (only if needed for sources list — likely reuses existing query)
+Keeps enabled: security-focused ATS boards and any source the user added manually that does keyword filtering at the source.
+
+## Files touched
+
+- `src/routes/_authenticated/jobs.tsx` — diagnosis banner + action buttons
+- `src/routes/_authenticated/sources.tsx` — disable-noisy button
+- `src/lib/filters.functions.ts` (or wherever filter mutations live) — small helper to loosen active filter
+- DB: one-off UPDATE on the active filter + call `rescore_all_jobs_for_user` (runs once, not a migration)
 
 ## Out of scope
 
-- No new tables, no migrations, no changes to filter scoring or apply portals.
+- No worker changes
+- No new tables
+- No scoring algorithm changes

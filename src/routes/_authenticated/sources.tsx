@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { triggerScrape, triggerTestSource } from "@/lib/commands";
 import { waitForCommand } from "@/lib/commands";
-import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2, Target, KeyRound, PackagePlus } from "lucide-react";
+import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2, Target, KeyRound, PackagePlus, EyeOff } from "lucide-react";
+import { useDisableNoisySources } from "@/lib/queries/jobs";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { PACKS, configFieldFor, mergePackIntoConfig } from "@/lib/sources/curated-packs";
 
@@ -311,6 +312,7 @@ function SourcesPage() {
   };
 
   const enabledCount = sources.filter((s) => s.enabled).length;
+  const disableNoisy = useDisableNoisySources();
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -318,9 +320,21 @@ function SourcesPage() {
         title="Sources"
         description={`${enabledCount} of ${sources.length} active · Where jobs are scraped from`}
         actions={
-          <Button onClick={seed} variant="outline" className="gap-1.5">
-            <Plus className="h-4 w-4" /> Add presets
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => disableNoisy.mutate(undefined, { onSuccess: () => load() })}
+              variant="outline"
+              className="gap-1.5"
+              disabled={disableNoisy.isPending}
+              title="Turn off sources that don't pre-filter by keyword (arbeitnow, weworkremotely, remoteok, generic USAJobs, etc.)"
+            >
+              <EyeOff className="h-4 w-4" />
+              {disableNoisy.isPending ? "Disabling…" : "Disable noisy sources"}
+            </Button>
+            <Button onClick={seed} variant="outline" className="gap-1.5">
+              <Plus className="h-4 w-4" /> Add presets
+            </Button>
+          </div>
         }
       />
 
