@@ -7,7 +7,9 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import nodemailer from "nodemailer";
+// nodemailer is lazy-imported inside sendUserEmailRaw() to avoid evaluating
+// its Node-only internals (__dirname, dynamic requires) during SSR module
+// load on Cloudflare Workers — that crashes every route in the bundle.
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export const getNotificationSettings = createServerFn({ method: "GET" })
