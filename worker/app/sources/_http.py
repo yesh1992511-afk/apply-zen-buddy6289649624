@@ -81,3 +81,29 @@ async def get_text(client: httpx.AsyncClient, url: str, *, params: dict | None =
             await asyncio.sleep(delay + random.random() * 0.4)
             delay *= 2
     raise last  # type: ignore[misc]
+
+
+class ApifyAccessError(RuntimeError):
+    """Raised when the Apify actor refuses the workspace token (401/403)."""
+
+
+def require_apify_token() -> str:
+    """Return APIFY_TOKEN or raise a clear error so it surfaces in sources.last_error."""
+    token = os.getenv("APIFY_TOKEN")
+    if not token:
+        raise ApifyAccessError(
+            "APIFY_TOKEN not set — open Settings → Secrets and add your Apify API token."
+        )
+    return token
+
+
+def wrap_apify_http_error(actor: str, exc: Exception) -> Exception:
+    """Convert an httpx 401/403 into a human-readable ApifyAccessError mentioning the actor."""
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (401, 403):
+        return ApifyAccessError(
+            f"Apify actor '{actor}' rejected the token (HTTP {exc.response.status_code}). "
+            "The actor may be paid/restricted on your Apify plan — try a different actor "
+            "in the source config, or upgrade Apify access."
+        )
+    return exc
+

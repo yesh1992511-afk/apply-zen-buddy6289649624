@@ -1,7 +1,9 @@
 export function timeAgo(input: string | Date | null | undefined): string {
   if (!input) return "—";
   const d = typeof input === "string" ? new Date(input) : input;
+  if (!d || Number.isNaN(d.getTime())) return "—";
   const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 0) return "just now";
   if (s < 60) return `${s}s ago`;
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ago`;

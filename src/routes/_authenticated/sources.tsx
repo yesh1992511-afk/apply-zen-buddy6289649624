@@ -55,19 +55,19 @@ type Source = {
 // at seed time (and overwritten by "Apply" later) — no more hard-coded
 // "software engineer".
 const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_status" | "last_run_count" | "last_error">> = [
-  // Paid Apify actors (LinkedIn / Indeed / ZipRecruiter / Glassdoor / Google / Wellfound)
-  { key: "apify_linkedin", display_name: "LinkedIn (Apify)", kind: "apify", cadence_minutes: 60, config: { rows: 50, published_at: "r86400" } },
-  { key: "apify_indeed", display_name: "Indeed (Apify)", kind: "apify", cadence_minutes: 60, config: { rows: 50, country: "US" } },
-  { key: "apify_ziprecruiter", display_name: "ZipRecruiter (Apify)", kind: "apify", cadence_minutes: 120, config: { rows: 50 } },
-  { key: "apify_glassdoor", display_name: "Glassdoor (Apify)", kind: "apify", cadence_minutes: 120, config: { rows: 50 } },
-  { key: "apify_google_jobs", display_name: "Google Jobs (Apify)", kind: "apify", cadence_minutes: 60, config: { rows: 50 } },
-  { key: "apify_wellfound", display_name: "Wellfound / AngelList (Apify)", kind: "apify", cadence_minutes: 180, config: { rows: 50 } },
+  // Paid Apify actors (keys MUST match worker adapters in worker/app/sources/*.py)
+  { key: "apify:linkedin", display_name: "LinkedIn (Apify)", kind: "apify", cadence_minutes: 60, config: { rows: 50, published_at: "r86400" } },
+  { key: "apify:indeed", display_name: "Indeed (Apify)", kind: "apify", cadence_minutes: 60, config: { rows: 50, country: "US" } },
+  { key: "apify:ziprecruiter", display_name: "ZipRecruiter (Apify)", kind: "apify", cadence_minutes: 120, config: { rows: 50 } },
+  { key: "apify:glassdoor", display_name: "Glassdoor (Apify)", kind: "apify", cadence_minutes: 120, config: { rows: 50 } },
+  { key: "apify:google_jobs", display_name: "Google Jobs (Apify)", kind: "apify", cadence_minutes: 60, config: { rows: 50 } },
+  { key: "apify:wellfound", display_name: "Wellfound / AngelList (Apify)", kind: "apify", cadence_minutes: 180, config: { rows: 50 } },
   // Free REST / RSS APIs
   { key: "remoteok", display_name: "RemoteOK (free)", kind: "rest", cadence_minutes: 60, config: {} },
   { key: "remotive", display_name: "Remotive (free)", kind: "rest", cadence_minutes: 60, config: {} },
   { key: "arbeitnow", display_name: "Arbeitnow (free)", kind: "rest", cadence_minutes: 60, config: {} },
   { key: "weworkremotely", display_name: "We Work Remotely (free)", kind: "rest", cadence_minutes: 120, config: { category: "remote-programming-jobs" } },
-  { key: "usajobs", display_name: "USAJobs (federal, free)", kind: "rest", cadence_minutes: 240, config: {} },
+  { key: "usajobs", display_name: "USAJobs (federal, free)", kind: "rest", cadence_minutes: 240, config: { queries: ["cyber", "data", "engineer", "software"] } },
   { key: "builtin", display_name: "BuiltIn (US tech)", kind: "rest", cadence_minutes: 120, config: { rows: 50 } },
   { key: "workatastartup", display_name: "YC Work At A Startup (free)", kind: "rest", cadence_minutes: 240, config: { rows: 50 } },
   { key: "infosec_jobs", display_name: "infosec-jobs.com (cyber, free)", kind: "rest", cadence_minutes: 180, config: { limit: 100 } },
@@ -81,7 +81,7 @@ const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_s
   { key: "workable_boards", display_name: "Workable boards", kind: "board", cadence_minutes: 180, config: { subdomains: [] } },
   { key: "recruitee_boards", display_name: "Recruitee boards", kind: "board", cadence_minutes: 240, config: { companies: [] } },
   { key: "teamtailor_boards", display_name: "Teamtailor boards", kind: "board", cadence_minutes: 240, config: { companies: [], api_keys: {} } },
-  // Enterprise ATS adapters (new)
+  // Enterprise ATS adapters
   { key: "workday_boards", display_name: "Workday CXS boards", kind: "board", cadence_minutes: 240, config: { sites: [] } },
   { key: "bamboohr_boards", display_name: "BambooHR boards", kind: "board", cadence_minutes: 240, config: { subdomains: [] } },
   { key: "personio_boards", display_name: "Personio boards", kind: "board", cadence_minutes: 240, config: { subdomains: [] } },
@@ -616,7 +616,7 @@ function SourcesPage() {
             </div>
           )}
           {sources.map((s) => {
-            const statusOk = s.last_run_status === "ok" || s.last_run_status === "success";
+            const statusOk = s.last_run_status === "ok" || s.last_run_status === "success" || s.last_run_status === "succeeded";
             const statusPartial = s.last_run_status === "partial";
             // Cadence-aware staleness: even an OK source is "Stale" if it hasn't run in 2× its cadence.
             const ageMs = s.last_run_at ? Date.now() - new Date(s.last_run_at).getTime() : 0;

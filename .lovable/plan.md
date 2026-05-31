@@ -1,46 +1,87 @@
-# Wire Completeness + Max-Coverage Auto-Apply End-to-End
+## What's wrong on /sources
 
-## 1. Add CompletenessBar to `/setup` as a readiness row
-- Edit `src/routes/_authenticated/setup.tsx` (readiness checklist page).
-- Add a new row above (or as the first item in) the readiness list:
-  - Render `<CompletenessBar />`.
-  - Click → navigates to `/profile` (or scrolls to the weakest section).
-- Re-use the same query the component already runs; no new server fn needed.
+After auditing the Sources page (`src/routes/_authenticated/sources.tsx`), the worker registry (`worker/app/sources/`), and the `sources` / `run_status` schema, the page has four real problems — most of what you're seeing as "Failing" is actually working code being mislabelled or running under the wrong key.
 
-## 2. Wire field-fill ledger surfaces (finish what's half-built)
-- `src/routes/_authenticated/applications.$id.tsx`
-  - Confirm "Form" tab reads `applications.field_fills` and renders `<FormFillTable />` with source badges (`profile` / `tailored` / `screening_cache` / `ai_generated`).
-  - Empty-state copy when ledger is empty (older applications).
-- `src/components/FormFillTable.tsx`
-  - Add filter chips by source + a "copy as JSON" debug action.
-- `src/routes/_authenticated/profile.screening.tsx`
-  - Confirm cached answers from `profile.screening_answers` load/edit/save correctly.
-  - "Clear cache" button per question.
+### 1. Health badge is wrong for every successful source
 
-## 3. Worker: ensure the ledger actually gets written for every adapter
-- `worker/app/apply/form_walker.py` — already logs text inputs + AI textareas. Extend to:
-  - Selects/radios/checkboxes → record `(label, chosen_value, source)`.
-  - File uploads (resume/cover) → record filename + source = `tailored`.
-- `worker/app/apply/runner.py` — persist `field_fills` jsonb at end of every run (success **and** failure), not only success.
-- Every ATS adapter (`ats_greenhouse.py`, `ats_lever.py`, `ats_ashby.py`, `ats_workday.py`, `ats_bamboohr.py`, `ats_breezyhr.py`, `ats_icims.py`, `ats_jobvite.py`, `ats_personio.py`) — route ALL field interactions through `safe_autofill` / `safe_select` so the ledger captures them. No more direct `page.fill()` calls bypassing the recorder.
+UI considers a run healthy only when `last_run_status === "ok" | "success"`, but the worker writes `"success"` / `"partial"` / `"failed"` and the DB enum also contains `"succeeded"` (legacy). Existing rows show `succeeded` → UI paints them red as "Failing" even with 96–160 jobs imported.
 
-## 4. Screening AI fallback — flag long-form for review
-- `worker/app/ai/screening.py`
-  - Short factual (years exp, yes/no, salary) → auto-answer, source = `ai_generated`, no flag.
-  - Long-form (>15 words OR "why do you want…", "tell us about…") → auto-answer **but** set `needs_review: true` in the ledger entry and bump `applications.status` only after user confirms (or auto-submit per user's prior preference).
-- Honor user's earlier choice: default to "always-AI, flag long-form".
+Fix: treat `"success" | "succeeded" | "ok"` as healthy. Drop `"succeeded"` from the enum later via migration after backfilling rows to `"success"`.
 
-## 5. Profile completeness — make it actually drive auto-apply
-- `src/components/profile/CompletenessBar.tsx` — already measures ~28 fields. Add:
-  - Click a missing-field chip → deep-link to the right `/profile/*` tab + scrolls to field.
-  - Warning banner on `/automation` if completeness < 70% ("auto-apply will skip ~X% of forms").
+### 2. Duplicate source rows (colon vs underscore keys)
 
-## Technical notes
-- No new migrations needed (`field_fills` jsonb + `screening_answers` jsonb already exist).
-- No new secrets (uses existing `DEEPSEEK_API_KEY` / `OPENAI_API_KEY`).
-- All UI changes are presentation; only worker changes touch business logic.
+The DB has two parallel sets of rows for the same portal:
 
-## Files touched
-**Frontend:** `src/routes/_authenticated/setup.tsx`, `src/routes/_authenticated/applications.$id.tsx`, `src/routes/_authenticated/automation.tsx`, `src/components/FormFillTable.tsx`, `src/components/profile/CompletenessBar.tsx`
+- Worker (Python) adapters use colon keys: `apify:linkedin`, `apify:glassdoor`, `apify:google_jobs`, `usajobs`, `greenhouse_boards`, …
+- The `PRESETS` array in `sources.tsx` (and the older `src/lib/sources/adapters.server.ts`) uses underscore keys: `apify_linkedin`, `apify_glassdoor`, `apify_google_jobs`, …
 
-**Worker:** `worker/app/apply/form_walker.py`, `worker/app/apply/runner.py`, `worker/app/ai/screening.py`, and all 9 ATS adapters under `worker/app/sources/ats_*.py` for ledger routing.
+Result: every Apify portal appears twice — once running (colon, often failing or 0 jobs) and once "Idle / Never run yet" (underscore, because no adapter matches that key). Clicking Run on the underscore row does nothing.
+
+Fix: standardise on the worker's colon keys. Update `PRESETS` to match adapter keys (`apify:linkedin`, `apify:glassdoor`, `apify:google_jobs`, `apify:indeed`, `apify:ziprecruiter`, `apify:wellfound`, `usajobs`, `greenhouse_boards`, `lever_boards`, `ashby_boards`, `workable_boards`, `smartrecruiters_boards`, `recruitee_boards`, `teamtailor_boards`, `workday_boards`, `bamboohr_boards`, `personio_boards`, `breezyhr_boards`, `jobvite_boards`, `icims_boards`, `infosec_jobs`, `hn_jobs`, `hn_who_is_hiring`, `workatastartup`, plus the new `dice`, `cybersecjobs`, `cleared_jobs`, `levelsfyi`, `ycombinator_jobs`). Add a one-shot migration that:
+  - Merges any underscore-key row into the matching colon-key row for the same user (preserve enabled / cadence / config; delete the underscore row).
+  - Renames legacy `usajobs:*` sub-keys (`usajobs:cyber/data/engineer/software`) into a single `usajobs` row with `config.queries = [cyber, data, engineer, software]` so they aren't run four times.
+
+After this, the page shows one row per source and "Run now" works for all of them.
+
+### 3. Concrete adapter errors visible today
+
+- `apify:glassdoor` → `403 Forbidden` on `bebity~glassdoor-jobs-scraper`. That actor is paid/restricted on the workspace's Apify token. Swap the default actor in `apify_glassdoor.py` to a free public Glassdoor actor and surface a clearer "set APIFY_TOKEN with access to this actor" message when 401/403 hits. (No new secret prompt — keep using the existing `APIFY_TOKEN`.)
+- `himalayas` → `RangeError: Invalid time value`. That string is coming from the UI's `timeAgo(last_run_at)` when `last_run_at` parses to `Invalid Date` (some legacy rows are stored as `0001-01-01` / empty strings). Harden `timeAgo` in `sources.tsx` to return `"—"` on `Number.isNaN(d.getTime())` and stop storing the error string in `last_error` for that case.
+- `usajobs:software` shows 0 jobs even though `cyber/data/engineer` return 96–100. After consolidating into the single `usajobs` source per fix #2, the worker already loops the four query terms — the 0-row "software" case disappears.
+
+### 4. Apify Run now silently no-ops without `APIFY_TOKEN`
+
+Today the adapter just throws a raw `httpx` 401/403 buried in `last_error`. Add a pre-flight check in `worker/app/sources/_http.py` (or a tiny helper in each apify adapter) that, when `APIFY_TOKEN` is missing, writes `last_run_status = "failed"`, `last_error = "APIFY_TOKEN not set — open Settings → Secrets"` and returns immediately. The Sources page already shows `last_error` in a copy-able panel, so the user gets a clear next step.
+
+## Out of scope (won't touch this turn)
+
+- The duplicate adapter file `src/lib/sources/adapters.server.ts` (the older TanStack server-fn scrapers). It is no longer the path of truth — the worker is. I'll leave it in place but note it as dead code; removing it is a separate cleanup.
+- Curated company packs ("Top Tech", "AI / ML", etc.) and the Job Target panel — they already work against the colon keys after fix #2; no UI changes needed.
+- Re-running historical scrapes / backfilling missed jobs.
+
+## Technical details (for the implementation pass)
+
+Files touched:
+
+- `src/routes/_authenticated/sources.tsx`
+  - `statusOk` accepts `"success" | "succeeded" | "ok"`.
+  - Replace `PRESETS` keys with the worker's colon/underscore canonical keys listed above; keep `display_name` and `kind` as-is.
+  - Harden `timeAgo()` against invalid dates.
+- `worker/app/sources/apify_glassdoor.py` — swap default actor to a free one; richer error string on 401/403.
+- `worker/app/sources/_http.py` — central `require_apify_token()` helper used by every `apify_*.py` adapter.
+- Migration `supabase/migrations/<ts>_sources_key_consolidation.sql`:
+  ```sql
+  -- 1. Backfill legacy run_status values
+  update public.sources set last_run_status = 'success' where last_run_status = 'succeeded';
+
+  -- 2. Map underscore → colon for apify sources, preferring the colon row if both exist
+  with conflicts as (
+    select u.id as und_id, c.id as col_id, u.user_id
+    from public.sources u
+    join public.sources c
+      on c.user_id = u.user_id
+     and c.key = replace(u.key, 'apify_', 'apify:')
+    where u.key like 'apify\_%'
+  )
+  delete from public.sources s using conflicts c where s.id = c.und_id;
+
+  update public.sources
+     set key = replace(key, 'apify_', 'apify:')
+   where key like 'apify\_%';
+
+  -- 3. Collapse usajobs:* sub-rows into a single 'usajobs' source per user
+  -- (merge config.queries arrays, keep max cadence, OR enabled, delete sub-rows)
+  -- … done with a CTE + insert-on-conflict-do-update; full body in the migration.
+  ```
+
+No schema changes to `run_status` itself this turn (safer to leave the legacy enum value and just stop writing it). New `add_secret` calls: none.
+
+## Acceptance check
+
+After implementation:
+
+- Every successful source on `/sources` shows a green "Healthy" badge (no more red "Failing" on rows that have job counts).
+- Each portal appears exactly once.
+- Apify rows without `APIFY_TOKEN` show "APIFY_TOKEN not set" in the error panel instead of an httpx 401/403 dump.
+- `himalayas` row no longer shows `RangeError: Invalid time value`.
+- "Run now" on every preset row triggers an actual scrape.
