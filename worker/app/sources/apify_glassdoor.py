@@ -1,20 +1,28 @@
-"""Glassdoor via Apify (bebity/glassdoor-jobs-scraper)."""
+"""Glassdoor via Apify.
+
+Default actor switched to the free `bora_dural/glassdoor-jobs-scraper`. The
+previous default (`bebity~glassdoor-jobs-scraper`) is paid and returns 403 for
+workspaces without a subscription to that actor. Override via the source's
+`config.actor` or the `APIFY_GLASSDOOR_ACTOR` env var.
+"""
 import os
 from typing import Any
 import httpx
 from .base import Source, RawJob
-from ..config import settings
+from ._http import require_apify_token, wrap_apify_http_error, ApifyAccessError
 from ..logger import log
 
 
 class ApifyGlassdoor(Source):
     key = "apify:glassdoor"
-    DEFAULT_ACTOR = os.getenv("APIFY_GLASSDOOR_ACTOR", "bebity~glassdoor-jobs-scraper")
+    DEFAULT_ACTOR = os.getenv("APIFY_GLASSDOOR_ACTOR", "bora_dural~glassdoor-jobs-scraper")
 
     async def fetch(self, config: dict[str, Any]):
-        token = settings().APIFY_TOKEN
-        if not token:
-            log.warning("apify_token_missing", source=self.key); return []
+        try:
+            token = require_apify_token()
+        except ApifyAccessError as e:
+            log.warning("apify_token_missing", source=self.key, error=str(e))
+            raise
         actor = config.get("actor", self.DEFAULT_ACTOR)
         payload: dict[str, Any] = {
             "keyword": " ".join(config.get("queries", [])) or "software engineer",
@@ -23,8 +31,13 @@ class ApifyGlassdoor(Source):
             "proxy": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]},
         }
         url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token={token}"
-        async with httpx.AsyncClient(timeout=900) as c:
-            r = await c.post(url, json=payload); r.raise_for_status(); items = r.json()
+        try:
+            async with httpx.AsyncClient(timeout=900) as c:
+                r = await c.post(url, json=payload)
+                r.raise_for_status()
+                items = r.json()
+        except httpx.HTTPStatusError as e:
+            raise wrap_apify_http_error(actor, e) from e
         out: list[RawJob] = []
         for it in items:
             out.append(RawJob(
