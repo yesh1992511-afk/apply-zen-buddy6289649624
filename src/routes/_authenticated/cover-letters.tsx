@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
-import { Mail, Plus, Trash2, Star, Sparkles, Loader2, FileText, Copy } from "lucide-react";
+import { Plus, Trash2, Star, Sparkles, Loader2, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/timeAgo";
 
