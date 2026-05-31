@@ -49,6 +49,7 @@ const pilot = [
 
 const profile = [
   { title: "Profile", to: "/profile", icon: User },
+  { title: "Resume", to: "/resume", icon: FileText },
   { title: "Automation", to: "/automation", icon: FileText },
   { title: "Billing", to: "/billing", icon: CreditCard },
   { title: "Privacy", to: "/privacy", icon: ShieldCheck },
