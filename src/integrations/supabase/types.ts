@@ -82,6 +82,7 @@ export type Database = {
           created_at: string
           dlq_reason: string | null
           finished_at: string | null
+          generated_resume_id: string | null
           id: string
           idempotency_key: string | null
           job_id: string
@@ -105,6 +106,7 @@ export type Database = {
           created_at?: string
           dlq_reason?: string | null
           finished_at?: string | null
+          generated_resume_id?: string | null
           id?: string
           idempotency_key?: string | null
           job_id: string
@@ -128,6 +130,7 @@ export type Database = {
           created_at?: string
           dlq_reason?: string | null
           finished_at?: string | null
+          generated_resume_id?: string | null
           id?: string
           idempotency_key?: string | null
           job_id?: string
@@ -145,6 +148,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "applications_generated_resume_id_fkey"
+            columns: ["generated_resume_id"]
+            isOneToOne: false
+            referencedRelation: "generated_resumes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "applications_job_id_fkey"
             columns: ["job_id"]
@@ -657,6 +667,57 @@ export type Database = {
           salary_min?: number | null
           seniority?: string[] | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      generated_resumes: {
+        Row: {
+          cost_usd: number
+          created_at: string
+          id: string
+          job_id: string
+          model: string | null
+          pdf_storage_path: string | null
+          tailored_experiences: Json
+          tailored_projects: Json
+          tailored_skills: string[]
+          tailored_summary: string | null
+          tex_content: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+          user_id: string
+        }
+        Insert: {
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          job_id: string
+          model?: string | null
+          pdf_storage_path?: string | null
+          tailored_experiences?: Json
+          tailored_projects?: Json
+          tailored_skills?: string[]
+          tailored_summary?: string | null
+          tex_content?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          user_id: string
+        }
+        Update: {
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          job_id?: string
+          model?: string | null
+          pdf_storage_path?: string | null
+          tailored_experiences?: Json
+          tailored_projects?: Json
+          tailored_skills?: string[]
+          tailored_summary?: string | null
+          tex_content?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
           user_id?: string
         }
         Relationships: []
