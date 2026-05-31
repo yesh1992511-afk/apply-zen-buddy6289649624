@@ -1,59 +1,77 @@
-## What I found
+# Full System Audit & Fix Plan
 
-- The `jobs` table is currently empty, so there are no jobs for the dashboard to show.
-- `automation_settings.enabled` is currently `false`, so cron only processes the user when triggered manually with a logged-in token or forced user ID.
-- Your cybersecurity filter exists and is active: `Cybersecurity — USA`, `min_score = 20`, cyber keywords applied.
-- The latest source run shows old generic sources still ran recently (`lever:mistral`, `usajobs:software`), meaning the previous source refactor likely has not been fully deployed/activated in the live runner yet.
-- Apify is not throwing token errors in the latest tier run, but every Apify provider returned `0` items. That points to actor input/schema mismatch or actor choice, not your API key.
-- `infosec_jobs` exists in code/database but has never run yet.
-- A USAJobs run had a salary parsing insert error: `invalid input syntax for type integer: "43.54"`, which can cause chunks of otherwise valid jobs to be skipped.
+## What I found (live DB right now)
 
-## Why you are not getting cybersecurity jobs
+| Area | State | Verdict |
+|---|---|---|
+| Jobs scraped | 1,319 total | OK |
+| "Matched" jobs | 150 | **Garbage** — includes *Technical support*, *Executive Assistant*, *SAP BTP Developer*, Chinese / Portuguese titles |
+| Applications | 143 queued, 3 applying, 0 succeeded | Worker stalled |
+| Worker heartbeat | last_seen 22:45 (>30 min stale) | **Offline** |
+| Apify (6 actors) | All `last_run_count = 0` | **Broken** (input schema) |
+| `infosec_jobs` | 0 results | **Parser broken** |
+| USAJobs `:cyber` | 96 results | OK |
+| Greenhouse/Lever boards | Most return 0; a few (klaviyo, mercor, modal, supabase) dump 200+ generic jobs | Wrong company list |
 
-The system is currently scraping and recording source runs, but the jobs are not being saved now. The live runner is either still using stale source data/routing or failing inserts for some sources. Also, Apify is configured with actors that return `0` with the current payload shape, so your valid API key is not enough — the actor inputs must match what each actor expects.
+## Root causes
 
-## Plan to fix it
+1. **Matching scores everything ≥50 by default; min_score is 20** → every job is "matched" even with zero cyber keywords. The cyber relevance gate at the adapter layer was added, but boards like `greenhouse:supabase` are flagged `CYBER_NATIVE_PROVIDERS`-bypassed or the regex is too loose.
+2. **Apply worker** isn't being woken — heartbeat is stale, queue keeps growing.
+3. **Apify actor payloads** still wrong — every actor returns 0 items.
+4. **InfoSec adapter** (HTML scraper) selector is wrong → 0 jobs.
+5. **Country/language gate** lets through CJK and Spanish titles.
+6. **Resume + cover letter generation per job** exists in `src/lib/apply/ai.server.ts` but is never reached because applications never leave the `queued` phase.
 
-1. **Make source runs actually persist jobs**
-   - Fix numeric salary normalization so decimal salary values from USAJobs cannot break job inserts.
-   - Ensure source upserts do not report success while saving zero jobs because of preventable mapping errors.
+---
 
-2. **Make cybersecurity sources first-class**
-   - Force the hot tier to include `infosec_jobs` and verify it is called.
-   - Keep generic remote boards, but add a pre-filter so they only save cybersecurity-relevant jobs instead of filling the pipeline with unrelated roles.
-   - Ensure the warm tier uses the current cyber-focused company seed list, not old generic slugs.
+## Plan (in order)
 
-3. **Fix Apify actor execution**
-   - Replace/adjust Apify payloads per actor so each actor receives the query/location fields it actually expects.
-   - Treat `0 items` from Apify as a visible warning in source health when the actor ran but returned nothing for cyber keywords.
-   - Keep using your existing `APIFY_TOKEN`; no new key needed.
+### 1. Fix the matcher (highest impact)
+- Update `public.match_job_to_filters`: drop baseline score from 50 → 0. A job earns points **only** from keyword hits. Discard if `title_kw_hits = 0` AND `body_kw_hits < 2`.
+- Bump default `min_score` on the cyber filter to **55**.
+- Add a language gate: discard if title contains CJK chars or non-Latin script (when target_country='US').
+- Add cyber-domain hard requirement when filter name matches `Cybersecurity`: require at least one cyber keyword in title OR ≥2 in body.
+- Re-run `rescore_all_jobs_for_user` after migration.
 
-4. **Turn matching into a stricter cybersecurity gate**
-   - Only save or match jobs that contain cyber keywords in title/description/company unless they come from a dedicated cybersecurity board.
-   - Keep your exclude list active for sales, marketing, recruiter, intern, physical security, guard, etc.
+### 2. Tighten the adapter cyber gate
+- In `adapters.server.ts`, remove `CYBER_NATIVE_PROVIDERS` bypass for boards that aren't actually cyber-only.
+- Run `isCyberRelevant()` against title+description for **every** non-USAJobs source.
+- Drop the noise companies (klaviyo, supabase, mercor, modal) from the warm-tier seed list and replace with cyber-focused orgs (CrowdStrike, Palo Alto Networks, Snyk, Wiz, Datadog Security, Cloudflare, Okta, 1Password, HashiCorp Vault, Tenable, Rapid7, SentinelOne).
 
-5. **Run a controlled refresh after implementation**
-   - Re-enable automation if you want it running continuously.
-   - Trigger hot, USAJobs, warm, and Apify tiers for your user.
-   - Check counts by source: fetched, inserted, matched, discarded.
-   - Show sample matched jobs with title/company/source/score so we can verify relevance.
+### 3. Fix Apify actor inputs
+- Inspect each of the 6 Apify actor schemas and rewrite the payload builder in `adapters.server.ts` so `queries`, `location`, `country`, `maxItems` match what each actor expects.
+- Log raw Apify response when 0 items returned (for diagnosis).
 
-## Technical details
+### 4. Fix the InfoSec HTML parser
+- Re-write `fetchInfoSec` against current `isecjobs.com` markup (`.job-card` selectors changed). Add a fallback to their RSS feed.
 
-Files likely involved:
+### 5. Revive the apply worker
+- Verify `bootstrap_apply_worker_cron` is scheduled in `pg_cron` and the `apply-worker` route is reachable.
+- Add a watchdog: if `worker_heartbeat.last_seen < now() - 5 min` and there are queued applications, the cron route auto-kicks the worker.
+- Make the route process up to `parallelism` jobs per tick (currently 1).
 
-- `src/lib/sources/adapters.server.ts`
-  - Normalize salary numbers safely.
-  - Fix Apify actor payloads and item mapping.
-  - Add cybersecurity relevance filtering for non-cyber sources.
+### 6. Wire AI generation properly per job
+The apply worker should, for each queued application:
+1. Generate tailored **resume** (LaTeX → PDF) via `src/lib/apply/ai.server.ts` → store in `generated_resumes` + `resumes` storage bucket.
+2. Generate tailored **cover letter** via Lovable AI (`google/gemini-2.5-flash`) → `cover_letters`.
+3. Attach both to `applications` row, then hand off to portal.server.ts for submission.
+4. Log every step into `application_events`.
 
-- `src/routes/api/public/sources/run-tier.ts`
-  - Make source health more honest.
-  - Ensure active user settings drive source context.
+### 7. End-to-end smoke test
+- Trigger one tier run → confirm only cyber jobs land.
+- Manually queue 1 application → confirm resume PDF + cover letter generated and stored.
+- Confirm worker picks it up and moves through phases.
 
-- Database data updates after code changes
-  - Re-enable automation if desired.
-  - Clear stale source health rows if they are misleading.
-  - Trigger new tier runs and inspect saved jobs.
+---
 
-No schema change is expected unless we decide to store more detailed Apify diagnostics.
+## Files to touch
+- `supabase/migrations/<new>.sql` — matcher rewrite + language gate + rescore
+- `src/lib/sources/adapters.server.ts` — cyber gate tightening, Apify payloads, InfoSec parser
+- `src/lib/sources/seed-slugs.ts` — replace warm-tier companies with cyber orgs
+- `src/routes/api/public/hooks/apply-worker.ts` — parallelism, watchdog
+- `src/lib/apply/ai.server.ts` — ensure resume + cover letter both run per job
+- `src/lib/apply/portal.server.ts` — verify it consumes the generated artifacts
+
+After this, the user should see: cyber-only jobs, every queued app gets its own tailored resume + cover letter, and the worker actually applies.
+
+Approve to start with Step 1 (matcher migration) — that single change alone will clean up the 150 garbage matches.
