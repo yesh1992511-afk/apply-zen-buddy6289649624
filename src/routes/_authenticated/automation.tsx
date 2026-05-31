@@ -388,6 +388,20 @@ function AutomationPage() {
           </div>
         </div>
       </SectionCard>
+
+      <SectionCard
+        title="Worker secrets"
+        description="Status of every secret the worker pulls from Lovable Cloud at runtime. Green = ready, amber = missing."
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <SecretStatusPanel group="decodo" />
+          <SecretStatusPanel group="capsolver" />
+          <SecretStatusPanel group="openai" />
+          <SecretStatusPanel group="deepseek" />
+          <SecretStatusPanel group="gmail" />
+          <SecretStatusPanel group="apply" />
+        </div>
+      </SectionCard>
     </div>
   );
 }
