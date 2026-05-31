@@ -631,6 +631,18 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
           <CardContent className="grid gap-3 pt-6 md:grid-cols-2">
             {schema.fields.map((f) => {
               const val = it[f.key];
+              if (f.bool) {
+                return (
+                  <div key={f.key} className="md:col-span-2 flex items-center justify-between rounded-md border border-border/50 bg-surface-2/40 px-3 py-2">
+                    <Label htmlFor={`${it.id}-${f.key}`} className="text-sm">{f.label}</Label>
+                    <Switch
+                      id={`${it.id}-${f.key}`}
+                      checked={Boolean(val)}
+                      onCheckedChange={(v) => update(it.id, { [f.key]: v, ...(f.key === "is_current" && v ? { end_date: null } : {}) })}
+                    />
+                  </div>
+                );
+              }
               if (f.multi) {
                 const str = Array.isArray(val) ? (f.key === "tech" ? val.join(", ") : val.join("\n")) : "";
                 return (
@@ -674,7 +686,10 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
               );
             })}
 
-            <div className="md:col-span-2 flex justify-end">
+            <div className="md:col-span-2 flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">
+                {savingId === it.id ? "Saving…" : "Saved automatically"}
+              </span>
               <Button size="sm" variant="ghost" onClick={() => remove(it.id)}><Trash2 className="h-4 w-4" /></Button>
             </div>
           </CardContent>
