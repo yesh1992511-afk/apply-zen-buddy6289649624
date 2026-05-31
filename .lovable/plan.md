@@ -1,28 +1,40 @@
-# Inline JD preview on matched job cards
+## Overview
+Display the match score and an "applied / queued / failed" status badge directly on every matched job card so the user can scan the grid and instantly know which jobs have already been actioned.
 
-Show a short, readable snippet of the job description on each card in `/jobs` so the JD is visible at a glance without opening the dialog or detail page. The existing "Description" button (full dialog) stays for the complete read.
+## Current State
+- The score is already rendered as a coloured pill in the top-right corner of each card.
+- There is **no** visible indicator showing whether a job has an existing application (queued, applying, applied, failed, etc.).
+- The `jobsQueryOptions` fetches `*` from `jobs` only; it does not join `applications`.
 
-## Scope
+## Proposed Changes
 
-- File: `src/routes/_authenticated/jobs.tsx` only.
-- Frontend/presentation only. No schema, query, or worker changes — `description` and `description_html` already come back on the `Job` type from `src/lib/queries/jobs.ts` and are scraped by the worker.
+### 1. Backend query (`src/lib/queries/jobs.ts`)
+- Modify `jobsQueryOptions` to use a Supabase relation join that pulls the latest `applications` row for each job.
+- Since `applications(job_id)` references `jobs(id)`, PostgREST supports `jobs(applications(status))` as an array.
+- Extract the first element in the queryFn and expose it as `application_status: string | null` on the `Job` type.
+- This avoids an extra network round-trip and keeps card rendering synchronous.
 
-## What changes
+### 2. Card UI (`src/routes/_authenticated/jobs.tsx`)
+- Add an inline status badge between the title row and the metadata row.
+- Badge states and colours:
+  - **Applied** → emerald green badge
+  - **Queued / Applying** → amber badge
+  - **Failed / Needs Review** → rose/destructive badge
+  - **Skipped** → muted grey badge
+  - **No application** → nothing shown (no badge)
+- When an application exists, replace the "Apply" button label with context:
+  - "Applied" → link to the existing application detail page
+  - "Queued / Applying" → show "In progress" with a spinner hint
+  - "Failed / Needs Review" → show "Retry" instead of "Apply"
+  - "Skipped" → still allow re-apply
+- Keep the existing score pill unchanged in the top-right corner.
 
-1. Add a small helper inside the file, `jdSnippet(j)`, that:
-   - Prefers `j.description` (plain text).
-   - Falls back to `j.description_html` stripped of tags (regex strip `<[^>]+>`, decode a few common entities like `&amp;`, `&nbsp;`, `&lt;`, `&gt;`, `&#39;`, `&quot;`) and collapsed whitespace.
-   - Returns `null` if nothing usable.
+### 3. No other changes
+- No database migrations required.
+- No worker or backend logic changes required.
+- The existing `useApplyToJob` mutation already handles duplicate applications; we only surface that state earlier in the UI.
 
-2. In the card JSX (between the meta row / salary chip and the bottom action bar, around line 296), render:
-   - A `<p>` with `line-clamp-3 text-xs text-muted-foreground/90 leading-relaxed` showing the snippet.
-   - Only when `jdSnippet(j)` is truthy.
-   - No "Read more" link — the existing "Description" button already opens the full dialog.
-
-3. Card already uses `flex flex-col` with `mt-auto` on the action bar, so the snippet naturally pushes the footer down and cards in the grid stay aligned via the grid's implicit row height. No layout overhaul needed.
-
-## Out of scope
-
-- No change to dialog, detail page, or worker.
-- No new dependency for HTML sanitization — snippet is plain text only, never rendered as HTML.
-- No truncation length tuning beyond `line-clamp-3`.
+## Acceptance Criteria
+- Every matched job card shows its score (already true) **and** an application status badge when an application exists.
+- The user can tell at a glance which jobs are already applied, queued, or failed without opening each card.
+- Clicking the card action button adapts its label based on the existing application status.

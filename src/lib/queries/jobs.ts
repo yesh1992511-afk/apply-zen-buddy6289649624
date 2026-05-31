@@ -140,6 +140,8 @@ export type Job = {
   description: string | null;
   description_html: string | null;
   status: string;
+  application_status: string | null;
+  application_id: string | null;
 };
 
 export const jobsKey = (params: { hours: number }) =>
@@ -151,7 +153,7 @@ export const jobsQueryOptions = (params: { hours: number }) =>
     queryFn: async (): Promise<Job[]> => {
       let q = supabase
         .from("jobs")
-        .select("*")
+        .select("*, applications(id, status, queued_at)")
         .order("score", { ascending: false })
         .order("posted_at", { ascending: false, nullsFirst: false })
         .limit(200);
@@ -161,7 +163,18 @@ export const jobsQueryOptions = (params: { hours: number }) =>
       }
       const { data, error } = await q;
       if (error) throw new Error(error.message);
-      return (data ?? []) as Job[];
+      return ((data ?? []) as Array<Record<string, unknown> & { applications?: Array<{ id: string; status: string; queued_at: string }> }>).map((row) => {
+        const apps = Array.isArray(row.applications) ? row.applications : [];
+        const latest = apps.length > 0
+          ? [...apps].sort((a, b) => (b.queued_at ?? "").localeCompare(a.queued_at ?? ""))[0]
+          : null;
+        const { applications: _drop, ...rest } = row;
+        return {
+          ...(rest as object),
+          application_status: latest?.status ?? null,
+          application_id: latest?.id ?? null,
+        } as Job;
+      });
     },
     staleTime: 15_000,
   });
