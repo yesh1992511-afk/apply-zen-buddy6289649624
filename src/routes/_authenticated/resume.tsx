@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useUser } from "@/lib/useAuth";
-import { Trash2, Upload } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { compileResumeToPdf } from "@/lib/resume.functions";
+import { Trash2, Upload, Download } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/resume")({
   head: () => ({
@@ -44,7 +46,7 @@ function ResumePage() {
   const load = () => {
     supabase.from("resumes").select("*").order("created_at", { ascending: false }).then(({ data }) => {
       const all = (data ?? []) as Tpl[];
-      setTemplates(all.filter((r) => r.kind === "template"));
+      setTemplates(all.filter((r) => r.kind === "template" || r.kind === "synced"));
     });
   };
   useEffect(() => { load(); }, []);
@@ -217,10 +219,15 @@ function ResumePage() {
             {templates.map((t) => (
               <div key={t.id} className={`flex items-center justify-between rounded border p-2 text-sm ${selectedId === t.id ? "border-primary bg-accent/30" : ""}`}>
                 <button className="flex-1 text-left" onClick={() => { setSelectedId(t.id); setPreviewMode("template"); }}>
-                  <div className="font-medium">{t.name}{t.is_default && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">DEFAULT</span>}</div>
+                  <div className="font-medium">
+                    {t.name}
+                    {t.kind === "synced" && <span className="ml-2 rounded bg-success/10 px-1.5 py-0.5 text-[10px] text-success">SYNCED</span>}
+                    {t.is_default && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">DEFAULT</span>}
+                  </div>
                   <div className="text-xs text-muted-foreground">{Array.isArray(t.markers) ? t.markers.length : 0} markers · {t.pdf_storage_path ? "PDF ready" : "no PDF"}</div>
                 </button>
                 <div className="flex gap-1">
+                  <DownloadPdfButton resumeId={t.id} name={t.name} />
                   {!t.is_default && <Button size="sm" variant="outline" onClick={() => setDefault(t.id)}>Default</Button>}
                   <Button size="sm" variant="ghost" onClick={() => remove(t.id)}><Trash2 className="h-4 w-4" /></Button>
                 </div>
