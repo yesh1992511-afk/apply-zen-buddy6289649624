@@ -24,6 +24,7 @@ import {
   LogOut,
   Bell,
   FileText,
+  Mail,
   Chrome,
   Sparkles,
   CreditCard,
