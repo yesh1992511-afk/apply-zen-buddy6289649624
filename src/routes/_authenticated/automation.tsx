@@ -32,6 +32,13 @@ import {
 } from "@/lib/validation/settings";
 import type { z } from "zod";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Beaker, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { triggerTestRun, waitForCommand } from "@/lib/commands";
+import { toast } from "sonner";
+
 
 type AutomationValues = z.infer<typeof automationSchema>;
 
@@ -80,12 +87,15 @@ function AutomationPage() {
         description="Master controls for the autopilot worker. Changes save automatically."
       />
 
+      <TestModeCard />
+
       <SectionCard
         title="Master switch"
         description="Stop or start the whole worker, and define when it can run."
         saveState={saveState}
         error={error}
       >
+
         <Row
           label="Worker enabled"
           desc="Master kill switch. When off, the worker stops scraping & applying."
@@ -330,3 +340,100 @@ function pickAutomationFields(s: AutomationSettings): AutomationValues {
   const { user_id: _u, ...rest } = s;
   return rest as unknown as AutomationValues;
 }
+
+function TestModeCard() {
+  const [limit, setLimit] = useState(2);
+  const [sourceKey, setSourceKey] = useState<string>("");
+  const [running, setRunning] = useState(false);
+  const [lastResult, setLastResult] = useState<string | null>(null);
+
+  const sources = useQuery({
+    queryKey: ["sources", "enabled-keys"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sources")
+        .select("key, display_name, enabled")
+        .eq("enabled", true)
+        .order("display_name");
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<{ key: string; display_name: string; enabled: boolean }>;
+    },
+    staleTime: 30_000,
+  });
+
+  const effectiveKey = sourceKey || sources.data?.[0]?.key || "";
+
+  async function handleRun() {
+    if (!effectiveKey) {
+      toast.error("Enable at least one source on the Sources page first.");
+      return;
+    }
+    setRunning(true);
+    setLastResult(null);
+    try {
+      const id = await triggerTestRun(effectiveKey, limit);
+      if (!id) return;
+      const row = await waitForCommand(id, 5 * 60_000);
+      if (row?.status === "done") {
+        const r = (row.result ?? {}) as { matched?: number; applied?: number };
+        const msg = `Done — matched ${r.matched ?? 0}, applied ${r.applied ?? 0}`;
+        setLastResult(msg);
+        toast.success(msg);
+      } else if (row?.status === "failed") {
+        const msg = `Failed: ${row.last_error ?? "unknown error"}`;
+        setLastResult(msg);
+        toast.error(msg);
+      } else {
+        setLastResult("Still running — check Worker page for progress.");
+        toast.message("Worker still busy. Check Worker page.");
+      }
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <SectionCard
+      title="Test mode"
+      description="Scrape one source until N matched jobs, then auto-apply them. Bypasses daily caps."
+    >
+      <div>
+        <Label>Source</Label>
+        <Select value={effectiveKey} onValueChange={setSourceKey}>
+          <SelectTrigger>
+            <SelectValue placeholder={sources.isLoading ? "Loading…" : "No enabled sources"} />
+          </SelectTrigger>
+          <SelectContent>
+            {(sources.data ?? []).map((s) => (
+              <SelectItem key={s.key} value={s.key}>
+                {s.display_name} ({s.key})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label className="flex items-center justify-between">
+          <span>Stop after N matched jobs</span>
+          <Badge variant="secondary" className="tabular-nums">{limit}</Badge>
+        </Label>
+        <Slider
+          value={[limit]}
+          min={1}
+          max={10}
+          step={1}
+          onValueChange={(v) => setLimit(v[0])}
+          className="mt-2"
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <Button onClick={handleRun} disabled={running || !effectiveKey}>
+          {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Beaker className="mr-2 h-4 w-4" />}
+          {running ? "Running test…" : "Run test"}
+        </Button>
+        {lastResult && <span className="text-xs text-muted-foreground">{lastResult}</span>}
+      </div>
+    </SectionCard>
+  );
+}
+

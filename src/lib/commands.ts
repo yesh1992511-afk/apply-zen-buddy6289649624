@@ -5,7 +5,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-type Kind = "scrape" | "apply" | "tailor" | "tailor_resume" | "compile_resume" | "test_source" | "notify_test";
+type Kind = "scrape" | "apply" | "tailor" | "tailor_resume" | "compile_resume" | "test_source" | "test_run" | "notify_test";
 
 async function enqueue(kind: Kind, payload: Record<string, unknown>): Promise<string | null> {
   const { data: u } = await supabase.auth.getUser();
@@ -53,6 +53,13 @@ export async function triggerTestSource(source_key: string) {
   if (id) toast.success(`Test fetch queued for "${source_key}".`);
   return id;
 }
+
+export async function triggerTestRun(source_key: string, match_limit: number) {
+  const id = await enqueue("test_run", { source_key, match_limit });
+  if (id) toast.success(`Test run queued: scrape until ${match_limit} matched, then auto-apply.`);
+  return id;
+}
+
 
 /**
  * Get a same-origin blob: URL for a PDF in the `resumes` bucket.

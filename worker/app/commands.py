@@ -217,6 +217,39 @@ async def _do_test_apply(_payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "browser_ok": True, "ip_probe": body[:200]}
 
 
+async def _do_test_run(payload: dict[str, Any]) -> dict[str, Any]:
+    """Scrape one source, stop after N matched jobs, then auto-apply each."""
+    key = payload.get("source_key")
+    if not key:
+        raise ValueError("source_key required")
+    limit = int(payload.get("match_limit") or 2)
+    limit = max(1, min(10, limit))
+    matched_ids = await run_source_by_key(key, force=True, match_limit=limit)
+    applied = 0
+    errs: list[str] = []
+    uid = user_id()
+    for job_id in matched_ids[:limit]:
+        try:
+            existing = db().table("applications").select("id,status").eq(
+                "user_id", uid
+            ).eq("job_id", job_id).limit(1).execute().data
+            app = existing[0] if existing else db().table("applications").insert({
+                "user_id": uid, "job_id": job_id, "status": "queued",
+            }).execute().data[0]
+            await process_one(app)
+            applied += 1
+        except Exception as e:
+            errs.append(f"{job_id[:8]}: {str(e)[:200]}")
+    return {
+        "ok": True,
+        "source_key": key,
+        "match_limit": limit,
+        "matched": len(matched_ids),
+        "applied": applied,
+        "errors": errs,
+    }
+
+
 HANDLERS = {
     "scrape": _do_scrape,
     "apply": _do_apply,
@@ -224,6 +257,7 @@ HANDLERS = {
     "tailor_resume": _do_tailor,
     "compile_resume": _do_compile_resume,
     "test_source": _do_test_source,
+    "test_run": _do_test_run,
     "notify_test": _do_notify_test,
     "notify_offline": _do_notify_offline,
     "notify_daily_summary": _do_notify_daily_summary,
@@ -232,6 +266,7 @@ HANDLERS = {
     "drain_apply_queue": _do_drain_apply_queue,
     "test_apply": _do_test_apply,
 }
+
 
 
 
