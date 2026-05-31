@@ -313,6 +313,12 @@ function JobsPage() {
                     {j.salary_currency ?? "$"}{j.salary_min ?? "?"}–{j.salary_max ?? "?"}
                   </div>
                 )}
+                {(() => {
+                  const snip = jdSnippet(j);
+                  return snip ? (
+                    <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-muted-foreground/90">{snip}</p>
+                  ) : null;
+                })()}
 
                 <div className="mt-auto pt-3 flex items-center justify-between border-t border-border/50 mt-3">
                   <div className="flex items-center gap-2">
