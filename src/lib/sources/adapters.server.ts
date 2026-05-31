@@ -911,15 +911,11 @@ export async function fetchInfosecJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]>
 
 export type SourceSpec = { provider: string; slug?: string };
 
-// Providers that are inherently cybersecurity-focused. Jobs from these
-// sources are kept as-is. Everything else is gated through a relevance
-// pre-filter so we don't flood the pipeline with unrelated roles.
-const CYBER_NATIVE_PROVIDERS = new Set<string>([
-  'infosec_jobs',
-  'usajobs', // we only run cyber keywords for USAJobs (see USAJOBS_QUERIES)
-]);
+// Only adapters that are 100% cybersecurity boards skip the relevance gate.
+// USAJobs is NOT here because users can configure non-cyber keyword queries.
+const CYBER_NATIVE_PROVIDERS = new Set<string>(['infosec_jobs']);
 
-const CYBER_RE = /\b(cyber|security|infosec|appsec|netsec|secops|devsecops|soc analyst|siem|penetration|pentest|red team|blue team|purple team|incident response|threat intel|vulnerab|malware|forensic|iam |identity (and|&) access|grc\b|compliance officer|ciso|security engineer|security analyst|security architect|cloud security)\b/i;
+const CYBER_RE = /\b(cyber|cybersecurity|security engineer|security analyst|security architect|security operations|infosec|information security|appsec|application security|netsec|network security|secops|devsecops|soc analyst|siem|penetration|pentest|pen-test|red team|blue team|purple team|incident response|threat intel|threat hunt|vulnerab|malware|forensic|iam |identity (and|&) access|grc\b|compliance officer|ciso|cloud security|product security|offensive security|defensive security|security researcher|security consultant)\b/i;
 
 function isCyberRelevant(j: NormalizedJob): boolean {
   const hay = `${j.title} ${j.company} ${j.description ?? ''}`;
