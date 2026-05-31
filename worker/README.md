@@ -120,3 +120,25 @@ docker compose logs -f worker                          # tail
 docker compose exec worker python -m app.cli scrape    # manual scrape
 docker compose exec worker python -m app.cli apply 5   # process 5 queued
 ```
+
+## Auto-deploy from GitHub (CI/CD)
+
+A GitHub Action (`.github/workflows/deploy-worker.yml`) auto-deploys this worker to your VPS on every push to `main` that touches `worker/**`. You can also trigger it manually from the **Actions** tab → *Deploy worker to VPS* → *Run workflow*.
+
+### One-time setup (5 min)
+
+1. **On the VPS**, create a deploy key and authorize it:
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/jobpilot_deploy -N ""
+   cat ~/.ssh/jobpilot_deploy.pub >> ~/.ssh/authorized_keys
+   cat ~/.ssh/jobpilot_deploy        # copy the whole private key
+   ```
+
+2. **In GitHub** → *Settings → Secrets and variables → Actions* → *New repository secret*:
+   - `VPS_HOST` — your VPS hostname or IP (e.g. `srv706334.hstgr.cloud`)
+   - `VPS_SSH_KEY` — the full private key from step 1 (`-----BEGIN…-----END-----`)
+   - `VPS_USER` *(optional, defaults to `root`)*
+
+3. Make sure the repo is already cloned at `/root/jobpilot` on the VPS and `worker/.env` is filled in.
+
+That's it. Next push to `main` deploys automatically. The workflow runs `worker/deploy.sh` on the VPS, which `git pull`s, rebuilds the Docker image, restarts the container, and fails loudly if it doesn't come up healthy.
