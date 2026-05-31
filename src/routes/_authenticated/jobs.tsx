@@ -55,11 +55,14 @@ function JobsPage() {
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
 
   const jobsQuery = useQuery(jobsQueryOptions({ hours }));
+  const countsQuery = useQuery(jobCountsQueryOptions());
   const filtersQuery = useQuery(savedFiltersQueryOptions());
   const applyMutation = useApplyToJob();
   const bulkQueue = useBulkQueueApplies();
   const clearAll = useClearAllJobs();
   const rescore = useRescoreAllJobs();
+  const loosen = useLoosenActiveFilter();
+  const disableNoisy = useDisableNoisySources();
 
   const jobs = jobsQuery.data ?? [];
   const savedFilters = filtersQuery.data ?? [];
