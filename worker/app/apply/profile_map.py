@@ -192,6 +192,28 @@ _rule(r"criminal (record|history|conviction)|felony", _criminal)
 _rule(r"references? (available|on request|contact)", lambda p, l: _yesno(p.get("references_available_on_request")))
 
 
+# --- Publications / research / papers ---
+def _publications(_p: dict, l: dict):
+    rows = l.get("publications") or []
+    if not rows:
+        return None
+    parts: list[str] = []
+    for r in rows[:5]:
+        title = (r.get("title") or "").strip()
+        if not title:
+            continue
+        venue = (r.get("venue") or "").strip()
+        date = (r.get("publication_date") or "")
+        year = str(date)[:4] if date else ""
+        suffix = ", ".join([x for x in [venue, year] if x])
+        parts.append(f"{title}{' — ' + suffix if suffix else ''}")
+    return "; ".join(parts) or None
+
+_rule(r"publication|papers? (you('ve| have)? )?(written|published)|research output|notable (publications|papers)",
+      _publications)
+
+
+
 # --- Cover-letter type prompts ---
 _rule(r"why (do you want|are you interested)", lambda p, l: (p.get("screening_answers") or {}).get("why_company") or p.get("summary"))
 _rule(r"tell us about yourself|brief introduction|summary about you", lambda p, l: p.get("summary"))
