@@ -1887,6 +1887,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bootstrap_apply_worker_cron: {
+        Args: { _base_url: string; _secret: string }
+        Returns: Json
+      }
       current_plan_for: {
         Args: { _user_id: string }
         Returns: {
