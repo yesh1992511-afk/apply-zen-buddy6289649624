@@ -236,7 +236,7 @@ function NotificationsPage() {
               onClick={() => testMutation.mutate()}
               disabled={!creds || testMutation.isPending}
             >
-              Send test email
+              {testMutation.isPending ? "Sending…" : "Send test email"}
             </Button>
             {creds && (
               <Button
