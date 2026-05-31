@@ -32,6 +32,13 @@ import {
 } from "@/lib/validation/settings";
 import type { z } from "zod";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Beaker, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { triggerTestRun, waitForCommand } from "@/lib/commands";
+import { toast } from "sonner";
+
 
 type AutomationValues = z.infer<typeof automationSchema>;
 
