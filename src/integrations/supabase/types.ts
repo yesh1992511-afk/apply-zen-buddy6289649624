@@ -1820,7 +1820,7 @@ export type Database = {
         | "needs_review"
         | "skipped"
       log_level: "debug" | "info" | "warn" | "error"
-      run_status: "running" | "succeeded" | "failed"
+      run_status: "running" | "succeeded" | "failed" | "success"
       source_kind: "apify" | "rest" | "board"
     }
     CompositeTypes: {
@@ -1975,7 +1975,7 @@ export const Constants = {
         "skipped",
       ],
       log_level: ["debug", "info", "warn", "error"],
-      run_status: ["running", "succeeded", "failed"],
+      run_status: ["running", "succeeded", "failed", "success"],
       source_kind: ["apify", "rest", "board"],
     },
   },

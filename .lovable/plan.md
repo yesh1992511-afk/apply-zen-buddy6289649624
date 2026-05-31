@@ -1,54 +1,68 @@
-# Plan: Worker DLQ Patch + System Polish
+# Plan: Fix scraping so every enabled portal produces leads
 
-## 1. Worker patch (applied on your VPS, not in this repo)
+## Root cause recap
 
-Deliver a single unified diff (`worker_dlq.patch`) you can `git apply` on the VPS. It adds:
+- **REST scrapers crash on status update**: worker writes `last_run_status = "success"`, but the `run_status` enum only allows `running | succeeded | failed`. After inserting jobs, the run row write throws `22P02`, the scheduler marks the source `failed`, and the next cron tick treats it as broken.
+- **Apify sources never ran**: no `APIFY_TOKEN` secret.
+- **USAJobs never ran**: no `USAJOBS_API_KEY` / user-agent email.
+- **Board scrapers have empty / token configs**: greenhouse/lever/ashby/workable/recruitee/teamtailor company lists are 0–2 entries and not cybersecurity-aligned.
 
-- **Retry budget**: read `attempts` and `max_attempts` (default 4) from `applications`. On failure, increment `attempts`, set `next_retry_at = now() + backoff(attempts)` (exponential: 5m, 15m, 1h, 4h). When `attempts >= max_attempts`, set `phase = 'dead_letter'`, `status = 'failed'`, write final error to `last_error`.
-- **Retry gating**: the apply-loop query filters `WHERE phase IN ('queued','retry') AND (next_retry_at IS NULL OR next_retry_at <= now())`. Rows in `dead_letter` are skipped.
-- **Manual retry support**: when the UI flips a row back to `phase='queued'` and clears `next_retry_at`, the worker picks it up on the next tick — no code change needed beyond the gating query.
-- **Event log**: every attempt writes an `application_events` row (`attempt_started`, `attempt_failed`, `dead_lettered`) with `error_code`, `screenshot_path`, `duration_ms`.
-- **Heartbeat**: keep existing heartbeat, add `last_error` field so the worker page surfaces the most recent crash without log-diving.
+## Fix in three tracks
 
-Output: the patch text in chat + a short "how to apply" block (`git apply worker_dlq.patch && systemctl restart applyzen-worker`).
+### Track A — DB compat (unblock the REST scrapers now)
 
-## 2. Repo changes to make the patch land cleanly
+One migration:
 
-### Migration
-- Add columns if missing: `applications.attempts int default 0`, `max_attempts int default 4`, `next_retry_at timestamptz`, `last_error text`.
-- Create `application_events` table (`id, application_id, user_id, kind, message, error_code, screenshot_path, duration_ms, created_at`) with RLS scoped to `auth.uid()`, GRANTs for authenticated + service_role, index on `(application_id, created_at desc)`.
-- Index `applications (phase, next_retry_at)` for the worker query.
+1. Add `'success'` as an alias label to `public.run_status` enum so existing worker writes stop crashing. (Keeps `'succeeded'` valid for the new code path.)
+2. Reset stuck sources so the UI and cron pick them back up:
+   ```sql
+   UPDATE sources
+   SET last_run_status = NULL, last_error = NULL
+   WHERE last_error LIKE '%invalid input value for enum run_status%';
+   ```
+   Done via `supabase--insert` (data change, not schema).
 
-### Server functions (`src/lib/applications.functions.ts`)
-- `retryApplication(id)` — set `phase='queued'`, `attempts=0`, `next_retry_at=null`, clear `last_error`.
-- `discardApplication(id)` — set `phase='dead_letter'`, `status='discarded'`.
-- `listApplicationEvents(applicationId)` — returns timeline.
+After this, the next `sources-hot-15min` / `sources-warm-*` cron tick will rerun arbeitnow, remotive, remoteok cleanly, plus builtin / weworkremotely / workatastartup which never got their turn.
 
-### UI
-- `/applications` — add a **Needs review** tab filtering `phase='dead_letter'` with bulk Retry/Discard.
-- `/applications/$id` — add an **Events timeline** panel (attempt count, last error, screenshot thumbnails via signed URL).
+### Track B — Curated company pack for board scrapers
 
-## 3. Phase B — Setup checklist polish
+A new server fn `seedCuratedCompanies({ pack: "cybersecurity" })` in `src/lib/sources/curated.functions.ts` that merges a hand-picked cybersecurity-heavy company list into the right board sources:
 
-Expand `getSystemReadiness()` to check: profile completeness ≥ 80%, default resume exists, ≥1 cover letter, Gmail secret, captcha secret, proxy secret, worker heartbeat < 10min, ≥1 source enabled, ≥1 filter, automation target set. Rebuild `/setup` as a red/amber/green list with deep-links to the exact fix page. Dashboard banner already wired — just feed it the richer signal.
+- **Greenhouse**: cloudflare, crowdstrike, datadog, okta, snowflake, gitlab, hashicorp, doordash, robinhood, instacart, coinbase, airtable, asana, plaid, stripe, airbnb, brex, ramp, mongodb, sentry, anthropic, openai (also runs on greenhouse for some)
+- **Lever**: netflix, palantir, attentive, postman, brex, faire, cresta, applied-intuition, anthropic, twitch
+- **Ashby**: openai, ramp, linear, vercel, retool, posthog, lattice, replicate, mercury, watershed, perplexityai, character, gem, deel
+- **Workable**: doctolib, getyourguide, omio, hostaway, vodafone-careers, persistent
+- **SmartRecruiters**: visa, bosch, square, ubisoft, mckesson, atos, allianz, equinix, publicissapient
+- **Recruitee**: catawiki, miro, contentful, dept, omio
+- **Teamtailor**: voi, klarna, polestar, mentimeter, kry, oda
 
-## 4. Phase E — Notifications cron (skeleton only)
+Add a one-click "Load cybersecurity company pack" button on `/sources` for each board source that shows current count and merges (dedup, no overwrite of user additions).
 
-- New route `src/routes/api/public/hooks/notifications-tick.ts` (POST, runs every 5 min via `pg_cron`).
-- Fires Gmail SMTP via existing Gmail secret for: worker offline > 15min, ≥3 failed applies in last hour, new job with score ≥ 85, daily 8am summary.
-- Per-user opt-in flags on `notification_settings` (already exists). No new secrets needed.
-- `pg_cron` schedule added via `supabase--insert` (not migration, since URL is project-specific).
+### Track C — Surface the missing secrets
 
-## 5. Out of scope
+Two `add_secret` prompts triggered from `/sources` (and the Setup checklist already has hooks):
 
-Python worker source in this repo, browser extension, billing, new scrapers, AI model swaps.
+1. `APIFY_TOKEN` — unlocks Indeed, LinkedIn, Glassdoor, ZipRecruiter, Google Jobs, Wellfound. Link to apify.com/account/integrations.
+2. `USAJOBS_API_KEY` + `USAJOBS_USER_AGENT_EMAIL` — unlocks federal cybersecurity roles. Link to developer.usajobs.gov.
 
-## Deliverables
+Add a "Missing keys" banner on `/sources` listing exactly which sources are dark because of which secret, with an "Add key" button per group. The readiness checklist already covers proxy/captcha — extend the same pattern.
 
-1. `worker_dlq.patch` posted in chat with apply instructions.
-2. One migration (cols + `application_events` + indexes).
-3. Updated `applications.functions.ts` + `applications.tsx` + `applications.$id.tsx`.
-4. Expanded `readiness.functions.ts` + rebuilt `/setup`.
-5. New `notifications-tick` route + cron registration.
+### Track D — Worker patch (delivered in chat, applied on VPS)
 
-Ship order: migration → worker patch → UI → readiness → notifications. Each step is independently useful if you stop early.
+Small diff that:
+
+- Replaces every hardcoded `"success"` literal with `"succeeded"` in source-run reporting (`sources_runner.py` / wherever `last_run_status` is written).
+- Wraps the status-write in a try/except so even if a status string drifts again, the inserted jobs aren't lost and the next source in the tick still runs.
+- For Apify sources, if `APIFY_TOKEN` is missing, write `last_error = "APIFY_TOKEN not configured"` and `last_run_status = 'failed'` instead of silently skipping — so the UI shows why.
+
+## Out of scope
+
+- Rewriting any scraper logic, adding new portals, captcha changes, or anything in the apply pipeline (worker DLQ work from last turn stays as-is).
+
+## Order of operations
+
+1. Migration + data reset (Track A) — immediate effect, no user input needed.
+2. Curated pack + secrets banner UI (Tracks B + C in one batch).
+3. Worker patch posted in chat for you to `git apply` on the VPS (Track D).
+
+After step 1 you should see new jobs from at least 5 REST sources within 15 minutes. After step 2 + you adding `APIFY_TOKEN`, the Apify portals (Indeed/LinkedIn/Glassdoor/Zip/Google) start producing within their cadence (60–120 min). After you load the curated pack, board scrapers start producing within 3 hours.
