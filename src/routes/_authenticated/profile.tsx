@@ -57,7 +57,6 @@ const CRITICAL_FIELDS: { key: string; label: string }[] = [
 ];
 
 function ProfilePage() {
-  const { user } = useUser();
   const { data: p, set, flush, saveState, error: saveError, isLoading } = useProfileEditor();
   const [tab, setTab] = useState<string>(() =>
     typeof window !== "undefined" && window.location.hash.length > 1 ? window.location.hash.slice(1) : "basic",
@@ -67,9 +66,6 @@ function ProfilePage() {
     history.replaceState(null, "", `#${tab}`);
   }, [tab]);
 
-
-  // Hint that `user` is still consumed elsewhere (kept for future per-section flushes).
-  void user;
 
   if (isLoading || !p) {
     return (
