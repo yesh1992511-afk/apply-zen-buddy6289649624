@@ -46,6 +46,7 @@ type AppRow = {
   applied_at: string | null;
   finished_at: string | null;
   screenshots: string[] | null;
+  field_fills: Array<{ label: string; value: string; source: string }> | null;
   job: {
     title: string; company: string; url: string; source_key: string;
     location: string | null; remote: string | null; posted_at: string | null;
