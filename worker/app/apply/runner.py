@@ -19,9 +19,12 @@ from .ratelimit import acquire as rl_acquire, record_challenge
 
 
 async def _next_queued(limit: int) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc).isoformat()
     rows = db().table("applications").select("*").eq(
         "user_id", user_id()
-    ).eq("status", "queued").order("queued_at").limit(limit).execute().data or []
+    ).eq("status", "queued").or_(
+        f"next_retry_at.is.null,next_retry_at.lte.{now}"
+    ).order("queued_at").limit(limit).execute().data or []
     return rows
 
 
