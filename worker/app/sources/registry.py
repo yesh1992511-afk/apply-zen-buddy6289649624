@@ -23,6 +23,12 @@ from .ats_smartrecruiters import SmartRecruitersBoards
 from .ats_workable import WorkableBoards
 from .ats_recruitee import RecruiteeBoards
 from .ats_teamtailor import TeamtailorBoards
+from .ats_workday import WorkdayBoards
+from .ats_bamboohr import BambooHRBoards
+from .ats_personio import PersonioBoards
+from .ats_breezyhr import BreezyHRBoards
+from .ats_jobvite import JobviteBoards
+from .ats_icims import ICIMSBoards
 from .builtin import BuiltIn
 from .usajobs import USAJobs
 from .infosec_jobs import InfosecJobs
@@ -47,6 +53,9 @@ ADAPTERS: dict[str, Source] = {a.key: a for a in [
     # Startups + direct ATS boards
     WorkAtAStartup(), GreenhouseBoards(), LeverBoards(), AshbyBoards(),
     SmartRecruitersBoards(), WorkableBoards(), RecruiteeBoards(), TeamtailorBoards(),
+    # Enterprise ATS (new)
+    WorkdayBoards(), BambooHRBoards(), PersonioBoards(), BreezyHRBoards(),
+    JobviteBoards(), ICIMSBoards(),
     # US tech boards + federal
     BuiltIn(), USAJobs(),
     # Cybersecurity-focused free sources
