@@ -1,52 +1,46 @@
-## Phase A — Remaining Cleanup & Verification
+# Why the captcha row stays red
 
-Investigation shows Phase A is **95% wired correctly**:
-- `source.hot` cron is firing every 15min and writing `automation_runs` rows ✅
-- Adapters return 344 jobs/run, dedupe correctly on subsequent runs ✅
-- `sources` health table being upserted by `run-tier.ts` ✅
-- `/worker` UI filters by `kind LIKE 'source.%'` ✅
+The Worker setup checklist does **not** read your VPS `.env` file. It reads a database table (`secrets_meta`) that tracks *which secret names are configured*. Right now nothing writes to that table, so even though `CAPTCHA_API_KEY` and `PROXY_HOST` are sitting in the worker's `.env` on Hostinger, the UI has no way to know.
 
-But three issues remain:
+Clicking the red row in the frontend opens `/setup`, but `/setup` currently only shows the readiness list — it has no form to "mark configured" either. That's why nothing happens when you click.
 
-### 1. Duplicate cron jobs (causes double work & race conditions)
+# Fix: let the worker tell the database what it has
 
-The database has **3 overlapping hot-tier jobs** and **9 warm-tier jobs** that all hit `/run-tier`:
+The worker already pings the database every 30s (`worker/app/heartbeat.py`). We extend that same heartbeat to also upsert one row per configured secret into `secrets_meta`. As soon as you redeploy the worker, the UI flips Captcha → green and Proxy → green automatically.
 
-| Duplicate group | Jobs |
+This is the right architecture because:
+- The worker is the only thing that actually knows whether the env var is set.
+- No new secrets, no frontend form, no manual sync step.
+- Same pattern as the existing heartbeat (one extra upsert per 30s tick).
+
+## Changes
+
+**1. `worker/app/heartbeat.py`** — extend `beat()` to also upsert `secrets_meta` rows based on which env vars are non-empty:
+
+| Env var present | secrets_meta row written |
 |---|---|
-| Hot (3×) | `scrape-hot`, `sources-hot-15min`, `sources-hot-tier` |
-| Warm shard 0 (3×) | `scrape-warm-0`, `sources-warm-shard-0`, `sources-warm-shard0` |
-| Warm shard 1–3 (2× each) | `scrape-warm-{1,2,3}` + `sources-warm-shard-{1,2,3}` |
+| `CAPTCHA_API_KEY` | `name=CAPTCHA_API_KEY, category=captcha, status=set` |
+| `PROXY_HOST` + `PROXY_USER` | `name=PROXY_HOST, category=proxy, status=set` |
+| `APIFY_TOKEN` | `name=APIFY_TOKEN, category=apify, status=set` |
+| `OPENAI_API_KEY` | `name=OPENAI_API_KEY, category=ai, status=set` |
+| `GMAIL_OAUTH_REFRESH_TOKEN` | `name=GMAIL_OAUTH_REFRESH_TOKEN, category=gmail, status=set` |
 
-**Fix:** Drop the redundant `scrape-*` and `sources-hot-15min` / `sources-warm-shard0` jobs. Keep one canonical set:
-- `sources-hot-tier` (every 15min)
-- `sources-warm-shard-{0..3}` (staggered :00/:15/:30/:45)
-- `scrape-usajobs` (every hour at :25)
-- `scrape-apify` (every 4h)
+Upsert on `(user_id, name)` (the table already has that unique constraint). Use `status='set'` when the value is non-empty, `status='unset'` otherwise so removing a key also reflects in the UI.
 
-### 2. Untested tiers (warm/usajobs/apify never invoked)
+**2. `worker/app/config.py`** — expose the captcha/proxy/gmail fields as settings if they aren't already (read with defaults so missing keys don't crash).
 
-`sources` table shows `last_run_at = NULL` for every ATS board, USAJobs, and Apify source. Adapters could silently throw on first run.
+**3. `worker/VERSION`** — bump to `0.1.1` so the UI's "Worker heartbeat" row shows the new version, confirming the new build is live.
 
-**Fix:** Manually invoke each tier once via `stack_modern--invoke-server-function` to validate:
-- `?tier=warm&shard=0` → expect ATS slugs to fetch
-- `?tier=usajobs` → expect federal jobs (needs USAJOBS_API_KEY ✅ already set)
-- `?tier=apify` → expect cached datasets from APIFY_TOKEN ✅
+**4. Frontend** — no changes needed. `ReadinessChecklist` already re-queries every 30s.
 
-Fix any failures surfaced (most likely adapter quirks in `adapters.server.ts`).
+## Rollout for you
 
-### 3. Errors array always empty in metadata
+1. I push the worker changes.
+2. On Hostinger: `cd /opt/jobpilot-worker && git pull && docker compose up -d --build` (or your existing deploy script — `worker/deploy.sh` already exists).
+3. Within ~30s the Worker setup page flips Captcha → green and Proxy → green.
 
-`automation_runs.metadata.errors` shows `[]` even when `errors:1`. The filter logic in `run-tier.ts:207` runs before all chunks finish counting. Minor — improves debuggability.
+## Out of scope
 
-**Fix:** Move metadata error array construction after the per-source loop completes (it already does — actual bug: `summary[sourceKey].error_message` is only set inside the timeout-rejected branch, not the per-chunk insert-error branch). Add `error_message` capture in the chunk-error branch.
-
----
-
-### Technical changes
-
-1. **SQL migration** — `cron.unschedule()` the 6 duplicate jobs.
-2. **`src/routes/api/public/sources/run-tier.ts`** — set `summary[sourceKey].error_message` on chunk insert errors too.
-3. **Verification** — call `/api/public/sources/run-tier?tier=warm&shard=0`, `?tier=usajobs`, `?tier=apify` against the published URL and inspect responses + new `sources` rows.
-
-No UI changes. No schema changes. No new secrets needed.
+- No changes to scraping, source adapters, or cron jobs (Phase A stays as-is).
+- No new secrets requested — the values you already put in `.env` on the VPS are all that's needed.
+- No "manual mark configured" UI — we don't need it once the worker self-reports.
