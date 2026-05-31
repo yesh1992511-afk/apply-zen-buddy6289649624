@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 from ..db import db, user_id
 from ..logger import db_log, log
-from ..ai.resume_pipeline import build_resume_pdf, load_profile_payload
+from ..ai.resume_pipeline import build_resume_pdf, build_tailored_resume, load_profile_payload
 from ..ai.cover_letter import generate as generate_cover_letter
 from .browser import new_browser
 from .humanize import pause
