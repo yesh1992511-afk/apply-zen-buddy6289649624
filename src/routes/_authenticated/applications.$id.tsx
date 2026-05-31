@@ -170,7 +170,7 @@ function ApplicationDetailPage() {
   const lastScope = logs.length > 0 ? logs[logs.length - 1].scope : null;
   const activeIdx = app ? deriveStep(app.status, lastScope) : 0;
   const isActive = app ? ACTIVE_STATUSES.has(app.status) : false;
-  const isDone = app?.status === "applied" || app?.status === "submitted";
+  const isDone = app?.status === "applied";
 
   const fillRows: FillRow[] = useMemo(() => {
     const persisted = app?.field_fills;
