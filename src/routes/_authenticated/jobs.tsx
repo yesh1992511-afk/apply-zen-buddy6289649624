@@ -197,6 +197,33 @@ function JobsPage() {
       </div>
 
 
+      {countsQuery.data && countsQuery.data.scraped > 50 && countsQuery.data.matched === 0 && (
+        <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-warning shrink-0" />
+            <div className="min-w-0 flex-1">
+              <h4 className="font-heading font-semibold text-sm">
+                Scraped {countsQuery.data.scraped.toLocaleString()} jobs but matched 0
+              </h4>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Your filter is too strict, or several enabled sources aren't pre-filtering by keyword. Try one of these:
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => loosen.mutate(undefined, { onSuccess: () => rescore.mutate() })} disabled={loosen.isPending || rescore.isPending}>
+                  {loosen.isPending || rescore.isPending ? "Working…" : "Loosen filter + re-score"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => disableNoisy.mutate()} disabled={disableNoisy.isPending}>
+                  {disableNoisy.isPending ? "Disabling…" : "Disable noisy sources"}
+                </Button>
+                <Button size="sm" variant="ghost" asChild>
+                  <Link to="/filters">Edit filter manually</Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {jobsQuery.isError ? (
         <QueryErrorState error={jobsQuery.error} onRetry={() => jobsQuery.refetch()} title="Couldn't load jobs" />
       ) : loading && jobs.length === 0 ? (
