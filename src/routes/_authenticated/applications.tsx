@@ -24,7 +24,7 @@ export const Route = createFileRoute("/_authenticated/applications")({
 
 type Phase =
   | "discovered" | "scored" | "tailored" | "queued" | "applying" | "submitted"
-  | "needs_review" | "failed" | "follow_up_sent" | "replied" | "interview" | "offer" | "rejected";
+  | "needs_review" | "failed" | "dead_letter" | "follow_up_sent" | "replied" | "interview" | "offer" | "rejected";
 
 type App = {
   id: string;
