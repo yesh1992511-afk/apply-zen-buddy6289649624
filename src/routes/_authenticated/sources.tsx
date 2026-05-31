@@ -225,12 +225,26 @@ function SourcesPage() {
     setRunningNow(true);
     setLastIngestResult(null);
     try {
-      const res = await fetch(`/api/public/sources/run-tier?tier=hot&user_id=${user.id}`);
-      const json = await res.json() as { ok?: boolean; summary?: Record<string, { fetched: number; inserted: number }> };
-      if (!json.ok) { toast.error("Run failed"); return; }
-      const totals = Object.values(json.summary ?? {}).reduce((a, b) => ({ fetched: a.fetched + b.fetched, inserted: a.inserted + b.inserted }), { fetched: 0, inserted: 0 });
-      setLastIngestResult(`Fetched ${totals.fetched} jobs · ${totals.inserted} new`);
-      toast.success(`Fetched ${totals.fetched} jobs · ${totals.inserted} new`);
+      // Run every tier in parallel: hot (aggregators) + warm (ATS) + usajobs + apify.
+      const tiers: Array<"hot" | "warm" | "usajobs" | "apify"> = ["hot", "warm", "usajobs", "apify"];
+      const results = await Promise.allSettled(
+        tiers.map((t) => fetch(`/api/public/sources/run-tier?tier=${t}&user_id=${user.id}`).then((r) => r.json())),
+      );
+      let fetched = 0, inserted = 0;
+      const failed: string[] = [];
+      results.forEach((res, i) => {
+        if (res.status === "fulfilled" && (res.value as { ok?: boolean }).ok) {
+          const summary = (res.value as { summary?: Record<string, { fetched: number; inserted: number }> }).summary ?? {};
+          for (const v of Object.values(summary)) { fetched += v.fetched; inserted += v.inserted; }
+        } else {
+          failed.push(tiers[i]);
+        }
+      });
+      setLastIngestResult(`Fetched ${fetched} jobs · ${inserted} new${failed.length ? ` · ${failed.length} tier${failed.length === 1 ? "" : "s"} failed` : ""}`);
+      if (failed.length === tiers.length) toast.error("All tiers failed — check worker status");
+      else if (inserted > 0) toast.success(`+${inserted} new jobs (${fetched} fetched)`);
+      else toast.info(`Fetched ${fetched} jobs · no new matches yet`);
+      load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Run failed");
     } finally {
@@ -250,6 +264,48 @@ function SourcesPage() {
     if (rows.length === 0) { toast.info("All presets already added"); return; }
     const { error } = await supabase.from("sources").insert(rows as never);
     if (error) toast.error(error.message); else { toast.success(`Seeded ${rows.length} sources`); load(); }
+  };
+
+  /** One-click: seed missing presets → enable everything → apply the
+   *  "tech_top" curated pack across every ATS board. Result: a fully wired
+   *  ingestion stack in a single action. */
+  const [seedingAll, setSeedingAll] = useState(false);
+  const seedEverything = async () => {
+    if (!user) return;
+    setSeedingAll(true);
+    try {
+      const existing = new Set(sources.map((s) => s.key));
+      const newRows = PRESETS.filter((p) => !existing.has(p.key)).map((p) => ({
+        ...p,
+        config: applyTargetToSourceConfig(p.key, p.config, target),
+        user_id: user.id,
+        enabled: true,
+      }));
+      if (newRows.length > 0) {
+        const { error } = await supabase.from("sources").insert(newRows as never);
+        if (error) throw error;
+      }
+      const toEnable = sources.filter((s) => !s.enabled).map((s) => s.id);
+      if (toEnable.length > 0) {
+        await supabase.from("sources").update({ enabled: true } as never).in("id", toEnable);
+      }
+      const { data: fresh } = await supabase.from("sources").select("*");
+      let packAdded = 0;
+      for (const s of (fresh ?? []) as Source[]) {
+        const { config, added } = mergePackIntoConfig(s.key, s.config, "tech_top");
+        if (added === 0) continue;
+        await supabase.from("sources").update({ config } as never).eq("id", s.id);
+        packAdded += added;
+      }
+      toast.success(
+        `Wired everything: +${newRows.length} sources, ${toEnable.length} enabled, +${packAdded} companies from Top Tech pack`,
+      );
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Seed failed");
+    } finally {
+      setSeedingAll(false);
+    }
   };
 
   const applyTarget = async () => {
