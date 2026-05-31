@@ -51,8 +51,9 @@ export type NotificationsPatch = Partial<z.infer<typeof notificationsSchema>>;
 // ---------- Filters ----------
 export const filterSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
-  keywords: z.array(z.string().trim().min(1).max(60)).max(50).optional(),
-  exclude_keywords: z.array(z.string().trim().min(1).max(60)).max(50).optional(),
+  // Reject PostgREST filter metacharacters at the validation boundary (defense in depth).
+  keywords: z.array(z.string().trim().min(1).max(60).regex(/^[^,.()*:%\\]+$/, "Invalid characters")).max(50).optional(),
+  exclude_keywords: z.array(z.string().trim().min(1).max(60).regex(/^[^,.()*:%\\]+$/, "Invalid characters")).max(50).optional(),
   exclude_companies: z.array(z.string().trim().min(1).max(120)).max(200).optional(),
   locations: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
   seniority: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
