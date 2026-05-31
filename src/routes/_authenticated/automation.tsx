@@ -87,12 +87,15 @@ function AutomationPage() {
         description="Master controls for the autopilot worker. Changes save automatically."
       />
 
+      <TestModeCard />
+
       <SectionCard
         title="Master switch"
         description="Stop or start the whole worker, and define when it can run."
         saveState={saveState}
         error={error}
       >
+
         <Row
           label="Worker enabled"
           desc="Master kill switch. When off, the worker stops scraping & applying."
