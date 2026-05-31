@@ -82,7 +82,7 @@ function ApplicationDetailPage() {
     (async () => {
       const { data, error } = await supabase
         .from("applications")
-        .select("id, status, job_id, resume_id, cover_letter_id, attempts, retry_count, last_error, dlq_reason, queued_at, started_at, applied_at, finished_at, screenshots, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at)")
+        .select("id, status, job_id, resume_id, cover_letter_id, attempts, retry_count, last_error, dlq_reason, queued_at, started_at, applied_at, finished_at, screenshots, field_fills, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at)")
         .eq("id", id)
         .maybeSingle();
       if (cancelled) return;
