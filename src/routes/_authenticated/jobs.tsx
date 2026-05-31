@@ -293,6 +293,10 @@ function JobsPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((j, idx) => {
             const isSel = selected.has(j.id);
+            const appMeta = appStatusMeta(j.application_status);
+            const isApplied = j.application_status === "applied";
+            const isInFlight = j.application_status === "queued" || j.application_status === "applying";
+            const isRetryable = j.application_status === "failed" || j.application_status === "needs_review";
             return (
               <div
                 key={j.id}
@@ -315,8 +319,15 @@ function JobsPage() {
                     </div>
                     <h3 className="mt-1.5 line-clamp-2 font-heading text-[15px] font-semibold leading-snug">{j.title}</h3>
                   </div>
-                  <div className={cn("shrink-0 rounded-full px-2.5 py-1 font-mono text-xs font-bold tabular-nums", scoreChip(j.score))}>
-                    {j.score}
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <div className={cn("rounded-full px-2.5 py-1 font-mono text-xs font-bold tabular-nums", scoreChip(j.score))}>
+                      {j.score}
+                    </div>
+                    {appMeta && (
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", appMeta.chip)}>
+                        {appMeta.label}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -349,15 +360,28 @@ function JobsPage() {
                     <Button size="sm" variant="outline" onClick={() => setDialogJob(j as JobDialogJob)} className="h-8 gap-1.5 text-xs">
                       <FileText className="h-3.5 w-3.5" />Description
                     </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => applyOne(j)}
-                      disabled={applyingId === j.id || atCap}
-                      title={atCap ? `Daily apply cap reached (${capLabel})` : undefined}
-                      className="h-8 gap-1.5 text-xs bg-gradient-emerald shadow-glow"
-                    >
-                      <Send className="h-3.5 w-3.5" />{applyingId === j.id ? "…" : atCap ? "Cap" : "Apply"}
-                    </Button>
+                    {(isApplied || isInFlight) && j.application_id ? (
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 text-xs"
+                      >
+                        <Link to="/applications/$id" params={{ id: j.application_id }}>
+                          <Send className="h-3.5 w-3.5" />{isApplied ? "View" : "In progress"}
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => applyOne(j)}
+                        disabled={applyingId === j.id || atCap}
+                        title={atCap ? `Daily apply cap reached (${capLabel})` : undefined}
+                        className="h-8 gap-1.5 text-xs bg-gradient-emerald shadow-glow"
+                      >
+                        <Send className="h-3.5 w-3.5" />{applyingId === j.id ? "…" : atCap ? "Cap" : isRetryable ? "Retry" : "Apply"}
+                      </Button>
+                    )}
 
                     <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0">
                       <a href={j.url} target="_blank" rel="noreferrer" title="Open job">
