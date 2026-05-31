@@ -373,6 +373,39 @@ function SourcesPage() {
         }
       />
 
+      {/* Curated company packs — one-click load 30–100+ company boards across all ATS sources */}
+      <div className="rounded-xl border border-border/60 bg-card p-5">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="h-10 w-10 rounded-full bg-primary/15 flex items-center justify-center">
+            <PackagePlus className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-heading font-semibold">Curated company packs</h3>
+            <p className="text-xs text-muted-foreground">
+              One click loads pre-vetted company boards into every supported ATS source (Greenhouse, Lever, Ashby, Workday, BambooHR, etc.).
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {PACK_KEYS.map((key) => {
+            const p = PACKS[key];
+            return (
+              <div key={key} className="rounded-lg border border-border/60 bg-surface-1/40 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm">{p.label}</div>
+                    <div className="text-xs text-muted-foreground line-clamp-2">{p.description}</div>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => applyPackEverywhere(key)} className="gap-1.5 shrink-0">
+                    <Plus className="h-3.5 w-3.5" /> Apply
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Job Target — drives keywords across every source + default filter */}
       <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/10 via-card to-card p-5">
         <div className="flex items-center gap-3 mb-4">
