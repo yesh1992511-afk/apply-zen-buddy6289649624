@@ -1,59 +1,91 @@
-# Add Publications + fix profile bugs
+## Goal
+Add a **Sync to Resume** button at the top-right of `/profile` that:
+1. Renders the user's profile data into your LaTeX template
+2. Saves a versioned `.tex` to the `resumes` table + `resumes` storage bucket
+3. Offers a one-click **Download PDF** action that compiles on-demand
 
-## A. New `publications` section
+---
 
-**Migration** — new `public.publications` table:
+## 1. LaTeX template + renderer (server-side)
 
-```sql
-CREATE TABLE public.publications (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  title text NOT NULL DEFAULT '',
-  authors text,                -- comma-separated list of co-authors
-  venue text,                  -- journal / conference / publisher
-  publication_date date,
-  url text,
-  doi text,
-  description text,
-  sort_order integer DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.publications TO authenticated;
-GRANT ALL ON public.publications TO service_role;
-ALTER TABLE public.publications ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "owner full access" ON public.publications
-  FOR ALL TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+**New file: `src/lib/resume-template.ts`**
+- Exports the LaTeX preamble + section formatting commands from your `.tex` file as a constant (the lines 1–62 boilerplate stays identical).
+- Exports `escapeTex(s)` that escapes `& % $ # _ { } ~ ^ \` and converts newlines.
+- Exports `formatDateRange(start, end)` → `"Jan 2025 -- Present"`.
+
+**New file: `src/lib/resume-render.server.ts`** (server-only helper)
+- `renderResumeTex(data)` builds the full `.tex` string by interpolating:
+  - **Header**: `full_name` (uppercased), `city, state_region`, `phone`, `email`, `linkedin_url`
+  - **Professional Summary**: `profile.summary` (verbatim, escaped)
+  - **Professional Experience**: each row from `experiences` → `\resumeSubheading{company}{date_range}{title}{location}` + bullet items split from `description` on newlines
+  - **Cybersecurity Projects / Projects**: each row from `projects` → project heading block + tech stack italic line + bullets
+  - **Technical Skills**: rows from `skills` grouped by `category` → one `\item \textbf{category:} comma,list`
+  - **Certifications**: rows from `certifications` → `\item \textbf{name} (year)`
+  - **Education**: rows from `educations` → `\resumeSubheading{school}{date_range}{degree | GPA}{location}`
+  - **Publications**: rows from `publications` → `\item authors. "title." venue, date. url. description`
+- Sections render with empty-state guard (skipped if no rows).
+
+## 2. Server function: sync + PDF compile
+
+**New file: `src/lib/resume.functions.ts`**
+
+```ts
+export const syncResumeFromProfile = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    // 1. load profile + all 6 child tables
+    // 2. compute completion %, throw if < 80
+    // 3. render tex
+    // 4. slugify full_name → "yeswanth_reddy_chilakala"
+    // 5. find existing default-synced resumes for user, compute next vN
+    // 6. upload tex to resumes/{user_id}/{slug}_v{n}.tex
+    // 7. insert into resumes (kind='synced', is_default=true on first, name='yeswanth_reddy_chilakala_v3')
+    //    unset is_default on prior synced rows
+    // 8. return { id, name, storage_path }
+  })
+
+export const compileResumePdf = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ resume_id: z.string().uuid() }))
+  .handler(async ({ data, context }) => {
+    // 1. fetch resume (RLS ensures ownership)
+    // 2. POST tex to https://latexonline.cc/compile (text=...)
+    // 3. upload pdf to resumes/{user_id}/{slug}_v{n}.pdf
+    // 4. update resumes.pdf_storage_path
+    // 5. return signed URL valid 60s
+  })
 ```
 
-**Profile UI (`src/routes/_authenticated/profile.tsx`)**:
-- Add a `publications` entry to the `SCHEMAS` map with fields: `title`, `authors`, `venue`, `publication_date` (date), `url`, `doi`, `description`.
-- Add `<TabsTrigger value="publications">Publications</TabsTrigger>` between Certs and References.
-- Add `<TabsContent value="publications"><ListSection table="publications" /></TabsContent>`.
-- Extend `buildBlank()` NOT-NULL seed for `publications` (`title = ""`).
-- Extend the ordering branch in `load()` so `publications` orders by `sort_order` (already the default branch — fine).
+**Compile strategy**: use **latexonline.cc** (free, public, no key) — `GET https://latexonline.cc/compile?text=<urlencoded tex>` returns a PDF. Falls back gracefully with an error toast if the service is down.
 
-**Worker / ATS map (`worker/app/apply/profile_map.py`)**: add a `publications` aggregator that joins title + venue + year so portal questions like "List notable publications" auto-fill from the new table.
+## 3. UI changes
 
-## B. Profile bug fixes
+**Edit: `src/routes/_authenticated/profile.tsx`**
+- Add `useProfileCompletion()` hook that returns `0–100` based on filled fields across profile + presence of ≥1 row in experiences/projects/skills/educations.
+- Add top-right action group next to the page title:
+  - Badge: `Completion: 87%`
+  - Button **Sync to Resume** (disabled with tooltip "Profile must be ≥80% complete" if below 80)
+  - On success: toast "Saved as yeswanth_reddy_chilakala_v3" + link "View in Resumes"
 
-1. **Redundant page-wide flush** — `<div onBlurCapture={() => flush()}>` at the top of `ProfilePage` fires on every blur inside list-section cards too, queuing profile-editor writes that have nothing to save. Move the `onBlurCapture` wrapper from the outer page `div` onto the form `<Tabs>` content for the profile-editor-driven tabs only (Basic / Address / Work auth / Comp / Compliance / Preferences / Links / Screening). List sections (Experience / Projects / Skills / Education / Languages / Certs / Publications / References) handle their own saves and must not trigger profile flush.
+**Edit: `src/routes/_authenticated/resumes.tsx`**
+- For each resume row, add a **Download PDF** button that calls `compileResumePdf`, then triggers browser download from the returned signed URL.
+- Add **Download .tex** button (uses existing `storage_path` signed URL).
+- Show a "Synced" badge for `kind='synced'` rows; mark `is_default` with a star.
 
-2. **"Years experience" number parse** — `set("years_experience", v ? Number(v) : null)` happily accepts negatives and `Number(".")` → NaN. Clamp: parse, then `Number.isFinite(n) && n >= 0 ? n : null`. Set `min={0}` on the `<Input type="number">`.
+## 4. Database
 
-3. **`<SelectField allowCustom>` clear** — Compliance tab uses `SelectFieldKV` for `criminal_record_disclosure`, `notice_period_category`, `travel_willingness_pct`. Once a value is set you can't unset to "no answer". Add a small "Clear" link next to the trigger when value is non-empty, calling `onChange("")`/`onChange(null)`.
+No schema change needed — `resumes` table already has `tex_content`, `storage_path`, `pdf_storage_path`, `is_default`, `kind`, `name`. Only changes:
+- Add a `kind` value `'synced'` (free-text already).
+- Storage bucket `resumes` already exists; ensure folder convention `{user_id}/...`.
 
-4. **Duplicate Notice-period UX** — Comp tab has `notice_period_weeks` (numeric weeks) and Compliance tab has `notice_period_category` (immediate/2w/1m…). They drift. Add a hint under each: "Linked to the other notice-period field" so users know they answer the same question two ways; no auto-sync (the worker already prefers `_category` then falls back to `_weeks`).
+## 5. Out of scope
+- AI rewriting / tailoring per job
+- Editing tex in-browser
+- Multiple template choices (only your provided template)
+- ATS scoring
 
-5. **`void user;` cleanup** — remove the `void user;` line (legacy hint comment) and drop the unused `const { user }` destructure in `ProfilePage` since it isn't referenced.
+---
 
-6. **Auto-seed empty-row guard** — `ListSection.load()` currently always tries to seed a blank row on first empty load. If the seed insert fails (network/RLS), `seededRef` is already flipped, so retry never happens. Reset `seededRef.current[table] = false` inside the `if (error)` branch so a refresh tries again.
-
-## Files touched
-- `src/routes/_authenticated/profile.tsx` — Publications schema/tab + 6 bug fixes
-- `worker/app/apply/profile_map.py` — publications aggregator
-- New migration creating `public.publications` with RLS + grants
-
-## Out of scope
-- ORCID / Google Scholar auto-import
-- Citation parsing or DOI lookup
-- Filter/automation integration of publications
+**Files touched:**
+- new: `src/lib/resume-template.ts`, `src/lib/resume-render.server.ts`, `src/lib/resume.functions.ts`
+- edit: `src/routes/_authenticated/profile.tsx`, `src/routes/_authenticated/resumes.tsx`
