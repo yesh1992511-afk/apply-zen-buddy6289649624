@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # One-shot VPS installer for JobPilot worker.
-# Run on a fresh Ubuntu 22.04 / 24.04 box as root:
 #
-#   curl -fsSL https://raw.githubusercontent.com/<you>/<repo>/main/worker/bootstrap.sh | bash
+# Now pulls runtime secrets from Lovable Cloud at startup so you only manage
+# them in one place. Required local seed in worker/.env:
+#   SUPABASE_URL=<from Lovable Cloud → Cloud settings>
+#   SUPABASE_SERVICE_ROLE_KEY=<from Lovable Cloud → Cloud settings>
+#   JOBPILOT_USER_ID=<your auth.users.id>
+#   WORKER_ENV_URL=https://apply-zen-buddy.lovable.app/api/public/worker/env
 #
-# Or, if you scp'd this repo to /root/jobpilot:
+# Everything else (APIFY_TOKEN, OPENAI_API_KEY, DECODO_*, CAPSOLVER_*, GMAIL_*,
+# APPLY_*, …) is fetched from /api/public/worker/env on every boot.
+#
 #   bash /root/jobpilot/worker/bootstrap.sh
 set -euo pipefail
 
@@ -24,22 +30,54 @@ fi
 cd "$WORKER_DIR"
 
 if [ ! -f .env ]; then
-  echo "ERROR: $WORKER_DIR/.env missing. Copy .env from the Lovable repo (it has your real keys)." >&2
+  echo "ERROR: $WORKER_DIR/.env missing. Create it with at minimum:" >&2
+  echo "  SUPABASE_URL=..." >&2
+  echo "  SUPABASE_SERVICE_ROLE_KEY=..." >&2
+  echo "  JOBPILOT_USER_ID=..." >&2
+  echo "  WORKER_ENV_URL=https://apply-zen-buddy.lovable.app/api/public/worker/env" >&2
   exit 1
 fi
 
-echo "==> Checking required env vars..."
-required=(SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY JOBPILOT_USER_ID APIFY_TOKEN OPENAI_API_KEY DEEPSEEK_API_KEY CAPTCHA_API_KEY PROXY_HOST PROXY_USER PROXY_PASS)
-missing=()
-for v in "${required[@]}"; do
+# Load seed vars from .env (just the ones we need to talk to Lovable Cloud)
+SEED_VARS=(SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY JOBPILOT_USER_ID)
+for v in "${SEED_VARS[@]}"; do
   if ! grep -qE "^${v}=.+" .env || grep -qE "^${v}=REPLACE_ME" .env; then
-    missing+=("$v")
+    echo "ERROR: seed value missing in .env: $v" >&2
+    exit 1
   fi
 done
-if [ ${#missing[@]} -gt 0 ]; then
-  echo "ERROR: missing values in .env: ${missing[*]}" >&2
-  echo "Edit $WORKER_DIR/.env and fill them in, then re-run." >&2
-  exit 1
+
+WORKER_ENV_URL="$(grep -E '^WORKER_ENV_URL=' .env | head -1 | cut -d= -f2- | tr -d '"' || true)"
+WORKER_ENV_URL="${WORKER_ENV_URL:-https://apply-zen-buddy.lovable.app/api/public/worker/env}"
+SERVICE_KEY="$(grep -E '^SUPABASE_SERVICE_ROLE_KEY=' .env | head -1 | cut -d= -f2- | tr -d '"')"
+
+echo "==> Syncing secrets from Lovable Cloud → $WORKER_ENV_URL ..."
+if ! REMOTE_ENV="$(curl -fsSL -H "Authorization: Bearer ${SERVICE_KEY}" "$WORKER_ENV_URL")"; then
+  echo "WARN: could not fetch worker env from Lovable Cloud — continuing with existing .env" >&2
+else
+  # Append/replace each remote var into .env without losing the seed vars.
+  TMP=$(mktemp)
+  cp .env "$TMP"
+  python3 - "$TMP" "$REMOTE_ENV" <<'PY'
+import json, sys, re, pathlib
+path = pathlib.Path(sys.argv[1])
+remote = json.loads(sys.argv[2])
+lines = path.read_text().splitlines()
+existing = {}
+for i, ln in enumerate(lines):
+    m = re.match(r"^([A-Z0-9_]+)=", ln)
+    if m:
+        existing[m.group(1)] = i
+for k, v in remote.items():
+    safe = v.replace("\n", "\\n")
+    entry = f'{k}={safe}'
+    if k in existing:
+        lines[existing[k]] = entry
+    else:
+        lines.append(entry)
+path.write_text("\n".join(lines) + "\n")
+PY
+  echo "    synced $(echo "$REMOTE_ENV" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))') keys"
 fi
 
 mkdir -p data/profiles
