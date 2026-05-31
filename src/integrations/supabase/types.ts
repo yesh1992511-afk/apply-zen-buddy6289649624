@@ -358,6 +358,45 @@ export type Database = {
         }
         Relationships: []
       }
+      cover_letters: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          is_default: boolean
+          job_id: string | null
+          kind: string
+          name: string
+          tone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          job_id?: string | null
+          kind?: string
+          name: string
+          tone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          job_id?: string | null
+          kind?: string
+          name?: string
+          tone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       educations: {
         Row: {
           created_at: string

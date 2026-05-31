@@ -1,95 +1,115 @@
-# System hardening: 4 tracks
+# Full System Audit — Gaps, Bugs, Missing Features
 
-You picked all four focus areas at scope 5. I'll ship them in one go but as **independent, mergeable tracks** so each one stands on its own. Order = highest leverage first.
+I walked the whole app (routes, server fns, DB schema, worker glue) and compared it to what an automated job-apply system actually needs. Below is the honest gap list, grouped by severity, then a build plan.
 
-## Current state (snapshot)
-
-- 20 sources enabled, 1 filter, 3 resumes, automation **off**, **0 secrets set** (captcha/proxy/Gmail), worker last seen 4 days ago.
-- That means even with the cybersecurity target applied, the next run will scrape but **cannot auto-apply** (no creds), and you won't be alerted when it stalls.
-
-So the order below isn't cosmetic — it follows what's actually blocking the system from being "perfect" for you.
-
----
-
-## Track 1 — Setup completeness (unblocks everything)
-
-Goal: stop silent failures from missing config.
-
-- **`/setup` becomes a checklist page** with green/amber/red rows, each linking to where to fix it:
-  - Profile completeness (≥ 90% of fields the apply walker reads)
-  - Resume: at least one default + LaTeX parses
-  - Gmail credentials verified (`gmail_credentials.verified_at` not null)
-  - Captcha key set + 2captcha balance ping
-  - Proxy provider set (optional, only flagged amber)
-  - Worker heartbeat seen in last 5 min
-  - Job Target applied (titles/locations not empty)
-  - At least 1 enabled source, 1 saved filter
-- **Dashboard banner** when any red item exists ("Auto-apply is paused: missing Gmail credentials").
-- **Server fn `getSystemReadiness()`** returns the structured checklist — reused by dashboard banner, sidebar dot, and `/setup`.
-
-## Track 2 — Job quality (relevance > volume)
-
-Goal: only see jobs that actually match you.
-
-- **Per-source keyword injection audit**: I'll log per scraper what query it actually sent vs the Job Target. Add a small "Last query" line under each source row on `/sources` so you can see e.g. RemoteOK was searched with `tags=security,cybersecurity`.
-- **Smarter scoring** (rewrite `match_job_to_filters`):
-  - Title-match weight (cyber keyword **in title** = +25, in body = +5)
-  - Hard exclude on negative title patterns (`sales`, `physical security`, `guard`, `marketing`, etc. configurable from Job Target)
-  - Country/location enforcement (US-only when target_country='US')
-  - Seniority match against profile years_experience
-  - Cap score 0–100, persist component breakdown to `jobs.raw->'score_breakdown'` so you can see *why*
-- **Better dedup**: include normalized company + title in `dedupe_hash` to kill cross-source duplicates (RemoteOK + Indeed posting same role).
-- **"Re-score all jobs" button** on `/filters` — runs match function over existing rows.
-
-## Track 3 — Apply pipeline reliability
-
-Goal: failures are visible, retried, and recoverable.
-
-- **Retry policy in worker**: exponential backoff (1m, 5m, 30m, 2h) up to 4 attempts using existing `applications.retry_count` / `next_retry_at` columns. After max attempts → `phase='dead_letter'`, `dlq_reason` populated.
-- **DLQ tab on `/applications`**: filter chip "Needs review" showing dead-lettered rows with one-click **Retry** / **Discard** / **Open job**.
-- **Per-application timeline upgrade** (`/applications/$id`): show every `application_events` row with phase, status, screenshot thumbnail, and the error message inline (today errors are buried in logs).
-- **Idempotency**: enforce unique `idempotency_key` (already a column, no unique index) so a double-click can't queue twice. Add `UNIQUE (user_id, job_id) WHERE phase != 'dead_letter'` partial index.
-
-## Track 4 — Worker observability
-
-Goal: know at a glance what the worker is doing without reading docker logs.
-
-- **`/worker` page becomes a live console**:
-  - Heartbeat status (green if `last_seen` < 30s, amber < 5m, red older), version, container metadata
-  - Last 20 `automation_runs` with status, items_in/out, errors, duration
-  - Live tail of `logs` table for current user (last 50, auto-refresh every 3s via realtime channel)
-  - Per-source health: cadence vs last_run_at, last_run_status, last_error truncated
-- **Notifications wiring** (table already exists, just unused):
-  - Worker offline > 10 min → email via existing `notification_settings.notify_worker_offline`
-  - Apply failed after max retries → email
-  - High-score (≥ threshold) match → email
-  - Daily summary at user's `daily_summary_time`
-  - All sent through a new cron route `/api/public/hooks/notifications-tick` (every 5 min) using `supabaseAdmin`.
+## Current state snapshot
+- **0 jobs, 0 applications** in DB (cleanup wiped everything — fresh slate).
+- **3 resumes** rows, only **1 default**, but **no UI to upload/preview/edit resumes** anywhere in the app.
+- **No cover letter table, no cover letter UI, no AI generator** — yet `applications.cover_letter_id` is referenced. Dead column.
+- **0 secrets set** (captcha, proxy, Gmail app password) → worker cannot auto-apply.
+- **Worker heartbeat: last seen days ago** → automation is effectively dead.
+- 20 sources enabled, 1 filter, automation toggle off.
 
 ---
 
-## Technical scope (for reference)
+## Critical gaps (block the core promise of the app)
 
-- **DB migration**: partial unique index on applications; index on `jobs(user_id, matched, score)`; new column `jobs.score_breakdown jsonb`; rewrite `match_job_to_filters()` SQL function.
-- **New server fns** (`src/lib/`): `readiness.functions.ts`, `rescore.functions.ts`, `applications.functions.ts` (retry/discard).
-- **New route**: `src/routes/api/public/hooks/notifications-tick.ts` + pg_cron schedule (5 min).
-- **Worker changes** (`worker/app/`): retry scheduler in `commands.py`, structured error capture in `apply/runner.py`, per-source query logging in `sources/base.py`.
-- **UI**: rebuild `/setup`, `/worker`, `/applications/$id`; add DLQ tab to `/applications`; per-source "Last query" line + "Re-score" button.
+1. **Resume management UI missing entirely.** Table exists, storage bucket exists, but there's no `/resumes` route. You can't upload, preview, mark default, delete, or attach a resume to an application.
+2. **Cover letter feature non-existent.** No table, no generator, no template, no editor. `applications.cover_letter_id` points to nothing.
+3. **No AI cover-letter / resume-tailoring generator.** Lovable AI is wired (`LOVABLE_API_KEY` set, `src/lib/apply/ai.server.ts` stub) but no user-facing generation flow.
+4. **Apply pipeline broken end-to-end** — no Gmail creds, no captcha key, no proxy → every apply attempt would 401/timeout. No UI prompt to fix it.
 
-## Out of scope (this round)
+## High-priority gaps
 
-- New scrapers / new portals
-- AI cover letter quality tuning
-- Browser extension changes
-- Billing/Stripe work
+5. **No DLQ / retry UX.** `applications.retry_count`, `next_retry_at`, `dlq_reason` columns exist but nothing reads or writes them from the app, no "Retry" button.
+6. **Application detail page is thin.** `application_events` are logged but not surfaced as a timeline with screenshots + error messages.
+7. **Worker observability page is read-only stats** — no live log tail, no per-source health, no "kick worker" button.
+8. **Idempotency not enforced.** `applications.idempotency_key` has no unique index → double-click can queue duplicates.
+9. **Dedup is weak.** `jobs.dedupe_hash` is per-source; same role on RemoteOK + Indeed creates two rows.
+10. **Notifications table + settings exist, but nothing sends emails.** No cron, no SMTP path wired.
+
+## Medium gaps
+
+11. **Setup page is informational, not actionable.** No green/red checklist driven by `getSystemReadiness()`.
+12. **No "Re-score all jobs" button** after editing filters or Job Target.
+13. **Source rows don't show what query was actually sent** to each scraper — hard to debug why a source returns junk.
+14. **Profile completeness % not surfaced** anywhere — apply walker silently skips fields it can't fill.
+15. **No screening-question library.** `profile.screening_answers jsonb` is empty and unused.
+
+## Low / polish
+
+16. Logs page has no filter by level/scope/run_id.
+17. No "export my data" beyond the privacy route stub.
+18. Admin console exists but doesn't show worker version, plan distribution, or error trends.
+19. No onboarding wizard re-entry once dismissed.
+20. No keyboard shortcuts surfaced (CommandPalette exists but is undiscoverable).
 
 ---
 
-## Suggested rollout order
+## Proposed build plan (ordered by impact)
 
-1. **DB migration + scoring rewrite** (Track 2 core) — biggest immediate quality lift
-2. **Readiness + setup checklist** (Track 1) — unblocks auto-apply
-3. **Worker page + notifications cron** (Track 4) — visibility
-4. **Retry/DLQ + timeline** (Track 3) — needs worker changes
+### Phase A — Resume & Cover Letter (closes the biggest functional gap)
+- **`/resumes` route**: list, upload PDF, paste LaTeX, set default, preview (signed URL from `resumes` bucket), delete.
+- **Cover letters**:
+  - New table `cover_letters` (id, user_id, name, kind: 'template'|'generated', body, job_id nullable, is_default, created_at) + GRANTs + RLS.
+  - `/cover-letters` route: list, edit template, AI-generate per job (using `google/gemini-3-flash-preview` via Lovable AI).
+  - Server fn `generateCoverLetter({ jobId, resumeId, tone })` returning markdown + saving row.
+- **Application detail**: pick resume + cover letter before queueing apply; show both attached.
 
-Want me to proceed with all four, or trim? If trim, easiest cut is Track 3 (needs worker docker changes you'd have to rebuild locally).
+### Phase B — Setup checklist + readiness banner
+- Expand `getSystemReadiness()` to cover: profile %, resume default, Gmail verified, captcha balance, proxy set, worker heartbeat, job target, 1+ source, 1+ filter, 1+ cover letter template.
+- Rebuild `/setup` as red/amber/green list with deep-links to fix.
+- Dashboard banner when any red item.
+
+### Phase C — Apply pipeline reliability
+- DB migration:
+  - `CREATE UNIQUE INDEX applications_idempotency_uniq ON applications(idempotency_key) WHERE idempotency_key IS NOT NULL`
+  - `CREATE UNIQUE INDEX applications_user_job_uniq ON applications(user_id, job_id) WHERE phase <> 'dead_letter'`
+  - `cover_letters` table (above)
+  - Tighten `jobs.dedupe_hash` to `md5(lower(company)||'|'||lower(title)||'|'||coalesce(location,''))` going forward.
+- Server fns: `retryApplication(id)`, `discardApplication(id, reason)`.
+- `/applications` gets a "Needs review" tab (phase = dead_letter).
+- `/applications/$id` gets a timeline of `application_events` with screenshots + inline errors.
+
+### Phase D — Job quality
+- Already-rewritten `match_job_to_filters()` is good; add:
+  - "Re-score all" button on `/filters` (calls existing `rescore_all_jobs_for_user`).
+  - Per-source "Last query sent" line on `/sources` (read from `automation_runs.metadata->>'query'`).
+  - Hard exclude list editable from Job Target UI.
+
+### Phase E — Worker observability + notifications
+- `/worker`: heartbeat dot + last 20 runs + live `logs` tail via Supabase realtime + per-source health card.
+- New cron route `/api/public/hooks/notifications-tick` (5 min) that:
+  - Sends "worker offline" if `last_seen < now() - 10m` and last alert > 1h ago.
+  - Sends "apply failed" for new dead-letter rows.
+  - Sends "high-score match" when score ≥ user threshold.
+  - Sends daily summary at user's `daily_summary_time`.
+- All via Gmail SMTP using stored `gmail_credentials`.
+
+### Phase F — Polish
+- Profile completeness % chip on `/profile` header.
+- Logs filters (level, scope, run, date).
+- Screening-question library on `/profile` (common Workday/Greenhouse questions with saved answers).
+- CommandPalette hint (`Press ⌘K`) on dashboard.
+
+---
+
+## Out of scope (call out so we agree)
+- Browser extension changes (route exists, stays as-is).
+- Stripe/billing changes (table exists, no upgrade flow built).
+- New scrapers — focus is making existing 20 sources reliable.
+- Worker Python code changes (you rebuild that on your VPS) — I'll write the diff separately when needed.
+
+---
+
+## Suggested rollout order (one PR per phase so you can verify)
+1. **A** — Resumes + Cover Letters UI + table + AI generation
+2. **B** — Setup checklist + readiness banner
+3. **C** — Apply DLQ + retry + idempotency indexes + timeline
+4. **D** — Re-score button + per-source query line + hard-exclude UI
+5. **E** — Worker live page + notifications cron
+6. **F** — Polish
+
+If you only want me to do part of this now, the highest-leverage cut is **A + B + C** — that gives you resumes, cover letters, a working "is my system green?" page, and a recoverable apply pipeline. The rest can follow.
+
+Reply with which phases to ship (or "all of it"), and I'll start.
