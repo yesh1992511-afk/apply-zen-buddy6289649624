@@ -152,6 +152,7 @@ export const jobsQueryOptions = (params: { hours: number }) =>
       let q = supabase
         .from("jobs")
         .select("*, applications(id, status, queued_at)")
+        .eq("matched", true)
         .order("score", { ascending: false })
         .order("posted_at", { ascending: false, nullsFirst: false })
         .limit(200);
