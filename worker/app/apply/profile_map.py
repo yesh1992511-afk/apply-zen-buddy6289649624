@@ -175,10 +175,22 @@ _rule(r"veteran", _eeoc("veteran_status"))
 _rule(r"disab(le|ility)", _eeoc("disability_status"))
 _rule(r"lgbt", _eeoc("lgbtq_status"))
 
-# --- Background checks ---
-_rule(r"pass (a )?background check|background screen", lambda p, l: (p.get("screening_answers") or {}).get("able_to_pass_background_check") or _YES)
-_rule(r"pass (a )?drug (test|screen)", lambda p, l: (p.get("screening_answers") or {}).get("able_to_pass_drug_test") or _YES)
-_rule(r"criminal (record|history|conviction)", lambda p, l: (p.get("screening_answers") or {}).get("criminal_record") or _NO)
+# --- Background checks / compliance ---
+_rule(r"pass (a )?background check|background screen|consent.*background",
+      lambda p, l: _yesno(p.get("consent_background_check")) if p.get("consent_background_check") is not None
+      else ((p.get("screening_answers") or {}).get("able_to_pass_background_check") or _YES))
+_rule(r"pass (a )?drug (test|screen)|consent.*drug",
+      lambda p, l: _yesno(p.get("consent_drug_test")) if p.get("consent_drug_test") is not None
+      else ((p.get("screening_answers") or {}).get("able_to_pass_drug_test") or _YES))
+def _criminal(p: dict, _l: dict):
+    v = p.get("criminal_record_disclosure")
+    if v == "none": return _NO
+    if v == "disclosed": return _YES
+    if v == "decline": return "Decline to answer"
+    return (p.get("screening_answers") or {}).get("criminal_record") or _NO
+_rule(r"criminal (record|history|conviction)|felony", _criminal)
+_rule(r"references? (available|on request|contact)", lambda p, l: _yesno(p.get("references_available_on_request")))
+
 
 # --- Cover-letter type prompts ---
 _rule(r"why (do you want|are you interested)", lambda p, l: (p.get("screening_answers") or {}).get("why_company") or p.get("summary"))
