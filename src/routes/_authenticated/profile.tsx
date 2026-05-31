@@ -117,6 +117,9 @@ function ProfilePage() {
         </div>
         <div className="flex items-center gap-3">
           <SavedIndicator state={saveState} error={saveError} />
+          <Button asChild variant="outline" size="sm">
+            <Link to="/profile/screening">Screening answers</Link>
+          </Button>
           <Button
             variant="outline"
             size="sm"
