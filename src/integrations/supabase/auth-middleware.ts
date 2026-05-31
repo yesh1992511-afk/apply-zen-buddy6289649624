@@ -37,10 +37,9 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       throw new Error('Unauthorized: No token provided');
     }
 
-    // SECURITY: verify the JWT signature server-side via GoTrue. Previously
-    // this used supabase.auth.getClaims() with the publishable key, which only
-    // base64-decodes the payload and does NOT verify the signature — allowing
-    // any forged JWT to authenticate as any user.
+    // SECURITY: verify the JWT signature server-side via GoTrue. The admin
+    // client makes a real Auth API call that validates the signature against
+    // the project's JWT secret; never trust local payload decoding here.
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !userData?.user?.id) {
       throw new Error('Unauthorized: Invalid token');
