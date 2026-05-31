@@ -57,7 +57,6 @@ const CRITICAL_FIELDS: { key: string; label: string }[] = [
 ];
 
 function ProfilePage() {
-  const { user } = useUser();
   const { data: p, set, flush, saveState, error: saveError, isLoading } = useProfileEditor();
   const [tab, setTab] = useState<string>(() =>
     typeof window !== "undefined" && window.location.hash.length > 1 ? window.location.hash.slice(1) : "basic",
@@ -67,9 +66,6 @@ function ProfilePage() {
     history.replaceState(null, "", `#${tab}`);
   }, [tab]);
 
-
-  // Hint that `user` is still consumed elsewhere (kept for future per-section flushes).
-  void user;
 
   if (isLoading || !p) {
     return (
@@ -100,7 +96,13 @@ function ProfilePage() {
   });
 
   return (
-    <div className="space-y-6 max-w-[1400px]" onBlurCapture={() => flush()}>
+    <div className="space-y-6 max-w-[1400px]" onBlurCapture={(e) => {
+      // Don't fire profile-editor flush when blur originated inside a ListSection
+      // (those sections self-save row-by-row).
+      const t = e.target as HTMLElement | null;
+      if (t && t.closest('[data-listsection="true"]')) return;
+      flush();
+    }}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight">Profile</h1>
@@ -174,6 +176,7 @@ function ProfilePage() {
           <TabsTrigger value="educations" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Education</TabsTrigger>
           <TabsTrigger value="languages" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Languages</TabsTrigger>
           <TabsTrigger value="certifications" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Certs</TabsTrigger>
+          <TabsTrigger value="publications" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Publications</TabsTrigger>
           <TabsTrigger value="references_list" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">References</TabsTrigger>
           <TabsTrigger value="screening" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Screening</TabsTrigger>
           
@@ -195,7 +198,10 @@ function ProfilePage() {
               <Label>Summary</Label>
               <Textarea rows={4} value={getStr("summary")} onChange={(e) => set("summary", e.target.value)} />
             </div>
-            <Field label="Years experience" type="number" value={getStr("years_experience")} onChange={(v) => set("years_experience", v ? Number(v) : null)} />
+            <Field label="Years experience" type="number" min={0} value={getStr("years_experience")} onChange={(v) => {
+              const n = Number(v);
+              set("years_experience", v && Number.isFinite(n) && n >= 0 ? n : null);
+            }} />
             <Field label="Apply email (portal sign-ups)" value={getStr("apply_email")} onChange={(v) => set("apply_email", v)} />
           </CardContent></Card>
         </TabsContent>
@@ -259,7 +265,10 @@ function ProfilePage() {
             <SelectField label="Currency" value={getStr("salary_currency") || "USD"} onChange={(v) => set("salary_currency", v)} options={CURRENCIES} />
             <Field label="Salary min (filter)" type="number" value={getStr("salary_min")} onChange={(v) => set("salary_min", v ? Number(v) : null)} />
             <Field label="Salary max (filter)" type="number" value={getStr("salary_max")} onChange={(v) => set("salary_max", v ? Number(v) : null)} />
-            <SelectFieldKV label="Notice period" value={getStr("notice_period_weeks")} onChange={(v) => set("notice_period_weeks", v ? Number(v) : null)} options={NOTICE_PERIOD_WEEKS.map((o) => ({ value: String(o.value), label: o.label }))} />
+            <div>
+              <SelectFieldKV label="Notice period (weeks)" value={getStr("notice_period_weeks")} onChange={(v) => set("notice_period_weeks", v ? Number(v) : null)} options={NOTICE_PERIOD_WEEKS.map((o) => ({ value: String(o.value), label: o.label }))} />
+              <p className="mt-1 text-[11px] text-muted-foreground">Linked to the Compliance tab's notice-period category.</p>
+            </div>
             <DatePickerField label="Earliest start date" value={getStr("earliest_start_date")} onChange={(v) => set("earliest_start_date", v)} startMonth={new Date()} />
             <Field label="Available hours / week" type="number" value={getStr("available_hours_per_week")} onChange={(v) => set("available_hours_per_week", v ? Number(v) : null)} />
             <SelectFieldKV label="Cover letter tone" value={getStr("cover_letter_tone") || "professional"} onChange={(v) => set("cover_letter_tone", v)} options={COVER_LETTER_TONE} />
@@ -281,41 +290,63 @@ function ProfilePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <SelectFieldKV
-                label="Notice period (category)"
-                value={getStr("notice_period_category")}
-                onChange={(v) => set("notice_period_category", v || null)}
-                options={[
-                  { value: "immediate", label: "Immediate / available now" },
-                  { value: "2w", label: "2 weeks" },
-                  { value: "1m", label: "1 month" },
-                  { value: "2m", label: "2 months" },
-                  { value: "3m", label: "3 months" },
-                  { value: "other", label: "Other (see weeks field)" },
-                ]}
-              />
-              <SelectFieldKV
-                label="Travel willingness (%)"
-                value={getStr("travel_willingness_pct")}
-                onChange={(v) => set("travel_willingness_pct", v ? Number(v) : null)}
-                options={[
-                  { value: "0", label: "0% — no travel" },
-                  { value: "25", label: "Up to 25%" },
-                  { value: "50", label: "Up to 50%" },
-                  { value: "75", label: "Up to 75%" },
-                  { value: "100", label: "100% — fully mobile" },
-                ]}
-              />
-              <SelectFieldKV
-                label="Criminal record disclosure"
-                value={getStr("criminal_record_disclosure")}
-                onChange={(v) => set("criminal_record_disclosure", v || null)}
-                options={[
-                  { value: "none", label: "No record to disclose" },
-                  { value: "disclosed", label: "Yes — willing to disclose in interview" },
-                  { value: "decline", label: "Decline to answer" },
-                ]}
-              />
+              <div>
+                <SelectFieldKV
+                  label="Notice period (category)"
+                  value={getStr("notice_period_category")}
+                  onChange={(v) => set("notice_period_category", v || null)}
+                  options={[
+                    { value: "immediate", label: "Immediate / available now" },
+                    { value: "2w", label: "2 weeks" },
+                    { value: "1m", label: "1 month" },
+                    { value: "2m", label: "2 months" },
+                    { value: "3m", label: "3 months" },
+                    { value: "other", label: "Other (see weeks field)" },
+                  ]}
+                />
+                <div className="mt-1 flex items-center justify-between">
+                  <p className="text-[11px] text-muted-foreground">Linked to Comp tab's notice-period (weeks).</p>
+                  {getStr("notice_period_category") && (
+                    <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => set("notice_period_category", null)}>Clear</button>
+                  )}
+                </div>
+              </div>
+              <div>
+                <SelectFieldKV
+                  label="Travel willingness (%)"
+                  value={getStr("travel_willingness_pct")}
+                  onChange={(v) => set("travel_willingness_pct", v ? Number(v) : null)}
+                  options={[
+                    { value: "0", label: "0% — no travel" },
+                    { value: "25", label: "Up to 25%" },
+                    { value: "50", label: "Up to 50%" },
+                    { value: "75", label: "Up to 75%" },
+                    { value: "100", label: "100% — fully mobile" },
+                  ]}
+                />
+                {getStr("travel_willingness_pct") && (
+                  <div className="mt-1 text-right">
+                    <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => set("travel_willingness_pct", null)}>Clear</button>
+                  </div>
+                )}
+              </div>
+              <div>
+                <SelectFieldKV
+                  label="Criminal record disclosure"
+                  value={getStr("criminal_record_disclosure")}
+                  onChange={(v) => set("criminal_record_disclosure", v || null)}
+                  options={[
+                    { value: "none", label: "No record to disclose" },
+                    { value: "disclosed", label: "Yes — willing to disclose in interview" },
+                    { value: "decline", label: "Decline to answer" },
+                  ]}
+                />
+                {getStr("criminal_record_disclosure") && (
+                  <div className="mt-1 text-right">
+                    <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => set("criminal_record_disclosure", null)}>Clear</button>
+                  </div>
+                )}
+              </div>
               <SwitchRow
                 label="Consent to background check"
                 checked={getBool("consent_background_check")}
@@ -378,6 +409,7 @@ function ProfilePage() {
         <TabsContent value="educations"><ListSection table="educations" /></TabsContent>
         <TabsContent value="languages"><ListSection table="languages" /></TabsContent>
         <TabsContent value="certifications"><ListSection table="certifications" /></TabsContent>
+        <TabsContent value="publications"><ListSection table="publications" /></TabsContent>
         <TabsContent value="references_list"><ListSection table="references_list" /></TabsContent>
 
         <TabsContent value="screening"><ScreeningAnswers value={(p.screening_answers as Record<string, string>) ?? {}} onChange={(v) => set("screening_answers", v)} /></TabsContent>
@@ -387,11 +419,11 @@ function ProfilePage() {
 }
 
 
-function Field({ label, value, onChange, type, className }: { label: string; value: string; onChange: (v: string) => void; type?: string; className?: string }) {
+function Field({ label, value, onChange, type, className, min }: { label: string; value: string; onChange: (v: string) => void; type?: string; className?: string; min?: number }) {
   return (
     <div className={className}>
       <Label>{label}</Label>
-      <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input type={type} min={min} value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
@@ -631,6 +663,18 @@ const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
       { key: "url", label: "URL" },
     ],
   },
+  publications: {
+    title: "Publication",
+    fields: [
+      { key: "title", label: "Title" },
+      { key: "authors", label: "Authors (comma-separated)" },
+      { key: "venue", label: "Venue (journal / conference / publisher)" },
+      { key: "publication_date", label: "Publication date", dateField: true },
+      { key: "url", label: "URL" },
+      { key: "doi", label: "DOI" },
+      { key: "description", label: "Description" },
+    ],
+  },
   references_list: {
     title: "Reference",
     fields: [
@@ -667,6 +711,7 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
     if (table === "languages") blank.name = "";
     if (table === "certifications") blank.name = "";
     if (table === "references_list") blank.name = "";
+    if (table === "publications") blank.title = "";
     return blank;
   };
 
@@ -688,6 +733,8 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
           setLoaded(true);
           return;
         }
+        // Seed failed (network / RLS) — allow a retry on next mount.
+        seededRef.current[table] = false;
       }
       setItems(rows);
       setLoaded(true);
@@ -717,7 +764,7 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
   };
 
   return (
-    <div className="space-y-3 pt-4">
+    <div className="space-y-3 pt-4" data-listsection="true">
       <div className="flex justify-end">
         <Button size="sm" onClick={add}><Plus className="mr-1 h-4 w-4" /> Add {schema.title.toLowerCase()}</Button>
       </div>

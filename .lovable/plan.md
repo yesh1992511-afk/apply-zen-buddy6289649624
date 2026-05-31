@@ -1,39 +1,59 @@
-# Finish remaining items
+# Add Publications + fix profile bugs
 
-## A. Profile: show input boxes immediately for Experience / Projects / Certifications
+## A. New `publications` section
 
-Today the Experience, Projects, and Certifications tabs render only an "Add" button when the list is empty — no input fields visible. Users can't see what to fill in.
+**Migration** — new `public.publications` table:
 
-**Fix in `src/routes/_authenticated/profile.tsx` (`ListSection`)**:
-- After `load()` returns `data`, if `data.length === 0` for `experiences`, `projects`, or `certifications`, auto-insert one blank starter row so the field grid (company/title/dates/bullets/tech, or name/url/description, or name/issuer/dates) is visible.
-- Apply only the first time the tab loads (track with a ref keyed by table name so we don't loop-insert).
-- Same gentle empty-state for `educations`, `skills`, `languages`, `references_list` — auto-seed one blank row so every tab presents fillable boxes.
+```sql
+CREATE TABLE public.publications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL DEFAULT '',
+  authors text,                -- comma-separated list of co-authors
+  venue text,                  -- journal / conference / publisher
+  publication_date date,
+  url text,
+  doi text,
+  description text,
+  sort_order integer DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.publications TO authenticated;
+GRANT ALL ON public.publications TO service_role;
+ALTER TABLE public.publications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "owner full access" ON public.publications
+  FOR ALL TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+```
 
-No schema change — the SCHEMAS already define the right inputs; we just need to make sure at least one editable card is present.
+**Profile UI (`src/routes/_authenticated/profile.tsx`)**:
+- Add a `publications` entry to the `SCHEMAS` map with fields: `title`, `authors`, `venue`, `publication_date` (date), `url`, `doi`, `description`.
+- Add `<TabsTrigger value="publications">Publications</TabsTrigger>` between Certs and References.
+- Add `<TabsContent value="publications"><ListSection table="publications" /></TabsContent>`.
+- Extend `buildBlank()` NOT-NULL seed for `publications` (`title = ""`).
+- Extend the ordering branch in `load()` so `publications` orders by `sort_order` (already the default branch — fine).
 
-## B. Phase 4 — remaining sync/UX polish
+**Worker / ATS map (`worker/app/apply/profile_map.py`)**: add a `publications` aggregator that joins title + venue + year so portal questions like "List notable publications" auto-fill from the new table.
 
-1. **Disable Apply button at daily cap**
-   - In `src/lib/queries/jobs.ts`, add `useDailyApplyBudget()` returning `{ used, cap, atCap }` from `usage_quotas` (today) + `automation_settings.max_applies_per_day`.
-   - In `src/routes/_authenticated/jobs.tsx`, disable the Apply / Bulk-Queue buttons and show a tooltip "Daily apply cap reached" when `atCap`.
+## B. Profile bug fixes
 
-2. **Loading skeletons** — replace literal `"Loading..."` strings with `<Skeleton />` from `src/components/skeletons.tsx` in:
-   - `src/routes/_authenticated/billing.tsx`
-   - `src/routes/_authenticated/automation.tsx` (settings load state)
-   - `src/routes/_authenticated/dashboard.tsx` (KPI tiles before first paint)
-   - any other `_authenticated/*` route still showing the string.
+1. **Redundant page-wide flush** — `<div onBlurCapture={() => flush()}>` at the top of `ProfilePage` fires on every blur inside list-section cards too, queuing profile-editor writes that have nothing to save. Move the `onBlurCapture` wrapper from the outer page `div` onto the form `<Tabs>` content for the profile-editor-driven tabs only (Basic / Address / Work auth / Comp / Compliance / Preferences / Links / Screening). List sections (Experience / Projects / Skills / Education / Languages / Certs / Publications / References) handle their own saves and must not trigger profile flush.
 
-3. **Cross-page mutation sync** — audit `dashboard.tsx` and `applications.tsx`; ensure their queries use the same query keys as `jobs.ts` (`['applications', userId]`, `['dashboard', userId]`) so `useApplyToJob` invalidations already wired in Phase 4 propagate without manual refresh. Fix any mismatched keys.
+2. **"Years experience" number parse** — `set("years_experience", v ? Number(v) : null)` happily accepts negatives and `Number(".")` → NaN. Clamp: parse, then `Number.isFinite(n) && n >= 0 ? n : null`. Set `min={0}` on the `<Input type="number">`.
 
-## Out of scope
-- New backend tables / migrations (none needed)
-- New job sources (Phase 3 done)
-- Worker changes (Phase 1–4 worker edits already shipped)
+3. **`<SelectField allowCustom>` clear** — Compliance tab uses `SelectFieldKV` for `criminal_record_disclosure`, `notice_period_category`, `travel_willingness_pct`. Once a value is set you can't unset to "no answer". Add a small "Clear" link next to the trigger when value is non-empty, calling `onChange("")`/`onChange(null)`.
+
+4. **Duplicate Notice-period UX** — Comp tab has `notice_period_weeks` (numeric weeks) and Compliance tab has `notice_period_category` (immediate/2w/1m…). They drift. Add a hint under each: "Linked to the other notice-period field" so users know they answer the same question two ways; no auto-sync (the worker already prefers `_category` then falls back to `_weeks`).
+
+5. **`void user;` cleanup** — remove the `void user;` line (legacy hint comment) and drop the unused `const { user }` destructure in `ProfilePage` since it isn't referenced.
+
+6. **Auto-seed empty-row guard** — `ListSection.load()` currently always tries to seed a blank row on first empty load. If the seed insert fails (network/RLS), `seededRef` is already flipped, so retry never happens. Reset `seededRef.current[table] = false` inside the `if (error)` branch so a refresh tries again.
 
 ## Files touched
-- `src/routes/_authenticated/profile.tsx` (auto-seed empty rows)
-- `src/lib/queries/jobs.ts` (+ daily budget hook)
-- `src/routes/_authenticated/jobs.tsx` (disable at cap)
-- `src/routes/_authenticated/billing.tsx`, `automation.tsx`, `dashboard.tsx`, `applications.tsx` (skeletons + query-key alignment)
+- `src/routes/_authenticated/profile.tsx` — Publications schema/tab + 6 bug fixes
+- `worker/app/apply/profile_map.py` — publications aggregator
+- New migration creating `public.publications` with RLS + grants
 
-Reply **approve** to implement.
+## Out of scope
+- ORCID / Google Scholar auto-import
+- Citation parsing or DOI lookup
+- Filter/automation integration of publications
