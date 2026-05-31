@@ -148,6 +148,59 @@ function WorkerPage() {
       </div>
 
       <div className="rounded-2xl border border-border/60 bg-card p-5">
+      {/* Per-source health */}
+      <div className="rounded-2xl border border-border/60 bg-card p-5">
+        <h2 className="font-heading text-base font-semibold mb-3">Source health</h2>
+        {srcHealth.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No sources configured yet.</p>
+        ) : (
+          <div className="space-y-1 max-h-[360px] overflow-y-auto">
+            {srcHealth.map((s) => {
+              const age = s.last_run_at ? Date.now() - new Date(s.last_run_at).getTime() : Infinity;
+              const overdue = s.enabled && age > s.cadence_minutes * 60_000 * 2;
+              const tone = !s.enabled
+                ? "bg-zinc-500"
+                : s.last_run_status === "ok"
+                  ? overdue ? "bg-amber-500" : "bg-emerald-500"
+                  : s.last_run_status === "failed" ? "bg-red-500" : "bg-zinc-500";
+              return (
+                <div key={s.key} className="flex items-center gap-3 text-xs py-1.5 border-b border-border/40 last:border-0">
+                  <span className={"inline-block h-1.5 w-1.5 rounded-full " + tone} />
+                  <span className="font-medium w-44 shrink-0 truncate">{s.display_name}</span>
+                  <span className="text-muted-foreground w-20 shrink-0">{s.enabled ? `${s.cadence_minutes}m` : "off"}</span>
+                  <span className="text-muted-foreground tabular-nums w-28 shrink-0">
+                    {s.last_run_at ? new Date(s.last_run_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "never"}
+                  </span>
+                  <span className="text-muted-foreground tabular-nums w-12 shrink-0">{s.last_run_count ?? "—"}</span>
+                  {s.last_error && <span className="text-red-400 truncate flex-1" title={s.last_error}>{s.last_error}</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Recent runs */}
+      <div className="rounded-2xl border border-border/60 bg-card p-5">
+        <h2 className="font-heading text-base font-semibold mb-3">Recent runs</h2>
+        {runs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No runs yet.</p>
+        ) : (
+          <div className="space-y-1 max-h-[360px] overflow-y-auto">
+            {runs.map((r) => (
+              <div key={r.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-border/40 last:border-0">
+                <span className={"inline-block h-1.5 w-1.5 rounded-full " + (r.status === "ok" ? "bg-emerald-500" : r.status === "failed" ? "bg-red-500" : "bg-amber-500 animate-pulse")} />
+                <span className="font-mono text-[11px] text-muted-foreground tabular-nums w-32 shrink-0">{new Date(r.started_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                <span className="font-medium w-32 shrink-0">{r.source_key ?? r.kind}</span>
+                <span className="text-muted-foreground capitalize w-16 shrink-0">{r.status}</span>
+                <span className="text-muted-foreground tabular-nums w-16 shrink-0">{fmtDur(r.started_at, r.finished_at)}</span>
+                <span className="text-muted-foreground tabular-nums">in {r.items_in ?? 0} · out {r.items_out ?? 0}{r.errors ? ` · err ${r.errors}` : ""}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
         <h2 className="font-heading text-base font-semibold mb-3">Quick commands</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {QUICK_COMMANDS.map((q) => (
