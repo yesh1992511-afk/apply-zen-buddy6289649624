@@ -589,22 +589,31 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
 
   const add = async () => {
     if (!user) return;
+    // Insert a truly empty row — user fills in fields. No "New company" junk.
     const blank: Record<string, unknown> = { user_id: user.id };
-    schema.fields.forEach((f) => { blank[f.key] = f.multi ? [] : ""; });
-    if (table === "experiences") { blank.company = "New company"; blank.title = "New title"; }
-    if (table === "projects") blank.name = "New project";
-    if (table === "skills") blank.name = "New skill";
-    if (table === "educations") blank.school = "New school";
-    if (table === "languages") blank.name = "English";
-    if (table === "certifications") blank.name = "New certification";
-    if (table === "references_list") blank.name = "New reference";
+    schema.fields.forEach((f) => {
+      if (f.multi) blank[f.key] = [];
+      else if (f.bool) blank[f.key] = false;
+    });
+    // For NOT NULL columns, seed with empty string so the insert succeeds.
+    if (table === "experiences") { blank.company = ""; blank.title = ""; }
+    if (table === "projects") blank.name = "";
+    if (table === "skills") blank.name = "";
+    if (table === "educations") blank.school = "";
+    if (table === "languages") blank.name = "";
+    if (table === "certifications") blank.name = "";
+    if (table === "references_list") blank.name = "";
     const { error } = await db.from(table).insert(blank);
     if (error) toast.error(error.message); else load();
   };
 
+  const [savingId, setSavingId] = useState<string | null>(null);
   const update = async (id: string, patch: Record<string, unknown>) => {
+    setSavingId(id);
     const { error } = await db.from(table).update(patch).eq("id", id);
+    setSavingId(null);
     if (error) toast.error(error.message);
+    else setItems((cur) => cur.map((x) => x.id === id ? { ...x, ...patch } : x));
   };
 
   const remove = async (id: string) => {
