@@ -1,33 +1,74 @@
-# Security Scan Results — Prioritized
+## Outstanding issues to fix
 
-Ran the platform security scan + Supabase linter. Earlier critical issues (auth-middleware JWT verification, `rescore_all_jobs_for_user` exec grants, `jd_analysis_cache` open SELECT, storage WITH CHECK, realtime RLS) are confirmed fixed. Four remaining items, prioritized:
+### 1. Cron calling `/api/public/hooks/apply-worker` fails with UNAUTHORIZED every minute
 
-## P1 — Medium
+**Root cause:** The route's `requireUserOrCron` accepts only:
+- `x-internal-secret: <WORKER_CRON_SECRET>`, or
+- `Authorization: Bearer <user JWT>`
 
-### 1. PostgREST filter injection in `FilterPreview`
-**File:** `src/routes/_authenticated/filters.tsx`
-User keywords are interpolated directly into `supabase.from('jobs').or(...)`. PostgREST parses `,`, `.`, `(`, `)` as operators, so a crafted keyword can inject extra predicates. RLS on `jobs` limits blast radius to the user's own rows today, but it's a footgun.
+The current `pg_cron` job sends the Supabase anon key (likely as `apikey` / `Authorization`), which is neither. Result: 401 every minute, application queue never drains.
 
-**Fix:** Sanitize keywords (reject/strip `,().*`) before building the `.or()` string, OR replace with chained `.ilike()` calls / a server function with Zod validation.
+**Fix:** Reschedule the pg_cron job to send the correct `x-internal-secret` header, sourced from Vault (so the secret is not stored in the cron command in plaintext).
 
-### 2. External error body forwarded to client in `compileResumeToPdf`
-**File:** `src/lib/resume.functions.ts`
-Raw response from `latexonline.cc` (up to 300 chars) is thrown back to the browser, potentially leaking compiler stack traces / paths.
+```sql
+-- Unschedule old (broken) job(s)
+SELECT cron.unschedule(jobid)
+FROM cron.job
+WHERE command ILIKE '%apply-worker%';
 
-**Fix:** `console.error` the raw body server-side, throw a generic `"PDF compilation failed…"` to the client.
+-- Store the worker secret in Vault (one-time)
+SELECT vault.create_secret(
+  '<WORKER_CRON_SECRET value>',
+  'worker_cron_secret',
+  'Shared secret for /api/public/hooks/* cron callers'
+);
 
-## P2 — Low / Informational
+-- Reschedule every minute with the internal secret header
+SELECT cron.schedule(
+  'apply-worker-every-minute',
+  '* * * * *',
+  $$
+  SELECT net.http_post(
+    url     := 'https://project--ba5780a8-641e-4ee8-9c24-6e1c185cef2f.lovable.app/api/public/hooks/apply-worker',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-internal-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'worker_cron_secret')
+    ),
+    body    := '{}'::jsonb
+  );
+  $$
+);
+```
 
-### 3. Extension in `public` schema (WARN)
-Pre-existing, documented as accepted risk in `security-memory.md`. **Recommend: ignore** (no action) and keep the memory note.
+I'll run this via the Supabase insert tool (not a migration — it contains a secret value and is environment-specific). After running, I'll verify by tailing server logs for the next minute and confirming `evt: apply-worker` with HTTP 200 instead of 401.
 
-### 4. "RLS enabled, no policy" (INFO)
-Lowest severity — table has RLS on but no policy, meaning it's locked to service_role only. This is intentional for `jd_analysis_cache` (fixed last round). **Recommend: ignore** as intentional.
+Also audit any other `/api/public/hooks/*` cron jobs (sources poller, etc.) and apply the same header fix if they share the same auth helper.
 
-## Proposed actions (build mode)
-1. Patch `src/routes/_authenticated/filters.tsx` — sanitize keywords for `.or()`.
-2. Patch `src/lib/resume.functions.ts` — sanitize compiler error surface.
-3. Mark findings #3 and #4 as ignored with explanations in security memory.
-4. Re-run scanner to confirm green.
+### 2. `_authenticated` layout skips its auth check during SSR
 
-Approve to switch to build mode and apply.
+**File:** `src/routes/_authenticated.tsx`
+
+```ts
+beforeLoad: async () => {
+  if (typeof window === "undefined") return; // <-- footgun
+  const { data } = await supabase.auth.getUser();
+  ...
+}
+```
+
+Today no protected child has a loader, so nothing is broken. But the moment someone adds `loader: () => getUserPosts()` under `_authenticated/`, SSR will run the loader against `requireSupabaseAuth` with no session and fail the prerender (the documented `build:dev` Unauthorized trap).
+
+**Fix:** Replace the window short-circuit with a serverFn-backed check that works in both SSR and the browser. Add a tiny server function `getAuthUser` (uses `requireSupabaseAuth` middleware) and call it via `useServerFn`-style call inside `beforeLoad`. When it throws Unauthorized, redirect to `/login` with the redirect-back search param. Keep the `onAuthStateChange` listener in the component for client-side session-loss handling, but drop the duplicate `supabase.auth.getUser()` poll in the `useEffect`.
+
+Effect: any future loader under `_authenticated/*` is safe by construction; behavior in the browser is unchanged for the user.
+
+### 3. Verification
+
+- After the cron fix: `stack_modern--server-function-logs` filtered on `apply-worker` should show 200s, no more `UNAUTHORIZED`.
+- After the layout fix: load `/dashboard` in preview, confirm no flash, no double redirect, no console errors.
+- Re-run security scan + Supabase linter; confirm the previously accepted items (`pg_cron`/`pg_net` in `public`, RLS-on-no-policy on `jd_analysis_cache`) are the only remaining items.
+
+### Out of scope
+- No business-logic changes.
+- No DB schema changes.
+- No UI changes.

@@ -1,6 +1,7 @@
-import { createFileRoute, Outlet, redirect, useNavigate, useRouterState, Link } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useNavigate, useRouterState, Link, isRedirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getAuthUser } from "@/lib/auth.functions";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { StatusDot } from "@/components/StatusDot";
@@ -15,11 +16,14 @@ import { useCallback } from "react";
 
 export const Route = createFileRoute("/_authenticated")({
   head: () => ({ meta: [{ name: "robots", content: "noindex,nofollow" }] }),
-  beforeLoad: async () => {
-    if (typeof window === "undefined") return;
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) {
-      throw redirect({ to: "/login" });
+  // Runs in both SSR and the browser. attachSupabaseAuth adds the bearer token
+  // on the client; during SSR there is no session, so this throws and we redirect.
+  beforeLoad: async ({ location }) => {
+    try {
+      await getAuthUser();
+    } catch (e) {
+      if (isRedirect(e)) throw e;
+      throw redirect({ to: "/login", search: { redirect: location.href } as never });
     }
   },
   component: AuthLayout,
