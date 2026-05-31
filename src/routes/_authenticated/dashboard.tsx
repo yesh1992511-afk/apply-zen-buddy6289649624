@@ -108,6 +108,7 @@ function Dashboard() {
   useRealtimeInvalidate({ table: "applications", onChange: load });
   useRealtimeInvalidate({ table: "worker_heartbeat", onChange: load });
   useRealtimeInvalidate({ table: "logs", onChange: load });
+  useRealtimeInvalidate({ table: "automation_runs", onChange: load });
 
 
   const workerOk = heartbeat && Date.now() - new Date(heartbeat).getTime() < 5 * 60_000;
