@@ -202,7 +202,10 @@ function ProfilePage() {
               <Label>Summary</Label>
               <Textarea rows={4} value={getStr("summary")} onChange={(e) => set("summary", e.target.value)} />
             </div>
-            <Field label="Years experience" type="number" value={getStr("years_experience")} onChange={(v) => set("years_experience", v ? Number(v) : null)} />
+            <Field label="Years experience" type="number" min={0} value={getStr("years_experience")} onChange={(v) => {
+              const n = Number(v);
+              set("years_experience", v && Number.isFinite(n) && n >= 0 ? n : null);
+            }} />
             <Field label="Apply email (portal sign-ups)" value={getStr("apply_email")} onChange={(v) => set("apply_email", v)} />
           </CardContent></Card>
         </TabsContent>
