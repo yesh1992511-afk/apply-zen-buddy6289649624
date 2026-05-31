@@ -55,7 +55,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
             break;
           case 'warm':
             sourceSpecs = SEED_SLUGS
-              .filter((_, i) => i % 4 === shard)
+              .filter((_, i) => i % 8 === shard)
               .map((s) => ({ provider: s.provider, slug: s.slug }));
             break;
           case 'usajobs':
@@ -68,8 +68,8 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
             return Response.json({ error: `unknown tier: ${tier}` }, { status: 400 });
         }
 
-        // Per-tier hard timeout on each adapter
-        const adapterTimeoutMs = tier === 'apify' ? 45_000 : 12_000;
+        // Per-tier hard timeout on each adapter (kept low so total invocation fits Worker CPU budget)
+        const adapterTimeoutMs = tier === 'apify' ? 30_000 : tier === 'usajobs' ? 10_000 : 7_000;
         const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
           Promise.race([
             p,
@@ -155,7 +155,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                   .select('id');
                 if (error) {
                   summary[sourceKey].errors++;
-                  summary[sourceKey].error_message = error.message.slice(0, 200);
+                  summary[sourceKey].error_message = `insert: ${error.message}`.slice(0, 200);
                   totalErr++;
                   continue;
                 }

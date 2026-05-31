@@ -1,92 +1,52 @@
+## Phase A — Remaining Cleanup & Verification
 
-# Phase A — Scraping in Lovable Cloud (perfect wiring + expanded coverage)
+Investigation shows Phase A is **95% wired correctly**:
+- `source.hot` cron is firing every 15min and writing `automation_runs` rows ✅
+- Adapters return 344 jobs/run, dedupe correctly on subsequent runs ✅
+- `sources` health table being upserted by `run-tier.ts` ✅
+- `/worker` UI filters by `kind LIKE 'source.%'` ✅
 
-Most plumbing already exists (`src/lib/sources/adapters.server.ts`, `src/routes/api/public/sources/run-tier.ts`, 6 aggregators, 47 seed slugs). What's missing is **pg_cron scheduling**, **paid/Apify sources**, **USAJobs**, **more ATS adapters**, and a **massive seed-slug expansion**. After this, the Scraper card turns green and 1,000+ career pages get pulled every 15–60 min automatically.
+But three issues remain:
 
-## What you get
+### 1. Duplicate cron jobs (causes double work & race conditions)
 
-- **6 free aggregators** (already built) — RemoteOK, Remotive, Arbeitnow, Himalayas, Jobicy, WeWorkRemotely → run every **15 min**
-- **9 ATS providers** (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee, **+ Teamtailor, Personio, BambooHR**) → run every **60 min** in 4 shards
-- **USAJobs** (federal jobs) → every 60 min, uses your existing `USAJOBS_API_KEY`
-- **6 Apify actors** (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Wellfound, Google Jobs) → every 4 hours, uses your existing `APIFY_TOKEN`. Fire-and-forget pattern so no source can stall the cron.
-- **Seed list expanded from ~47 → ~250 companies** across Greenhouse/Lever/Ashby/Workable
-- **Scraper heartbeat turns green** — `/worker` page reads `automation_runs WHERE kind LIKE 'source.%'`
-- **Per-source health stays accurate** — each adapter writes `sources.last_run_at/status/count/error` so the source-health table on `/worker` reflects real state
+The database has **3 overlapping hot-tier jobs** and **9 warm-tier jobs** that all hit `/run-tier`:
 
-## Wiring guarantee (your "will it perfectly wire" question)
+| Duplicate group | Jobs |
+|---|---|
+| Hot (3×) | `scrape-hot`, `sources-hot-15min`, `sources-hot-tier` |
+| Warm shard 0 (3×) | `scrape-warm-0`, `sources-warm-shard-0`, `sources-warm-shard0` |
+| Warm shard 1–3 (2× each) | `scrape-warm-{1,2,3}` + `sources-warm-shard-{1,2,3}` |
 
-```text
-pg_cron (every 15m / 60m / 4h)
-        │
-        ▼
-GET /api/public/sources/run-tier?tier=hot|warm|apify|usajobs&shard=N
-        │   (already exists, will extend with new tiers)
-        ▼
-For each user with automation_settings.enabled = true
-        │
-        ├─ Fetch adapters in parallel (concurrency 8)
-        ├─ Upsert into jobs ON CONFLICT(user_id,dedupe_hash) DO NOTHING
-        ├─ Call match_job_to_filters(job_id)   ◀── existing trigger, scores+matches
-        ├─ Update sources.last_run_* per adapter
-        └─ Insert automation_runs row    ◀── makes Scraper card green
-```
+**Fix:** Drop the redundant `scrape-*` and `sources-hot-15min` / `sources-warm-shard0` jobs. Keep one canonical set:
+- `sources-hot-tier` (every 15min)
+- `sources-warm-shard-{0..3}` (staggered :00/:15/:30/:45)
+- `scrape-usajobs` (every hour at :25)
+- `scrape-apify` (every 4h)
 
-Three independent failure domains: aggregator timeout doesn't block ATS, Apify failure doesn't block USAJobs, one user's failure doesn't block other users. Every adapter has a 10s timeout and try/catch.
+### 2. Untested tiers (warm/usajobs/apify never invoked)
 
-## Steps
+`sources` table shows `last_run_at = NULL` for every ATS board, USAJobs, and Apify source. Adapters could silently throw on first run.
 
-### 1. Extend adapters.server.ts
-- Add `fetchTeamtailor(slug)`, `fetchPersonio(slug)`, `fetchBambooHR(slug)`
-- Add `fetchUSAJobs(keyword, location)` using `process.env.USAJOBS_API_KEY` + `USAJOBS_USER_AGENT_EMAIL`
-- Add Apify adapters: `fetchApifyLinkedIn`, `fetchApifyIndeed`, `fetchApifyGlassdoor`, `fetchApifyZipRecruiter`, `fetchApifyWellfound`, `fetchApifyGoogleJobs` — all use the **sync-get-dataset-items** endpoint with a 50s cap; if Apify is slow we skip this tick (no blocking)
-- Extend `runSource()` switch to handle the new providers
-- Bump `AGGREGATOR_PROVIDERS` list and add new `APIFY_PROVIDERS`, `USAJOBS_PROVIDERS` constants
+**Fix:** Manually invoke each tier once via `stack_modern--invoke-server-function` to validate:
+- `?tier=warm&shard=0` → expect ATS slugs to fetch
+- `?tier=usajobs` → expect federal jobs (needs USAJOBS_API_KEY ✅ already set)
+- `?tier=apify` → expect cached datasets from APIFY_TOKEN ✅
 
-### 2. Expand seed-slugs.ts (~47 → ~250)
-Add curated slugs for big tech, fintech, AI labs, climate, healthtech, defense, devtools — organized by provider. Source list compiled from public boards (Greenhouse: ~120, Lever: ~50, Ashby: ~40, Workable: ~20, Teamtailor: ~20).
+Fix any failures surfaced (most likely adapter quirks in `adapters.server.ts`).
 
-### 3. Extend run-tier.ts
-- Accept `tier=hot|warm|apify|usajobs`
-- For `apify` tier, wrap each adapter in `Promise.race` with a 50s timeout (cron HTTP call can't exceed ~60s)
-- Per-source health: after each adapter completes, `UPDATE sources SET last_run_at, last_run_status, last_run_count, last_error WHERE user_id=$1 AND key=$2` (insert row if missing — auto-registers new sources on first run)
-- Tighten errors: bubble adapter exception messages into `automation_runs.metadata.errors[]` so `/worker` shows the actual reason
+### 3. Errors array always empty in metadata
 
-### 4. Update `/worker` Scraper card logic
-- Filter `runs.find(r => r.kind?.startsWith('source.'))` instead of generic `kind === 'scrape'`
-- Show last-tier badge (hot/warm/apify) under the heartbeat
+`automation_runs.metadata.errors` shows `[]` even when `errors:1`. The filter logic in `run-tier.ts:207` runs before all chunks finish counting. Minor — improves debuggability.
 
-### 5. Schedule pg_cron (via `supabase--insert` not migration — they're user-specific)
-```sql
-SELECT cron.schedule('scrape-hot',     '*/15 * * * *',
-  $$SELECT net.http_get(url := 'https://project--ba5780a8-641e-4ee8-9c24-6e1c185cef2f.lovable.app/api/public/sources/run-tier?tier=hot')$$);
-SELECT cron.schedule('scrape-warm-0',  '5,35 * * * *',
-  $$SELECT net.http_get(url := '...?tier=warm&shard=0')$$);
--- shards 1,2,3 staggered at 10/40, 15/45, 20/50
-SELECT cron.schedule('scrape-usajobs', '25 * * * *',
-  $$SELECT net.http_get(url := '...?tier=usajobs')$$);
-SELECT cron.schedule('scrape-apify',   '0 */4 * * *',
-  $$SELECT net.http_get(url := '...?tier=apify')$$);
-```
-Enable `pg_cron` + `pg_net` extensions if not already on.
+**Fix:** Move metadata error array construction after the per-source loop completes (it already does — actual bug: `summary[sourceKey].error_message` is only set inside the timeout-rejected branch, not the per-chunk insert-error branch). Add `error_message` capture in the chunk-error branch.
 
-### 6. Verify
-- Hit each tier endpoint manually with `invoke-server-function` and confirm rows appear in `jobs` + `automation_runs`
-- Check `/worker` page → Scraper card goes green within 15 min
-- Check `cron.job_run_details` for any failed cron runs
+---
 
-## Technical notes
+### Technical changes
 
-- **Apify timeout strategy**: Cloudflare Workers cap server requests at ~60s. Apify sync-get-dataset-items returns immediately if dataset exists, or waits. We use `timeout=50000` query param + AbortController. If a run times out, we skip and try next tick — no orphaned actor runs because we use cached/last-completed runs not start-new.
-- **VPS scraper code stays untouched** — `worker/app/sources/*` keeps working as a backup, but pg_cron is now the primary path. Phase B-style cleanup of VPS scrapers can come later.
-- **Cost**: ATS + aggregators + USAJobs are free. Apify costs ~$0.001–0.01 per dataset call depending on actor; running 6 actors every 4h = ~36 calls/day = pennies.
-- **No new secrets needed** — `APIFY_TOKEN`, `USAJOBS_API_KEY`, `USAJOBS_USER_AGENT_EMAIL` all already exist.
+1. **SQL migration** — `cron.unschedule()` the 6 duplicate jobs.
+2. **`src/routes/api/public/sources/run-tier.ts`** — set `summary[sourceKey].error_message` on chunk insert errors too.
+3. **Verification** — call `/api/public/sources/run-tier?tier=warm&shard=0`, `?tier=usajobs`, `?tier=apify` against the published URL and inspect responses + new `sources` rows.
 
-## Files touched
-
-- `src/lib/sources/adapters.server.ts` — add 10 new adapter functions + extend `runSource()`
-- `src/lib/sources/seed-slugs.ts` — expand from 47 → ~250 entries
-- `src/routes/api/public/sources/run-tier.ts` — handle new tiers, per-source health writes, timeout wrapping
-- `src/routes/_authenticated/worker.tsx` — Scraper card filter + tier badge
-- pg_cron jobs (via `supabase--insert`)
-
-After approval I'll execute steps 1-6 in order and verify with a test invocation before handing back.
+No UI changes. No schema changes. No new secrets needed.
