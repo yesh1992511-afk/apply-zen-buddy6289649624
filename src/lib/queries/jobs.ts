@@ -225,11 +225,15 @@ export function useApplyToJob() {
         .select("id")
         .single();
       if (error) throw new Error(error.message);
-      // Best-effort: kick the worker immediately
-      fetch(`/api/public/hooks/apply-worker?application_id=${data.id}`, {
-        method: "POST",
-        headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string },
-      }).catch(() => {});
+      // Best-effort: kick the worker immediately (scoped to current user via JWT)
+      void (async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        fetch(`/api/public/hooks/apply-worker?application_id=${data.id}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        }).catch(() => {});
+      })();
       return { id: data.id as string, existed: false };
     },
     onSuccess: (res) => {

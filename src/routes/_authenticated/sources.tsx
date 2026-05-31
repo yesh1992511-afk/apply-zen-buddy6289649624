@@ -225,10 +225,14 @@ function SourcesPage() {
     setRunningNow(true);
     setLastIngestResult(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: HeadersInit = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
       // Run every tier in parallel: hot (aggregators) + warm (ATS) + usajobs + apify.
       const tiers: Array<"hot" | "warm" | "usajobs" | "apify"> = ["hot", "warm", "usajobs", "apify"];
       const results = await Promise.allSettled(
-        tiers.map((t) => fetch(`/api/public/sources/run-tier?tier=${t}&user_id=${user.id}`).then((r) => r.json())),
+        tiers.map((t) => fetch(`/api/public/sources/run-tier?tier=${t}`, { headers }).then((r) => r.json())),
       );
       let fetched = 0, inserted = 0;
       const failed: string[] = [];
