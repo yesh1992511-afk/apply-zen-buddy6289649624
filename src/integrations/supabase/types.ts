@@ -1768,6 +1768,7 @@ export type Database = {
         | "interview"
         | "offer"
         | "rejected"
+        | "dead_letter"
       application_status:
         | "queued"
         | "applying"
@@ -1920,6 +1921,7 @@ export const Constants = {
         "interview",
         "offer",
         "rejected",
+        "dead_letter",
       ],
       application_status: [
         "queued",
