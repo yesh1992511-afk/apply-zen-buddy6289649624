@@ -300,7 +300,16 @@ function ApplicationDetailPage() {
               <PdfViewer url={resumeUrl} title={resume?.name ?? "Tailored resume"} isGenerating={isActive && !resumeUrl} />
             </TabsContent>
             <TabsContent value="cover" className="mt-0">
-              <PdfViewer url={coverUrl} title={coverLetter?.name ?? "Cover letter"} isGenerating={isActive && !coverUrl} />
+              {coverBody ? (
+                <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-border/40 flex items-center justify-between">
+                    <h3 className="text-sm font-medium">{coverLetter?.name ?? "Cover letter"}</h3>
+                  </div>
+                  <pre className="whitespace-pre-wrap p-5 text-sm leading-relaxed font-sans">{coverBody}</pre>
+                </div>
+              ) : (
+                <PdfViewer url={coverUrl} title={coverLetter?.name ?? "Cover letter"} isGenerating={isActive && !coverUrl} />
+              )}
             </TabsContent>
           </Tabs>
 
