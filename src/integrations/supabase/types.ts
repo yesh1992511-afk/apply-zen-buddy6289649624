@@ -1042,9 +1042,12 @@ export type Database = {
           available_hours_per_week: number | null
           behance_url: string | null
           city: string | null
+          consent_background_check: boolean | null
+          consent_drug_test: boolean | null
           country: string | null
           cover_letter_tone: string | null
           created_at: string
+          criminal_record_disclosure: string | null
           current_salary: number | null
           date_of_birth: string | null
           desired_industries: string[] | null
@@ -1071,6 +1074,7 @@ export type Database = {
           nationality: string | null
           needs_visa_future: boolean | null
           needs_visa_now: boolean | null
+          notice_period_category: string | null
           notice_period_weeks: number | null
           onboarded_at: string | null
           onboarding_state: Json
@@ -1086,6 +1090,8 @@ export type Database = {
           preferred_locations: string[] | null
           preferred_name: string | null
           pronouns: string | null
+          references_available_on_request: boolean | null
+          relocation_assistance_needed: boolean | null
           remote_preference: string | null
           requires_sponsorship: boolean | null
           salary_currency: string | null
@@ -1102,6 +1108,7 @@ export type Database = {
           summary: string | null
           timezone: string | null
           travel_willingness: string | null
+          travel_willingness_pct: number | null
           twitter_url: string | null
           updated_at: string
           user_id: string
@@ -1121,9 +1128,12 @@ export type Database = {
           available_hours_per_week?: number | null
           behance_url?: string | null
           city?: string | null
+          consent_background_check?: boolean | null
+          consent_drug_test?: boolean | null
           country?: string | null
           cover_letter_tone?: string | null
           created_at?: string
+          criminal_record_disclosure?: string | null
           current_salary?: number | null
           date_of_birth?: string | null
           desired_industries?: string[] | null
@@ -1150,6 +1160,7 @@ export type Database = {
           nationality?: string | null
           needs_visa_future?: boolean | null
           needs_visa_now?: boolean | null
+          notice_period_category?: string | null
           notice_period_weeks?: number | null
           onboarded_at?: string | null
           onboarding_state?: Json
@@ -1165,6 +1176,8 @@ export type Database = {
           preferred_locations?: string[] | null
           preferred_name?: string | null
           pronouns?: string | null
+          references_available_on_request?: boolean | null
+          relocation_assistance_needed?: boolean | null
           remote_preference?: string | null
           requires_sponsorship?: boolean | null
           salary_currency?: string | null
@@ -1181,6 +1194,7 @@ export type Database = {
           summary?: string | null
           timezone?: string | null
           travel_willingness?: string | null
+          travel_willingness_pct?: number | null
           twitter_url?: string | null
           updated_at?: string
           user_id: string
@@ -1200,9 +1214,12 @@ export type Database = {
           available_hours_per_week?: number | null
           behance_url?: string | null
           city?: string | null
+          consent_background_check?: boolean | null
+          consent_drug_test?: boolean | null
           country?: string | null
           cover_letter_tone?: string | null
           created_at?: string
+          criminal_record_disclosure?: string | null
           current_salary?: number | null
           date_of_birth?: string | null
           desired_industries?: string[] | null
@@ -1229,6 +1246,7 @@ export type Database = {
           nationality?: string | null
           needs_visa_future?: boolean | null
           needs_visa_now?: boolean | null
+          notice_period_category?: string | null
           notice_period_weeks?: number | null
           onboarded_at?: string | null
           onboarding_state?: Json
@@ -1244,6 +1262,8 @@ export type Database = {
           preferred_locations?: string[] | null
           preferred_name?: string | null
           pronouns?: string | null
+          references_available_on_request?: boolean | null
+          relocation_assistance_needed?: boolean | null
           remote_preference?: string | null
           requires_sponsorship?: boolean | null
           salary_currency?: string | null
@@ -1260,6 +1280,7 @@ export type Database = {
           summary?: string | null
           timezone?: string | null
           travel_willingness?: string | null
+          travel_willingness_pct?: number | null
           twitter_url?: string | null
           updated_at?: string
           user_id?: string

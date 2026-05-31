@@ -1,60 +1,72 @@
-# Full system audit — findings + fix plan
+# Plan: ship Phases 2 + 3 + 4
 
-Audited profile completeness, sources, auto-apply pipeline, and cross-page sync. Real issues found in all four areas. Doing everything in one shot is risky — proposing 4 phases, ship in order.
-
-## Phase 1 — Critical correctness fixes (do first)
-
-**Apply pipeline reliability**
-- **PDF fallback**: worker currently throws `RuntimeError` if no `.tex` template is set (`resume_pipeline.py:28`). Add fallback: if no tex template, use the user's default uploaded PDF as-is. Unblocks anyone who hasn't authored a LaTeX resume.
-- **Auto-retry with backoff**: `applications` table already has `retry_count` and `next_retry_at`. Wire exponential backoff (1m → 5m → 30m, cap 3) in worker `commands.py` on transient failures.
-- **Worker concurrency honors settings**: remove hard cap of 2 in `runner.py:158`; use `automation_settings.parallelism` directly.
-
-**Profile data integrity**
-- Add **`is_current` toggle** to Experience rows (DB column exists, no UI).
-- Fix **silent save** on Experience/Education/Skills/Certs/Languages/Projects/References: route through the same `useProfileEditor` saved-indicator pattern as the main profile.
-- Stop auto-creating `"New company"` / `"New school"` placeholder rows — require at least one filled field before insert (`profile.tsx:593`).
-- Fix onboarding gate (`onboarding.tsx:42`): accept `work_auth_country` OR `work_authorization` instead of just the latter.
-
-**Sources noise**
-- Fix `jobTarget.ts` keyword mapping: BuiltIn excluded from `standardKey` (line 102); RemoteOK over-splits multi-word keywords (line 113); USAJobs only sends first keyword (line 118). Fix all three so user keywords actually reach the source.
-- Disable BuiltIn/Arbeitnow/WeWorkRemotely by default in the seed preset (keep them removable but off).
+Phase 1 already landed (PDF fallback, parallelism, keyword mapping, is_current, onboarding gate, noisy sources off). This plan finishes the audit.
 
 ## Phase 2 — MNC-grade profile fields
 
-Add to DB + UI (one migration + profile.tsx additions):
-- **Compliance**: `consent_background_check` (bool), `criminal_record_disclosure` (enum: none/disclosed/decline-to-answer), `consent_drug_test` (bool)
-- **Availability**: `notice_period_category` (immediate/2wks/1mo/2mo/3mo/other) alongside existing weeks field
-- **Relocation/Travel**: `relocation_assistance_needed` (bool), `travel_willingness_pct` (0/25/50/75/100)
-- **References on demand**: `references_available_on_request` (bool)
-- **Global work auth**: relabel section to "Work authorization" (not "U.S."), already supports `authorized_countries` array — just surface it
-- **Demographics (EEOC)**: ensure existing fields (gender/ethnicity/veteran/disability/lgbtq) have the standard ATS dropdowns + the legally required "decline to answer" option
+**One migration** adds these columns to `public.profile`:
+- `consent_background_check` boolean default false
+- `consent_drug_test` boolean default false
+- `criminal_record_disclosure` text (`none` | `disclosed` | `decline`)
+- `notice_period_category` text (`immediate` | `2w` | `1m` | `2m` | `3m` | `other`)
+- `relocation_assistance_needed` boolean default false
+- `travel_willingness_pct` integer (0/25/50/75/100)
+- `references_available_on_request` boolean default true
 
-## Phase 3 — Free job source additions (cybersecurity USA focus)
+**Profile UI (`src/routes/_authenticated/profile.tsx`)**:
+- New "Compliance & Availability" section with the new fields
+- Rename "U.S. Work Authorization" → "Work Authorization", surface `authorized_countries` as a multi-chip input
+- EEOC dropdowns: ensure each demographic field offers the standard ATS options + "Decline to answer"
+- All fields wired through `useProfileEditor` so they save + show the saved indicator
 
-Add 3 high-signal free sources to `worker/app/sources/`:
-- **Hacker News "Who is Hiring"** via Algolia HN Search API (no key, monthly thread, filters by keyword cleanly)
-- **infosec-jobs.com** (niche security board, public JSON feed)
-- **Hacker News Algolia jobs index** as a second backstop
+**Profile-map (`worker/app/apply/profile_map.py`)**: expose new fields to the form walker so ATS questions about background check / notice / relocation / travel auto-fill.
 
-Register them in `registry.py` + `curated-packs.ts` + `sources.tsx` PRESETS. Each pre-filters by keyword at source.
+## Phase 3 — Free job sources (cyber-USA focus)
 
-## Phase 4 — Cross-page sync & UX consistency
+Three new adapter files under `worker/app/sources/`:
+- `hn_who_is_hiring.py` — Algolia HN Search API, monthly "Ask HN: Who is hiring?" thread, keyword-filtered comments
+- `infosec_jobs.py` — infosec-jobs.com public JSON feed
+- `hn_jobs.py` — Algolia HN jobs index as a backstop
 
-- **Convert Dashboard + Applications to useQuery** with shared query keys so mutations on Jobs page update both immediately (no more split-brain).
-- **Realtime on `automation_runs`** for live scrape progress on Dashboard + Worker pages.
-- **Wire notification triggers**: server cron / worker hook that calls `sendUserEmailRaw` for high-score jobs, apply failures, and worker-offline (UI toggles exist, no firing code).
-- **Server-side quota enforcement**: `enforce_apply_quota` trigger exists in DB but `useApplyToJob` doesn't surface the rejection cleanly — add toast + disable when at cap.
-- Loading skeletons on `Filters`, `Billing`, `Setup`, `Resume` (replace `"Loading..."` strings).
+Register each in:
+- `worker/app/sources/registry.py`
+- `src/lib/sources/curated-packs.ts` (add to Cybersecurity pack)
+- `src/routes/_authenticated/sources.tsx` PRESETS
 
-## Out of scope (call out, defer)
+Each source pre-filters by user keywords at fetch time to avoid noise.
 
-- LLM-based dynamic screening answer engine (Phase 3 in apply audit) — large surface area, deserves its own pass.
-- iCIMS/Taleo/BambooHR portal adapters — each is a multi-day build.
-- Dice/ClearanceJobs/NinjaJobs — require scraping with anti-bot handling, not free APIs.
-- Stripe billing wiring beyond what's already there.
+## Phase 4 — Cross-page sync & UX
 
-## How to proceed
+**Shared query keys**: convert `dashboard.tsx` and `applications.tsx` to `useQuery` against the same keys used by `jobs.tsx` so mutations propagate without manual refresh.
 
-Phase 1 is ~6 file changes + 1 migration, low risk, immediately user-visible. I recommend shipping **Phase 1 now**, then asking you whether to continue with 2/3/4 (each phase is 30-60 min of work).
+**Realtime**:
+- Subscribe to `automation_runs` on Dashboard + Worker pages for live scrape progress
+- Reuse existing `useRealtimeInvalidate` hook pattern
 
-**Reply with**: `phase 1` to ship just the critical fixes, `phase 1+2` to also add the MNC profile fields, or `all` to do everything in sequence.
+**Notification firing**:
+- Add hook in worker `apply/runner.py` to call `notify.apply_failed` on terminal failure (after retries exhausted)
+- Add hook in `pipeline/filter_engine.py` (or after `match_job_to_filters`) to call `notify.high_score`
+- Daily summary already cron-wired; verify
+
+**Quota enforcement UX**:
+- `useApplyToJob` in `src/lib/queries/applications.ts` catches `check_violation` Postgres error and shows a clear toast "Daily apply cap reached — upgrade plan or wait until tomorrow"
+- Disable Apply button when at cap (cheap count query)
+
+**Loading polish**: replace `"Loading..."` strings in Filters, Billing, Setup, Resume with skeletons from `src/components/skeletons.tsx`.
+
+## Out of scope (explicitly deferred)
+
+- LLM dynamic screening answer engine
+- iCIMS / Taleo / BambooHR portal adapters
+- Dice / ClearanceJobs / NinjaJobs (anti-bot)
+- Stripe billing changes beyond what exists
+
+## Order of execution
+
+1. Phase 2 migration → wait for approval → UI + profile_map
+2. Phase 3 sources (no migration needed)
+3. Phase 4 sync + notifications + quota + skeletons
+
+Estimated ~15 file edits + 1 migration. After each phase I'll verify build, then move to the next.
+
+Reply **approve** to start with the Phase 2 migration.
