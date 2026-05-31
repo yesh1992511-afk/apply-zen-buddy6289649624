@@ -546,8 +546,8 @@ export async function fetchUSAJobs(keyword = 'software', location = ''): Promise
       url,
       description: typeof d.QualificationSummary === 'string' ? (d.QualificationSummary as string).slice(0, 8000) : null,
       description_html: null,
-      salary_min: ((d.PositionRemuneration as Array<Record<string, unknown>>)?.[0]?.MinimumRange) ? Number((d.PositionRemuneration as Array<Record<string, unknown>>)[0].MinimumRange) : null,
-      salary_max: ((d.PositionRemuneration as Array<Record<string, unknown>>)?.[0]?.MaximumRange) ? Number((d.PositionRemuneration as Array<Record<string, unknown>>)[0].MaximumRange) : null,
+      salary_min: ((d.PositionRemuneration as Array<Record<string, unknown>>)?.[0]?.MinimumRange) ? Math.round(Number((d.PositionRemuneration as Array<Record<string, unknown>>)[0].MinimumRange)) : null,
+      salary_max: ((d.PositionRemuneration as Array<Record<string, unknown>>)?.[0]?.MaximumRange) ? Math.round(Number((d.PositionRemuneration as Array<Record<string, unknown>>)[0].MaximumRange)) : null,
       salary_currency: 'USD',
       employment_type: ((d.PositionSchedule as Array<Record<string, unknown>>)?.[0]?.Name as string) || null,
       seniority: null,
@@ -853,33 +853,56 @@ export async function fetchInfosecJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]>
 
 export type SourceSpec = { provider: string; slug?: string };
 
+// Providers that are inherently cybersecurity-focused. Jobs from these
+// sources are kept as-is. Everything else is gated through a relevance
+// pre-filter so we don't flood the pipeline with unrelated roles.
+const CYBER_NATIVE_PROVIDERS = new Set<string>([
+  'infosec_jobs',
+  'usajobs', // we only run cyber keywords for USAJobs (see USAJOBS_QUERIES)
+]);
+
+const CYBER_RE = /\b(cyber|security|infosec|appsec|netsec|secops|devsecops|soc analyst|siem|penetration|pentest|red team|blue team|purple team|incident response|threat intel|vulnerab|malware|forensic|iam |identity (and|&) access|grc\b|compliance officer|ciso|security engineer|security analyst|security architect|cloud security)\b/i;
+
+function isCyberRelevant(j: NormalizedJob): boolean {
+  const hay = `${j.title} ${j.company} ${j.description ?? ''}`;
+  return CYBER_RE.test(hay);
+}
+
 export async function runSource(spec: SourceSpec, ctx?: ApifyCtx): Promise<NormalizedJob[]> {
+  let jobs: NormalizedJob[];
   switch (spec.provider) {
-    case 'remoteok': return fetchRemoteOK();
-    case 'remotive': return fetchRemotive();
-    case 'arbeitnow': return fetchArbeitnow();
-    case 'himalayas': return fetchHimalayas();
-    case 'jobicy': return fetchJobicy();
-    case 'weworkremotely': return fetchWeWorkRemotely();
-    case 'infosec_jobs': return fetchInfosecJobs(ctx);
-    case 'greenhouse': return spec.slug ? fetchGreenhouse(spec.slug) : [];
-    case 'lever': return spec.slug ? fetchLever(spec.slug) : [];
-    case 'ashby': return spec.slug ? fetchAshby(spec.slug) : [];
-    case 'workable': return spec.slug ? fetchWorkable(spec.slug) : [];
-    case 'smartrecruiters': return spec.slug ? fetchSmartRecruiters(spec.slug) : [];
-    case 'recruitee': return spec.slug ? fetchRecruitee(spec.slug) : [];
-    case 'teamtailor': return spec.slug ? fetchTeamtailor(spec.slug) : [];
-    case 'personio': return spec.slug ? fetchPersonio(spec.slug) : [];
-    case 'bamboohr': return spec.slug ? fetchBambooHR(spec.slug) : [];
-    case 'usajobs': return fetchUSAJobs(spec.slug || 'software');
-    case 'apify:linkedin': return fetchApifyLinkedIn(ctx);
-    case 'apify:indeed': return fetchApifyIndeed(ctx);
-    case 'apify:glassdoor': return fetchApifyGlassdoor(ctx);
-    case 'apify:ziprecruiter': return fetchApifyZipRecruiter(ctx);
-    case 'apify:wellfound': return fetchApifyWellfound(ctx);
-    case 'apify:google_jobs': return fetchApifyGoogleJobs(ctx);
-    default: return [];
+    case 'remoteok': jobs = await fetchRemoteOK(); break;
+    case 'remotive': jobs = await fetchRemotive(); break;
+    case 'arbeitnow': jobs = await fetchArbeitnow(); break;
+    case 'himalayas': jobs = await fetchHimalayas(); break;
+    case 'jobicy': jobs = await fetchJobicy(); break;
+    case 'weworkremotely': jobs = await fetchWeWorkRemotely(); break;
+    case 'infosec_jobs': jobs = await fetchInfosecJobs(ctx); break;
+    case 'greenhouse': jobs = spec.slug ? await fetchGreenhouse(spec.slug) : []; break;
+    case 'lever': jobs = spec.slug ? await fetchLever(spec.slug) : []; break;
+    case 'ashby': jobs = spec.slug ? await fetchAshby(spec.slug) : []; break;
+    case 'workable': jobs = spec.slug ? await fetchWorkable(spec.slug) : []; break;
+    case 'smartrecruiters': jobs = spec.slug ? await fetchSmartRecruiters(spec.slug) : []; break;
+    case 'recruitee': jobs = spec.slug ? await fetchRecruitee(spec.slug) : []; break;
+    case 'teamtailor': jobs = spec.slug ? await fetchTeamtailor(spec.slug) : []; break;
+    case 'personio': jobs = spec.slug ? await fetchPersonio(spec.slug) : []; break;
+    case 'bamboohr': jobs = spec.slug ? await fetchBambooHR(spec.slug) : []; break;
+    case 'usajobs': jobs = await fetchUSAJobs(spec.slug || 'cyber'); break;
+    case 'apify:linkedin': jobs = await fetchApifyLinkedIn(ctx); break;
+    case 'apify:indeed': jobs = await fetchApifyIndeed(ctx); break;
+    case 'apify:glassdoor': jobs = await fetchApifyGlassdoor(ctx); break;
+    case 'apify:ziprecruiter': jobs = await fetchApifyZipRecruiter(ctx); break;
+    case 'apify:wellfound': jobs = await fetchApifyWellfound(ctx); break;
+    case 'apify:google_jobs': jobs = await fetchApifyGoogleJobs(ctx); break;
+    default: jobs = [];
   }
+
+  // Cybersecurity relevance gate at the adapter layer. Keeps the jobs
+  // table from filling with unrelated roles when generic boards run.
+  if (!CYBER_NATIVE_PROVIDERS.has(spec.provider) && jobs.length > 0) {
+    jobs = jobs.filter(isCyberRelevant);
+  }
+  return jobs;
 }
 
 // Tier A: aggregators that need no slug (every 15min)

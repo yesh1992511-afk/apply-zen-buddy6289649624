@@ -212,11 +212,17 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                 },
                 { onConflict: 'user_id,key' },
               );
+              const fetchedZero = jobs.length === 0;
+              const warning = fetchedZero
+                ? (spec.provider.startsWith('apify:')
+                    ? 'Apify actor returned 0 items for your keywords/locations — verify actor input.'
+                    : 'Source returned 0 cyber-relevant jobs this run.')
+                : null;
               await supabaseAdmin.from('sources').update({
                 last_run_at: runAt,
                 last_run_status: 'succeeded',
                 last_run_count: insertedForSource,
-                last_error: null,
+                last_error: warning,
               }).eq('user_id', userId).eq('key', sourceKey);
             }
           }
