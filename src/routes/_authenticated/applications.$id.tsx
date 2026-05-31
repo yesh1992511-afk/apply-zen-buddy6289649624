@@ -67,6 +67,7 @@ function ApplicationDetailPage() {
   const [coverLetter, setCoverLetter] = useState<ResumeRow | null>(null);
   const [resumeUrl, setResumeUrl] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [coverBody, setCoverBody] = useState<string | null>(null);
   const [tab, setTab] = useState("form");
   const [loading, setLoading] = useState(true);
 
