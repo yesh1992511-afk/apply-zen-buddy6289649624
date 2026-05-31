@@ -143,8 +143,8 @@ function WorkerPage() {
 
   // Apply worker = VPS heartbeat
   const applyAgeMs = hb?.last_seen ? Date.now() - new Date(hb.last_seen).getTime() : Infinity;
-  // Scraper = most recent scrape-style run
-  const lastScrape = runs.find((r) => r.kind === "scrape" || r.source_key) ?? runs[0];
+  // Scraper = most recent Lovable Cloud source-tier run
+  const lastScrape = runs.find((r) => r.kind?.startsWith("source.")) ?? runs.find((r) => r.kind === "scrape" || r.source_key) ?? runs[0];
   const scrapeAgeMs = lastScrape ? Date.now() - new Date(lastScrape.started_at).getTime() : Infinity;
 
   const fmtDur = (a: string, b: string | null) => {
