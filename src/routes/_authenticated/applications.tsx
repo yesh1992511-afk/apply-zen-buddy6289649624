@@ -1,10 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { NotFoundRoute } from "@/components/NotFoundRoute";
-import { useEffect, useState, useCallback } from "react";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
-
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { Send, Clock, Loader2, CheckCircle2, AlertTriangle, AlertCircle, ExternalLink, Eye, Mail, MessageCircle, Award, ThumbsDown, FileEdit, Inbox, RotateCcw, Trash2, Skull } from "lucide-react";
@@ -14,6 +12,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { retryApplication, discardApplication } from "@/lib/applications.functions";
 import { toast } from "sonner";
+import { applicationsListQueryOptions, phaseOf, APPLICATIONS_QUERY_KEY, type ApplicationRow, type AppPhase } from "@/lib/queries/applications";
 
 export const Route = createFileRoute("/_authenticated/applications")({
   head: () => ({ meta: [{ title: "Applications — JobPilot" }] }),
@@ -22,25 +21,7 @@ export const Route = createFileRoute("/_authenticated/applications")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
-type Phase =
-  | "discovered" | "scored" | "tailored" | "queued" | "applying" | "submitted"
-  | "needs_review" | "failed" | "dead_letter" | "follow_up_sent" | "replied" | "interview" | "offer" | "rejected";
-
-type App = {
-  id: string;
-  status: string;
-  phase: Phase;
-  job_id: string;
-  attempts: number;
-  retry_count: number;
-  last_error: string | null;
-  dlq_reason: string | null;
-  queued_at: string;
-  applied_at: string | null;
-  job?: { title: string; company: string; url: string } | null;
-};
-
-const COLS: Array<{ phase: Phase; label: string; icon: LucideIcon; accent: string }> = [
+const COLS: Array<{ phase: AppPhase; label: string; icon: LucideIcon; accent: string }> = [
   { phase: "discovered", label: "Discovered", icon: Inbox, accent: "text-muted-foreground" },
   { phase: "scored", label: "Scored", icon: Eye, accent: "text-muted-foreground" },
   { phase: "tailored", label: "Tailored", icon: FileEdit, accent: "text-primary/80" },
@@ -58,46 +39,27 @@ const COLS: Array<{ phase: Phase; label: string; icon: LucideIcon; accent: strin
 ];
 
 function ApplicationsPage() {
-  const [apps, setApps] = useState<App[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
+  const query = useQuery(applicationsListQueryOptions());
+  const apps: ApplicationRow[] = query.data ?? [];
+  const loading = query.isLoading;
 
-  const load = useCallback(() => {
-    supabase
-      .from("applications")
-      .select("id, status, phase, job_id, attempts, retry_count, last_error, dlq_reason, queued_at, applied_at, job:jobs(title, company, url)")
-      .order("queued_at", { ascending: false })
-      .limit(500)
-      .then(({ data }) => {
-        setApps((data ?? []) as unknown as App[]);
-        setLoading(false);
-      });
-  }, []);
-  useEffect(() => { load(); }, [load]);
-  useRealtimeInvalidate({ table: "applications", onChange: load });
-  useRealtimeInvalidate({ table: "application_events", onChange: load });
+  const invalidate = () => qc.invalidateQueries({ queryKey: APPLICATIONS_QUERY_KEY });
+  useRealtimeInvalidate({ table: "applications", onChange: invalidate });
+  useRealtimeInvalidate({ table: "application_events", onChange: invalidate });
 
   const retryFn = useServerFn(retryApplication);
   const discardFn = useServerFn(discardApplication);
   const retryMut = useMutation({
     mutationFn: (id: string) => retryFn({ data: { id } }),
-    onSuccess: () => { toast.success("Re-queued"); load(); },
+    onSuccess: () => { toast.success("Re-queued"); invalidate(); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Retry failed"),
   });
   const discardMut = useMutation({
     mutationFn: (id: string) => discardFn({ data: { id } }),
-    onSuccess: () => { toast.success("Discarded"); load(); },
+    onSuccess: () => { toast.success("Discarded"); invalidate(); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Discard failed"),
   });
-
-  // Back-compat: derive phase from legacy status when phase is missing/discovered
-  const phaseOf = (a: App): Phase => {
-    if (a.phase && a.phase !== "discovered") return a.phase;
-    const map: Record<string, Phase> = {
-      queued: "queued", applying: "applying", applied: "submitted",
-      needs_review: "needs_review", failed: "failed",
-    };
-    return map[a.status] ?? "discovered";
-  };
 
   if (loading) {
     return (
@@ -125,7 +87,7 @@ function ApplicationsPage() {
     );
   }
 
-  const byPhase = (p: Phase) => apps.filter((a) => phaseOf(a) === p);
+  const byPhase = (p: AppPhase) => apps.filter((a) => phaseOf(a) === p);
 
   return (
     <div className="space-y-6 max-w-[1600px]">
@@ -134,7 +96,7 @@ function ApplicationsPage() {
         {COLS.map(({ phase, label, icon: Icon, accent }) => {
           const items = byPhase(phase);
           if (items.length === 0 && (phase === "follow_up_sent" || phase === "replied" || phase === "interview" || phase === "offer" || phase === "rejected" || phase === "tailored" || phase === "scored")) {
-            return null; // hide empty advanced columns
+            return null;
           }
           return (
             <div key={phase} className="flex flex-col rounded-xl border border-border/60 bg-card">
