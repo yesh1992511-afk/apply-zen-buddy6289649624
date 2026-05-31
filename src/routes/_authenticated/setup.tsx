@@ -10,7 +10,9 @@ import { CheckCircle2, AlertCircle, Copy, Server, Shield, Zap, Send, Loader2, Sp
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { ReadinessChecklist, useReadiness } from "@/components/ReadinessChecklist";
+import { CompletenessBar } from "@/components/profile/CompletenessBar";
 import { formatDistanceToNow } from "date-fns";
+
 
 export const Route = createFileRoute("/_authenticated/setup")({
   head: () => ({ meta: [{ title: "Worker Setup — JobPilot" }] }),
@@ -115,10 +117,12 @@ function SetupPage() {
             </Badge>
           )}
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <CompletenessBar />
           <ReadinessChecklist />
         </CardContent>
       </Card>
+
 
       {/* Mac-level "Test pipeline" card — the most important thing on this page */}
       <Card className="border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card">
