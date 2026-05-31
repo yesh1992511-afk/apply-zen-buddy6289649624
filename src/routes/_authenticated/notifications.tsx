@@ -193,8 +193,9 @@ function NotificationsPage() {
             >
               myaccount.google.com/apppasswords <ExternalLink className="h-3 w-3" />
             </a>
-            . The worker uses it via IMAP (read OTPs) + SMTP (send notifications). Requires 2-Step
-            Verification enabled on your Google account.
+            . Notifications send directly from the app — clicking <strong>Send test email</strong>{" "}
+            sends a real message via SMTP and flips the badge to Verified if it succeeds. Requires
+            2-Step Verification enabled on your Google account.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
