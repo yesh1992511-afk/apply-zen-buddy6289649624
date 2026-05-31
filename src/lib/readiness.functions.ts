@@ -111,22 +111,23 @@ export const getSystemReadiness = createServerFn({ method: "GET" })
       href: "/automation",
     });
 
-    // 6. Worker integrations — group secrets by category so users see one row per integration.
+    // 6. Worker integrations — check Lovable Cloud secrets directly via process.env
+    // (server-only, never returns the values, only presence flags).
+    const envSet = (name: string) => !!(process.env[name] && process.env[name]!.length > 0);
     const SECRET_GROUPS: Array<{ key: string; label: string; names: string[]; required: boolean; href: string }> = [
       { key: "openai", label: "OpenAI (resume tailor + cover letter)", names: ["OPENAI_API_KEY"], required: true, href: "/automation" },
       { key: "deepseek", label: "DeepSeek (JD analysis)", names: ["DEEPSEEK_API_KEY"], required: false, href: "/automation" },
       { key: "gmail_oauth", label: "Gmail OAuth (OTP detection)", names: ["GMAIL_OAUTH_CLIENT_ID", "GMAIL_OAUTH_CLIENT_SECRET", "GMAIL_OAUTH_REFRESH_TOKEN", "GMAIL_EMAIL"], required: false, href: "/automation" },
       { key: "apply_identity", label: "Apply identity (portal login)", names: ["APPLY_EMAIL", "APPLY_PASSWORD"], required: false, href: "/automation" },
     ];
-    const setNames = new Set((secrets ?? []).filter((s) => s.status === "set").map((s) => s.name));
     for (const g of SECRET_GROUPS) {
-      const missing = g.names.filter((n) => !setNames.has(n));
+      const missing = g.names.filter((n) => !envSet(n));
       const ok = missing.length === 0;
       checks.push({
         key: g.key,
         label: g.label,
         status: ok ? "ok" : g.required ? "fail" : "warn",
-        detail: ok ? "All keys configured" : `Missing: ${missing.join(", ")}`,
+        detail: ok ? "All keys configured in Lovable Cloud" : `Missing: ${missing.join(", ")}`,
         href: g.href,
       });
     }
