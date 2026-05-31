@@ -78,8 +78,9 @@ async def _label_for(page, handle) -> str:
         return ""
 
 
-async def fill_text_inputs(page, profile: dict, lists: dict | None = None) -> int:
-    """Fill <input type=text|email|tel|number|url|date> and <textarea>. Returns number filled."""
+async def fill_text_inputs(page, profile: dict, lists: dict | None = None,
+                           job: dict | None = None) -> int:
+    """Fill text-ish inputs and textareas. Falls back to AI for unanswered textareas."""
     filled = 0
     selectors = "input:not([type='hidden']):not([type='file']):not([type='submit']):not([type='button']):not([type='checkbox']):not([type='radio']), textarea"
     handles = await page.locator(selectors).element_handles()
@@ -89,12 +90,30 @@ async def fill_text_inputs(page, profile: dict, lists: dict | None = None) -> in
                 continue
             current = await h.evaluate("e => e.value")
             if current:
-                continue  # don't overwrite existing values
+                continue
             label = await _label_for(page, h)
             ans = answer_for(label, profile, lists)
+            source = "profile"
             if ans is None or ans == "":
-                continue
+                # AI fallback only for textareas (free-form questions). Skip small inputs.
+                tag = (await h.evaluate("e => e.tagName") or "").lower()
+                if tag == "textarea" and label:
+                    try:
+                        from ..ai.screening import answer_with_ai
+                        ai_ans, src = answer_with_ai(label, profile, job, long_form=True)
+                        if ai_ans:
+                            ans = ai_ans
+                            source = "screening_cache" if src == "cache" else "ai_generated"
+                    except Exception:
+                        pass
+                if ans is None or ans == "":
+                    continue
+            else:
+                # Decide tailored vs profile vs cache
+                if ff.is_tailored_field(label, profile):
+                    source = "tailored"
             await h.fill(str(ans))
+            ff.record(label, ans, source)
             filled += 1
         except Exception:
             continue
