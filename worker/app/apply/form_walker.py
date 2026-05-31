@@ -12,18 +12,17 @@ text is almost always present somewhere near the input.
 from __future__ import annotations
 from typing import Any
 from .profile_map import answer_for
+from . import field_fills as ff
 
 
 def load_lists(user_id: str | None) -> dict:
-    """Fetch related rows (experiences/educations/languages/...) the mapper may need.
-
-    Shared by all portal adapters so they can call autofill_form uniformly.
-    """
+    """Fetch related rows (experiences/educations/languages/...) the mapper may need."""
     if not user_id:
         return {}
     from ..db import db
     out: dict = {}
-    for tbl in ("experiences", "educations", "languages", "certifications", "skills", "projects"):
+    for tbl in ("experiences", "educations", "languages", "certifications", "skills",
+                "projects", "publications", "references_list"):
         try:
             res = db().table(tbl).select("*").eq("user_id", user_id).execute()
             out[tbl] = res.data or []
@@ -32,12 +31,15 @@ def load_lists(user_id: str | None) -> dict:
     return out
 
 
-async def safe_autofill(page, profile: dict) -> dict[str, int] | None:
+async def safe_autofill(page, profile: dict, job: dict | None = None,
+                        application_id: str | None = None) -> dict[str, int] | None:
     """Convenience wrapper: load lists + run autofill, swallow all exceptions.
-    Call this right before the final Submit click in any portal adapter."""
+    Pass job + application_id to enable AI screening fallback and field-fill logging."""
     try:
+        if application_id and ff._ledger.get() is None:
+            ff.start(application_id)
         lists = load_lists(profile.get("user_id"))
-        return await autofill_form(page, profile, lists)
+        return await autofill_form(page, profile, lists, job=job)
     except Exception:
         return None
 
