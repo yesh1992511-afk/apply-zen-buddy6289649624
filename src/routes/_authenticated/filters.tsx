@@ -324,10 +324,17 @@ function FilterPreview({ filter }: { filter: Filter }) {
       q = q.gte("scraped_at", since);
     }
     if ((filter.keywords ?? []).length > 0) {
-      const or = filter.keywords
-        .map((k) => `title.ilike.%${k}%,description.ilike.%${k}%`)
-        .join(",");
-      q = q.or(or);
+      // Sanitize keywords to prevent PostgREST filter injection.
+      // Strip characters with special meaning in the .or() mini-language: , . ( ) * : %
+      const safe = filter.keywords
+        .map((k) => k.replace(/[,.()*:%\\]/g, "").trim())
+        .filter((k) => k.length > 0 && k.length <= 100);
+      if (safe.length > 0) {
+        const or = safe
+          .map((k) => `title.ilike.%${k}%,description.ilike.%${k}%`)
+          .join(",");
+        q = q.or(or);
+      }
     }
     const { count: c } = await q;
     setCount(c ?? 0);

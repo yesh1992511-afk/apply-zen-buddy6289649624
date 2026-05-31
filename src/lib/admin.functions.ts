@@ -8,7 +8,7 @@ async function assertSuperAdmin(supabase: any, userId: string) {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId);
-  if (error) throw new Error(error.message);
+  if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
   const roles = (data ?? []).map((r: { role: string }) => r.role);
   if (!roles.includes("super_admin")) {
     throw new Error("Forbidden: super-admin only");
@@ -24,7 +24,7 @@ export const getMyRoles = createServerFn({ method: "GET" })
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return (data ?? []).map((r: { role: string }) => r.role);
   });
 
@@ -38,7 +38,7 @@ export const listErrorEvents = createServerFn({ method: "GET" })
       .select("*")
       .order("last_seen", { ascending: false })
       .limit(500);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return data ?? [];
   });
 
@@ -53,7 +53,7 @@ export const setErrorResolved = createServerFn({ method: "POST" })
       .from("error_events")
       .update({ resolved: data.resolved })
       .eq("id", data.id);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 
@@ -67,7 +67,7 @@ export const listAuditLog = createServerFn({ method: "GET" })
       .select("id, ts, action, entity_type, entity_id, metadata, user_id")
       .order("ts", { ascending: false })
       .limit(1000);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return data ?? [];
   });
 
@@ -106,7 +106,7 @@ export const dispatchWorkerCommand = createServerFn({ method: "POST" })
       kind: data.kind,
       payload: (data.payload ?? {}) as any,
     });
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     await supabaseAdmin.from("audit_log").insert({
       user_id: userId,
       actor_role: "super_admin",
@@ -123,7 +123,7 @@ export const listFeatureFlags = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertSuperAdmin(context.supabase, context.userId);
     const { data, error } = await supabaseAdmin.from("feature_flags").select("*").order("key");
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return data ?? [];
   });
 
@@ -147,7 +147,7 @@ export const upsertFeatureFlag = createServerFn({ method: "POST" })
       description: data.description ?? null,
       updated_at: new Date().toISOString(),
     });
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     await supabaseAdmin.from("audit_log").insert({
       user_id: userId,
       actor_role: "super_admin",
@@ -165,7 +165,7 @@ export const listPlans = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertSuperAdmin(context.supabase, context.userId);
     const { data, error } = await supabaseAdmin.from("plans").select("*").order("sort_order");
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return data ?? [];
   });
 
@@ -177,7 +177,7 @@ export const verifySuperAdmin = createServerFn({ method: "GET" })
       .from("user_roles")
       .select("role")
       .eq("user_id", context.userId);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     const roles = (data ?? []).map((r: { role: string }) => r.role);
     return { isSuperAdmin: roles.includes("super_admin") };
   });
