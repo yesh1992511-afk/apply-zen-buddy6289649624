@@ -265,7 +265,7 @@ function WorkerPage() {
               const overdue = s.enabled && age > s.cadence_minutes * 60_000 * 2;
               const t = !s.enabled
                 ? "bg-zinc-500"
-                : s.last_run_status === "ok"
+                : (s.last_run_status === "ok" || s.last_run_status === "succeeded" || s.last_run_status === "success")
                   ? overdue ? "bg-amber-500" : "bg-emerald-500"
                   : s.last_run_status === "failed" ? "bg-red-500" : "bg-zinc-500";
               return (
