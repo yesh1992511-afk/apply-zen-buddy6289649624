@@ -25,7 +25,7 @@ import {
 
 import { toast } from "sonner";
 import { useUser } from "@/lib/useAuth";
-import { Plus, Trash2, Upload, X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 
 
 export const Route = createFileRoute("/_authenticated/profile")({
