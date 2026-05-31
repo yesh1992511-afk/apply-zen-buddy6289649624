@@ -65,6 +65,8 @@ ADAPTERS: dict[str, Source] = {a.key: a for a in [
     BuiltIn(), USAJobs(),
     # Cybersecurity-focused free sources
     InfosecJobs(), HNJobs(), HNWhoIsHiring(),
+    # New free public boards
+    YCombinatorJobs(), Dice(), CyberSecJobs(), ClearedJobs(), LevelsFYI(),
 ]}
 
 
