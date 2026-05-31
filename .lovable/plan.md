@@ -1,45 +1,48 @@
-## Goal
+# Fix Jobs → Applications flow
 
-Restructure the Jobs page to match the reference: keep the top "matched jobs" grid, then append an "All applications" section underneath with status tabs, a per-company search, an **Open tracker** button (→ existing kanban at `/applications`), and clickable company rows that open the application detail (existing `/applications/$id`).
+Three improvements to make the Jobs page match the reference flow (table → kanban → detail), all reusing the existing `applicationsListQueryOptions` so data stays in one place.
 
-## Scope
+## 1. Inline the kanban on the Jobs page
 
-Frontend only. No schema, no server-fn, no business-logic changes. The kanban tracker page (`/applications`) and the application detail page (`/applications/$id`) already exist and stay as-is — we just navigate to them.
+Today the "All applications" section has an **Open tracker** button that navigates away to `/applications`. Replace that with an **in-page view toggle** so the kanban lives on the Jobs page itself.
 
-## Changes
+- `src/components/AllApplicationsTable.tsx`
+  - Add a `view` state: `"table" | "kanban"`.
+  - Header row: drop `Open tracker`; add a small segmented control `Table · Kanban` on the right next to the search.
+  - When `view === "kanban"`, render a new `AllApplicationsKanban` component instead of the table; tabs/search row stays visible and filters both views.
+- `src/components/AllApplicationsKanban.tsx` (new)
+  - Compact kanban (same columns/visuals as today's `/applications` page) consuming `applicationsListQueryOptions` + `phaseOf`.
+  - Cards link to `/applications/$id` (image 3).
+  - Hides empty late-stage columns (follow_up_sent, replied, interview, offer, rejected, tailored, scored), matching current `/applications` behavior.
+- `src/routes/_authenticated/applications.tsx`
+  - Refactor to reuse the new `AllApplicationsKanban` component (single source of truth). Page becomes a thin wrapper: `<PageHeader/>` + `<AllApplicationsKanban fullHeight />`.
 
-### 1. `src/routes/_authenticated/jobs.tsx`
+## 2. Polish the All-applications table (image 1)
 
-Below the existing job-cards grid (after line 406), add a new `<AllApplicationsSection />` block:
+- Tighter row height, larger company avatar with brand-color initials background.
+- Status chip simplified to a single pill with colored dot (already there, just align widths so columns don't jitter).
+- Add a thin top "summary" strip above tabs: total · submitted · in flight · needs you (clickable shortcuts to set the tab).
+- Sticky table header inside the card; zebra hover only (no zebra rows).
+- Resume / Cover letter cells show "Ready" with check icon, "Generating…" with spinner when `phase === "tailored"/"applying"`, else `—`.
 
-- **Header row**: "All applications" title on the left; on the right two buttons:
-  - `Open tracker` → `<Link to="/applications">` (goes to the existing kanban view = image 2).
-  - `Approve all` (disabled placeholder for now — no business logic change requested).
-- **Tabs** (pill row, count badge each): `All` · `Submitted` · `In flight` (queued+applying) · `Needs you` (needs_review) · `Failed` · `Skipped`. Local `useState` for active tab.
-- **Search input** on the right ("Search company…") — local filter on company name.
-- **Table** with columns: Company (logo letters + title/role), Resume (Ready/—), Cover letter (Ready/—), Status (chip), Applied (timeAgo).
-  - Whole row is a `<Link to="/applications/$id" params={{ id }}>` → opens existing detail page (image 3).
-  - Empty state when no rows match the active tab/search.
+## 3. Polish the application detail page (image 3)
 
-### 2. Data source
+`src/routes/_authenticated/applications.$id.tsx`:
 
-Reuse the same query the current `/applications` page uses — a Supabase select on `applications` joined to `jobs(title, company, url)`. Extract it into `src/lib/queries/applications.ts` as `applicationsListQueryOptions()` so both the Jobs page (new table) and the Applications page (kanban) can consume it via `useQuery`, keeping a single source of truth and realtime invalidation behavior.
-
-Status derivation for the tabs uses the existing `phase`/`status` logic already in `applications.tsx` (lifted into a small helper next to the new query).
-
-### 3. `src/routes/_authenticated/applications.tsx`
-
-Refactor to consume `applicationsListQueryOptions()` (drop the inline `supabase.from(...)` call + local `useState`/`useEffect`). No visual change — kanban layout stays identical (matches image 2, which is the "Open tracker" destination).
+- Two-column layout on ≥lg: left = timeline + screenshots + JD snippet; right = sticky sidebar with company card, status chip, action buttons (Retry / Discard / Open job), generated resume + cover-letter preview links, applied/queued timestamps.
+- Add breadcrumb `Jobs › {company} › {title}` linking back to `/jobs`.
+- Promote the latest `application_events` entry into a hero status banner (color-coded by phase) at the top.
+- Keep all existing data fetching and mutations; this is presentation only.
 
 ## Out of scope
 
-- No changes to the kanban tracker visuals.
-- No changes to the application detail page.
-- No new business logic (Approve-all is a disabled UI affordance only).
-- No data-model or RLS changes.
+- No schema/RLS/server-function changes.
+- No changes to scrape, scoring, or apply-worker logic.
+- Filter behavior on `/jobs` (window, saved filters, search) is unchanged.
 
 ## Files touched
 
-- `src/routes/_authenticated/jobs.tsx` — append All-applications section + Open tracker button.
-- `src/lib/queries/applications.ts` — new shared query options + phase helper.
-- `src/routes/_authenticated/applications.tsx` — switch to shared query (no UI change).
+- new: `src/components/AllApplicationsKanban.tsx`
+- edit: `src/components/AllApplicationsTable.tsx`
+- edit: `src/routes/_authenticated/applications.tsx`
+- edit: `src/routes/_authenticated/applications.$id.tsx`

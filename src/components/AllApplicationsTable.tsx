@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, ClipboardList, CheckCheck, AlertCircle, Inbox } from "lucide-react";
+import { Search, CheckCheck, AlertCircle, Inbox, LayoutGrid, Table as TableIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/timeAgo";
 import { EmptyState } from "@/components/EmptyState";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
+import { AllApplicationsKanban } from "@/components/AllApplicationsKanban";
 import {
   applicationsListQueryOptions,
   bucketOf,
@@ -81,6 +82,7 @@ export function AllApplicationsTable() {
   const apps: ApplicationRow[] = query.data ?? [];
   const [tab, setTab] = useState<AppBucket>("all");
   const [search, setSearch] = useState("");
+  const [view, setView] = useState<"table" | "kanban">("table");
 
   useRealtimeInvalidate({
     table: "applications",
@@ -113,12 +115,26 @@ export function AllApplicationsTable() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-lg font-semibold">All applications</h2>
         <div className="flex items-center gap-2">
-          <Button asChild variant="outline" size="sm" className="gap-1.5">
-            <Link to="/applications">
-              <ClipboardList className="h-4 w-4" />
-              Open tracker
-            </Link>
-          </Button>
+          <div className="inline-flex rounded-lg border border-border/60 bg-surface-2 p-0.5">
+            <button
+              onClick={() => setView("table")}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                view === "table" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <TableIcon className="h-3.5 w-3.5" /> Table
+            </button>
+            <button
+              onClick={() => setView("kanban")}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                view === "kanban" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" /> Kanban
+            </button>
+          </div>
           <Button variant="outline" size="sm" disabled className="gap-1.5">
             <CheckCheck className="h-4 w-4" />
             Approve all
@@ -166,7 +182,9 @@ export function AllApplicationsTable() {
         </div>
       </div>
 
-      {query.isLoading ? (
+      {view === "kanban" ? (
+        <AllApplicationsKanban bucket={tab} search={search} />
+      ) : query.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-14 shimmer rounded-lg" />
