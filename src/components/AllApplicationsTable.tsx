@@ -82,6 +82,7 @@ export function AllApplicationsTable() {
   const apps: ApplicationRow[] = query.data ?? [];
   const [tab, setTab] = useState<AppBucket>("all");
   const [search, setSearch] = useState("");
+  const [view, setView] = useState<"table" | "kanban">("table");
 
   useRealtimeInvalidate({
     table: "applications",
