@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Check, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/skeletons";
 
 export const Route = createFileRoute("/_authenticated/billing")({
   head: () => ({ meta: [{ title: "Billing — JobPilot" }] }),
