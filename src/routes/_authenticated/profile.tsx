@@ -315,28 +315,42 @@ function ProfilePage() {
                   )}
                 </div>
               </div>
-              <SelectFieldKV
-                label="Travel willingness (%)"
-                value={getStr("travel_willingness_pct")}
-                onChange={(v) => set("travel_willingness_pct", v ? Number(v) : null)}
-                options={[
-                  { value: "0", label: "0% — no travel" },
-                  { value: "25", label: "Up to 25%" },
-                  { value: "50", label: "Up to 50%" },
-                  { value: "75", label: "Up to 75%" },
-                  { value: "100", label: "100% — fully mobile" },
-                ]}
-              />
-              <SelectFieldKV
-                label="Criminal record disclosure"
-                value={getStr("criminal_record_disclosure")}
-                onChange={(v) => set("criminal_record_disclosure", v || null)}
-                options={[
-                  { value: "none", label: "No record to disclose" },
-                  { value: "disclosed", label: "Yes — willing to disclose in interview" },
-                  { value: "decline", label: "Decline to answer" },
-                ]}
-              />
+              <div>
+                <SelectFieldKV
+                  label="Travel willingness (%)"
+                  value={getStr("travel_willingness_pct")}
+                  onChange={(v) => set("travel_willingness_pct", v ? Number(v) : null)}
+                  options={[
+                    { value: "0", label: "0% — no travel" },
+                    { value: "25", label: "Up to 25%" },
+                    { value: "50", label: "Up to 50%" },
+                    { value: "75", label: "Up to 75%" },
+                    { value: "100", label: "100% — fully mobile" },
+                  ]}
+                />
+                {getStr("travel_willingness_pct") && (
+                  <div className="mt-1 text-right">
+                    <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => set("travel_willingness_pct", null)}>Clear</button>
+                  </div>
+                )}
+              </div>
+              <div>
+                <SelectFieldKV
+                  label="Criminal record disclosure"
+                  value={getStr("criminal_record_disclosure")}
+                  onChange={(v) => set("criminal_record_disclosure", v || null)}
+                  options={[
+                    { value: "none", label: "No record to disclose" },
+                    { value: "disclosed", label: "Yes — willing to disclose in interview" },
+                    { value: "decline", label: "Decline to answer" },
+                  ]}
+                />
+                {getStr("criminal_record_disclosure") && (
+                  <div className="mt-1 text-right">
+                    <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => set("criminal_record_disclosure", null)}>Clear</button>
+                  </div>
+                )}
+              </div>
               <SwitchRow
                 label="Consent to background check"
                 checked={getBool("consent_background_check")}
