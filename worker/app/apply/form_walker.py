@@ -121,7 +121,6 @@ async def fill_text_inputs(page, profile: dict, lists: dict | None = None,
 
 
 async def select_dropdowns(page, profile: dict, lists: dict | None = None) -> int:
-    """Pick best matching option in each <select>. Returns number set."""
     filled = 0
     handles = await page.locator("select").element_handles()
     for h in handles:
@@ -146,6 +145,7 @@ async def select_dropdowns(page, profile: dict, lists: dict | None = None) -> in
                         chosen = o["value"]; break
             if chosen is not None:
                 await h.select_option(value=chosen)
+                ff.record(label, ans, "profile")
                 filled += 1
         except Exception:
             continue
@@ -153,7 +153,6 @@ async def select_dropdowns(page, profile: dict, lists: dict | None = None) -> in
 
 
 async def click_radios(page, profile: dict, lists: dict | None = None) -> int:
-    """For each radio group, click the option whose label matches the computed answer."""
     filled = 0
     try:
         groups = await page.evaluate(
@@ -184,6 +183,7 @@ async def click_radios(page, profile: dict, lists: dict | None = None) -> int:
                     rlabel = await _label_for(page, r)
                     if target in (rlabel or "").lower():
                         await r.click()
+                        ff.record(label, ans, "profile")
                         filled += 1
                         break
                 except Exception:
@@ -193,9 +193,10 @@ async def click_radios(page, profile: dict, lists: dict | None = None) -> int:
     return filled
 
 
-async def autofill_form(page, profile: dict, lists: dict | None = None) -> dict[str, int]:
+async def autofill_form(page, profile: dict, lists: dict | None = None,
+                        job: dict | None = None) -> dict[str, int]:
     """Walk the whole form and fill what we can. Returns counts for logging."""
-    text = await fill_text_inputs(page, profile, lists)
+    text = await fill_text_inputs(page, profile, lists, job=job)
     sel = await select_dropdowns(page, profile, lists)
     rad = await click_radios(page, profile, lists)
     return {"text": text, "select": sel, "radio": rad}
