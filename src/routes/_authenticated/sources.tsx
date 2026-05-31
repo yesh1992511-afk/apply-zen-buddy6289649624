@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { triggerScrape, triggerTestSource } from "@/lib/commands";
 import { waitForCommand } from "@/lib/commands";
-import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2, Target, KeyRound, PackagePlus } from "lucide-react";
+import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2, Target, KeyRound, PackagePlus, EyeOff } from "lucide-react";
+import { useDisableNoisySources } from "@/lib/queries/jobs";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { PACKS, configFieldFor, mergePackIntoConfig } from "@/lib/sources/curated-packs";
 
