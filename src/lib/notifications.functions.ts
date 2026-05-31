@@ -131,6 +131,7 @@ export async function sendUserEmailRaw(args: {
   text: string;
   html?: string;
 }): Promise<{ messageId: string }> {
+  const { default: nodemailer } = await import("nodemailer");
   const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
