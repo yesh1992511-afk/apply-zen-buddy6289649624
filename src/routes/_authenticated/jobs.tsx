@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock, Trash2 } from "lucide-react";
+import { ExternalLink, MapPin, Building2, Search, Send, Briefcase, Plus, Check, FileText, Clock, Trash2, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
 import { EmptyState } from "@/components/EmptyState";
