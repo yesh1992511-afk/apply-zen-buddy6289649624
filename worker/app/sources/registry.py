@@ -24,6 +24,9 @@ from .ats_recruitee import RecruiteeBoards
 from .ats_teamtailor import TeamtailorBoards
 from .builtin import BuiltIn
 from .usajobs import USAJobs
+from .infosec_jobs import InfosecJobs
+from .hn_jobs import HNJobs
+from .hn_who_is_hiring import HNWhoIsHiring
 from ..db import db, user_id
 from ..logger import db_log, log
 from ..pipeline.normalize import normalize
