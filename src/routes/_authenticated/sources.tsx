@@ -119,9 +119,24 @@ function SourcesPage() {
           });
         }
       });
+    supabase.from("secrets_meta").select("name,status").then(({ data }) => {
+      const names = new Set((data ?? []).filter((s) => s.status === "set").map((s) => s.name));
+      setSecretNames(names);
+    });
   };
   useEffect(() => { load(); }, []);
   useRealtimeInvalidate({ table: "sources", onChange: load });
+
+  const loadPack = async (s: Source) => {
+    const field = configFieldFor(s.key);
+    if (!field) { toast.error("Pack not supported for this source"); return; }
+    const { config, added } = mergePackIntoConfig(s.key as keyof typeof PACKS.cybersecurity.data, s.config, "cybersecurity");
+    if (added === 0) { toast.info("All companies in the pack are already configured"); return; }
+    const { error } = await supabase.from("sources").update({ config } as never).eq("id", s.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Added ${added} compan${added === 1 ? "y" : "ies"} to ${s.display_name}`);
+    load();
+  };
 
 
   // First-visit autopilot: if the user has zero sources, seed + enable everything
