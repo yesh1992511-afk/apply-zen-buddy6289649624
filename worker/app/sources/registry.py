@@ -67,17 +67,23 @@ async def run_due_sources(force: bool = False) -> None:
             await _run_source(r)
 
 
-async def run_source_by_key(key: str, force: bool = True) -> None:
+async def run_source_by_key(key: str, force: bool = True, match_limit: int | None = None) -> list[str]:
+    """Run a single source. If match_limit is set, stop after that many matched
+    jobs and return their newly-inserted IDs."""
     rows = db().table("sources").select("*").eq("user_id", user_id()).eq("key", key).execute().data or []
+    inserted_ids: list[str] = []
     for r in rows:
-        await _run_source(r)
+        ids = await _run_source(r, match_limit=match_limit)
+        inserted_ids.extend(ids)
+    return inserted_ids
 
 
-async def _run_source(row: dict[str, Any]) -> None:
+async def _run_source(row: dict[str, Any], match_limit: int | None = None) -> list[str]:
+    inserted_matched_ids: list[str] = []
     adapter = ADAPTERS.get(row["key"])
     if not adapter:
         db_log("warning", f"no adapter for source key={row['key']}", scope="sources")
-        return
+        return inserted_matched_ids
 
     run = db().table("automation_runs").insert({
         "user_id": user_id(), "kind": "scrape", "source_key": row["key"],
@@ -105,12 +111,16 @@ async def _run_source(row: dict[str, Any]) -> None:
                 j["user_id"] = user_id()
                 inserted = db().table("jobs").insert(j).execute().data
                 items_out += 1
-                if inserted and j.get("matched") and (j.get("score") or 0) >= 95:
-                    try:
-                        from .. import notify as _notify
-                        _notify.high_score_job({**j, "id": inserted[0]["id"]})
-                    except Exception as _e:
-                        log.warning("high_score_notify_failed", error=str(_e))
+                if inserted and j.get("matched"):
+                    inserted_matched_ids.append(inserted[0]["id"])
+                    if (j.get("score") or 0) >= 95:
+                        try:
+                            from .. import notify as _notify
+                            _notify.high_score_job({**j, "id": inserted[0]["id"]})
+                        except Exception as _e:
+                            log.warning("high_score_notify_failed", error=str(_e))
+                    if match_limit is not None and len(inserted_matched_ids) >= match_limit:
+                        break
             except Exception as e:
                 errors += 1
                 log.warning("normalize_failed", error=str(e))
@@ -138,3 +148,5 @@ async def _run_source(row: dict[str, Any]) -> None:
             "errors": errors + 1, "finished_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", run_id).execute()
         db_log("error", f"source {row['key']} failed: {e}", scope="sources", run_id=run_id)
+    return inserted_matched_ids
+
