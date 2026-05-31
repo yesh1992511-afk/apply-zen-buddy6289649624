@@ -110,8 +110,10 @@ export async function fetchRemoteOK(): Promise<NormalizedJob[]> {
     }));
 }
 
-export async function fetchRemotive(): Promise<NormalizedJob[]> {
-  const data = await fetchJson<{ jobs?: Array<Record<string, unknown>> }>('https://remotive.com/api/remote-jobs');
+export async function fetchRemotive(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
+  const query = ctx?.queries?.find((q) => q.trim()) ?? 'cybersecurity';
+  const url = `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query)}`;
+  const data = await fetchJson<{ jobs?: Array<Record<string, unknown>> }>(url);
   if (!data?.jobs) return [];
   return data.jobs.map((j) => ({
     source_key: 'remotive',
@@ -596,7 +598,7 @@ async function runApifyActor(
 export type ApifyCtx = { queries: string[]; locations: string[] };
 
 const defaultCtx = (ctx?: ApifyCtx): ApifyCtx => ({
-  queries: ctx?.queries?.length ? ctx.queries : ['software engineer'],
+  queries: ctx?.queries?.length ? ctx.queries : ['cybersecurity', 'security engineer', 'SOC analyst'],
   locations: ctx?.locations?.length ? ctx.locations : ['United States'],
 });
 
@@ -802,10 +804,66 @@ export async function fetchApifyGoogleJobs(ctx?: ApifyCtx): Promise<NormalizedJo
 }
 
 // ============================================================
-// InfoSec-Jobs — free public JSON feed for cybersecurity roles
+// InfoSec-Jobs / isecjobs — dedicated cybersecurity job board.
 // ============================================================
+function decodeHtml(input: string): string {
+  return input
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stripTags(input: string): string {
+  return decodeHtml(input.replace(/<[^>]+>/g, ' '));
+}
+
+function parseIsecJobsHtml(html: string): NormalizedJob[] {
+  const abs = (u: string) => (u.startsWith('http') ? u : `https://isecjobs.com${u.startsWith('/') ? '' : '/'}${u}`);
+  const blocks = html.match(/<li class="d-flex justify-content-between position-relative pb-2">[\s\S]*?<\/li>/g) ?? [];
+  return blocks.map((block) => {
+    const linkMatch = block.match(/<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?([^<]+)\s*<\/a>/i);
+    if (!linkMatch) return null;
+    const url = abs(decodeHtml(linkMatch[1]));
+    const title = decodeHtml(linkMatch[2]);
+    const salary = block.match(/<span class="text-bg-secondary px-1 rounded">([^<]+)<\/span>/i)?.[1] ?? '';
+    const tagLine = Array.from(block.matchAll(/<span>([^<]+)<\/span>/g)).map((m) => decodeHtml(m[1])).join(' | ');
+    const right = block.match(/<div class="text-end">([\s\S]*?)<\/div>\s*<\/li>/i)?.[1] ?? '';
+    const plainRight = stripTags(right);
+    const location = plainRight.replace(/(Entry-level|Junior|Mid-level|Intermediate|Senior-level|Expert|Executive-level|Director|Full Time|Part Time|Contract|\d+d ago|\d+h ago)/gi, ' ').replace(/\s+/g, ' ').trim() || 'Remote';
+    const slug = url.split('/job/')[1]?.replace(/\/$/, '') ?? url;
+    return {
+      source_key: 'infosec_jobs',
+      source_job_id: slug,
+      dedupe_hash: mkHash('infosec_jobs', slug, url),
+      title: title.slice(0, 500),
+      company: 'isecjobs',
+      location: location.slice(0, 300),
+      remote: /remote/i.test(location) ? 'remote' : null,
+      url,
+      description: [tagLine, salary ? `Salary: ${decodeHtml(salary)}` : ''].filter(Boolean).join('\n').slice(0, 8000) || null,
+      description_html: null,
+      salary_min: null, salary_max: null, salary_currency: salary.includes('USD') ? 'USD' : null,
+      employment_type: /full time/i.test(plainRight) ? 'full_time' : null,
+      seniority: /(senior|expert)/i.test(plainRight) ? 'senior' : /(entry|junior)/i.test(plainRight) ? 'entry' : null,
+      posted_at: null,
+      raw: { url, title, salary, tagLine, location },
+    } as NormalizedJob;
+  }).filter((j): j is NormalizedJob => j !== null)
+    .filter((j) => {
+      const loc = (j.location ?? '').toLowerCase();
+      return loc.includes('united states') || loc.includes('remote');
+    });
+}
+
 export async function fetchInfosecJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
-  const data = await fetchJson<unknown>('https://infosec-jobs.com/api/jobs?limit=150');
+  const html = await fetchText('https://isecjobs.com/');
+  if (html) return parseIsecJobsHtml(html).slice(0, 150);
+
+  const data = await fetchJson<unknown>('https://isecjobs.com/api/jobs?limit=150');
   let items: Array<Record<string, unknown>> = [];
   if (Array.isArray(data)) items = data as Array<Record<string, unknown>>;
   else if (data && typeof data === 'object') {
@@ -818,7 +876,7 @@ export async function fetchInfosecJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]>
       const title = String(it.title ?? it.position ?? '').trim();
       const company = String(it.company ?? it.company_name ?? '').trim();
       const slug = String(it.slug ?? it.id ?? '');
-      const url = String(it.url ?? it.link ?? (slug ? `https://infosec-jobs.com/job/${slug}` : ''));
+      const url = String(it.url ?? it.link ?? (slug ? `https://isecjobs.com/job/${slug}` : ''));
       if (!title || !company || !url) return null;
       const loc = String(it.location ?? it.city ?? 'Remote').trim();
       const desc = typeof it.description === 'string' ? it.description : (it.summary as string ?? '');
@@ -872,7 +930,7 @@ export async function runSource(spec: SourceSpec, ctx?: ApifyCtx): Promise<Norma
   let jobs: NormalizedJob[];
   switch (spec.provider) {
     case 'remoteok': jobs = await fetchRemoteOK(); break;
-    case 'remotive': jobs = await fetchRemotive(); break;
+    case 'remotive': jobs = await fetchRemotive(ctx); break;
     case 'arbeitnow': jobs = await fetchArbeitnow(); break;
     case 'himalayas': jobs = await fetchHimalayas(); break;
     case 'jobicy': jobs = await fetchJobicy(); break;

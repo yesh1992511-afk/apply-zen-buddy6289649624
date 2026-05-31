@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS trg_auto_queue_matched_job ON public.jobs;
