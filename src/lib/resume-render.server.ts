@@ -237,7 +237,7 @@ function publicationSection(rows: Publication[]): string {
   const items = rows.map((p) => {
     const parts: string[] = [];
     if (p.authors) parts.push(escapeTex(p.authors));
-    parts.push(```${escapeTex(p.title)}.''`);
+    parts.push("``" + escapeTex(p.title) + ".''");
     if (p.venue) parts.push(escapeTex(p.venue) + ".");
     const yr = fmtYear(p.publication_date);
     if (yr) parts.push(`${yr}.`);
