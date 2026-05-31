@@ -54,8 +54,9 @@ async def _save_resume(app_id: str, pdf: bytes, tex: str) -> str:
     pdf_path = f"{uid}/{app_id}/resume.pdf"
     db().storage.from_("resumes").upload(pdf_path, pdf, {"content-type": "application/pdf", "upsert": "true"})
     rid = db().table("resumes").insert({
-        "user_id": uid, "kind": "tailored", "name": f"app-{app_id}",
-        "tex_content": tex, "pdf_storage_path": pdf_path,
+        "user_id": uid, "kind": "tailored" if tex else "static",
+        "name": f"app-{app_id}",
+        "tex_content": tex or None, "pdf_storage_path": pdf_path,
         "application_id": app_id,
     }).execute().data[0]["id"]
     db().table("applications").update({"resume_id": rid}).eq("id", app_id).execute()
