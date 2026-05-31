@@ -1,68 +1,75 @@
-# Plan: Fix scraping so every enabled portal produces leads
+# Plan: Fix Gmail "Unverified" + "Send test email" not arriving
 
-## Root cause recap
+## Root cause
 
-- **REST scrapers crash on status update**: worker writes `last_run_status = "success"`, but the `run_status` enum only allows `running | succeeded | failed`. After inserting jobs, the run row write throws `22P02`, the scheduler marks the source `failed`, and the next cron tick treats it as broken.
-- **Apify sources never ran**: no `APIFY_TOKEN` secret.
-- **USAJobs never ran**: no `USAJOBS_API_KEY` / user-agent email.
-- **Board scrapers have empty / token configs**: greenhouse/lever/ashby/workable/recruitee/teamtailor company lists are 0–2 entries and not cybersecurity-aligned.
+The Notifications page enqueues a `notify_test` row in `worker_commands` and depends on the Python worker to actually open the SMTP connection, send the mail, write `notification_log`, and stamp `gmail_credentials.verified_at`. Your worker is currently **stale** (badge visible top-right). With no worker consuming the queue:
+- the test email is never sent,
+- `last_error` never gets set,
+- `verified_at` stays `NULL`,
+- the badge stays red **Unverified**.
 
-## Fix in three tracks
+The fix is to stop routing this through the worker and do the SMTP send + verification directly from a TanStack server function. That's the only way the button can give the user an authoritative answer in one click.
 
-### Track A — DB compat (unblock the REST scrapers now)
+## Changes
 
-One migration:
+### 1. Add `nodemailer` (Worker-compatible)
 
-1. Add `'success'` as an alias label to `public.run_status` enum so existing worker writes stop crashing. (Keeps `'succeeded'` valid for the new code path.)
-2. Reset stuck sources so the UI and cron pick them back up:
-   ```sql
-   UPDATE sources
-   SET last_run_status = NULL, last_error = NULL
-   WHERE last_error LIKE '%invalid input value for enum run_status%';
-   ```
-   Done via `supabase--insert` (data change, not schema).
+Install `nodemailer` + `@types/nodemailer`. Cloudflare's `nodejs_compat` runtime supports `node:net` + `node:tls`, which is everything nodemailer needs for `smtp.gmail.com:465`. No other packages.
 
-After this, the next `sources-hot-15min` / `sources-warm-*` cron tick will rerun arbeitnow, remotive, remoteok cleanly, plus builtin / weworkremotely / workatastartup which never got their turn.
+### 2. New server fn `verifyAndSendTestEmail` in `src/lib/notifications.functions.ts`
 
-### Track B — Curated company pack for board scrapers
+Replaces the current `sendTestNotification` behavior. Flow:
 
-A new server fn `seedCuratedCompanies({ pack: "cybersecurity" })` in `src/lib/sources/curated.functions.ts` that merges a hand-picked cybersecurity-heavy company list into the right board sources:
+1. Load the user's `gmail_credentials` row (email + app_password).
+2. Build a nodemailer transport: `host: smtp.gmail.com, port: 465, secure: true, auth: { user, pass }`.
+3. `transporter.verify()` — proves the app password is valid against Gmail's SMTP without sending.
+4. `transporter.sendMail({ from: user, to: recipient_email ?? user, subject: "JobPilot test email", text: "...", html: "..." })`.
+5. On success:
+   - `update gmail_credentials set verified_at = now(), last_error = null where user_id = ?`
+   - `insert into notification_log(kind='test', subject, status='sent', recipient_email)`
+   - return `{ ok: true, messageId }`.
+6. On failure (any thrown error):
+   - `update gmail_credentials set verified_at = null, last_error = <message>`
+   - `insert into notification_log(kind='test', status='failed', last_error)`
+   - throw with a human-readable message keyed off Gmail's typical SMTP errors:
+     - `535-5.7.8` → "App password rejected. Make sure 2-Step Verification is on and you used a fresh 16-char App Password (no spaces)."
+     - `534-5.7.9` → "Application-specific password required."
+     - `EAUTH` → "Authentication failed — re-generate the App Password."
+     - `EDNS` / `ECONNECTION` → "Couldn't reach smtp.gmail.com — try again."
+     - fallback: raw error string.
 
-- **Greenhouse**: cloudflare, crowdstrike, datadog, okta, snowflake, gitlab, hashicorp, doordash, robinhood, instacart, coinbase, airtable, asana, plaid, stripe, airbnb, brex, ramp, mongodb, sentry, anthropic, openai (also runs on greenhouse for some)
-- **Lever**: netflix, palantir, attentive, postman, brex, faire, cresta, applied-intuition, anthropic, twitch
-- **Ashby**: openai, ramp, linear, vercel, retool, posthog, lattice, replicate, mercury, watershed, perplexityai, character, gem, deel
-- **Workable**: doctolib, getyourguide, omio, hostaway, vodafone-careers, persistent
-- **SmartRecruiters**: visa, bosch, square, ubisoft, mckesson, atos, allianz, equinix, publicissapient
-- **Recruitee**: catawiki, miro, contentful, dept, omio
-- **Teamtailor**: voi, klarna, polestar, mentimeter, kry, oda
+Keep the existing `sendTestNotification` symbol as a thin alias forwarding to `verifyAndSendTestEmail` so other callers (worker, daily-summary) don't break.
 
-Add a one-click "Load cybersecurity company pack" button on `/sources` for each board source that shows current count and merges (dedup, no overwrite of user additions).
+### 3. Reuse the same transport for real notifications
 
-### Track C — Surface the missing secrets
+Extract `getGmailTransport(userId)` and `sendUserEmail(userId, { subject, text, html, to? })` helpers in `src/lib/notifications.functions.ts`. Update `src/routes/api/public/hooks/daily-summary.ts` to use `sendUserEmail` directly instead of waiting on the worker — that path was also worker-dependent and silently dropping. (Worker-side cover-letter generation is untouched.)
 
-Two `add_secret` prompts triggered from `/sources` (and the Setup checklist already has hooks):
+### 4. UI tweaks in `src/routes/_authenticated/notifications.tsx`
 
-1. `APIFY_TOKEN` — unlocks Indeed, LinkedIn, Glassdoor, ZipRecruiter, Google Jobs, Wellfound. Link to apify.com/account/integrations.
-2. `USAJOBS_API_KEY` + `USAJOBS_USER_AGENT_EMAIL` — unlocks federal cybersecurity roles. Link to developer.usajobs.gov.
+- Switch the **Send test email** button to call `verifyAndSendTestEmail` synchronously; show a spinner, then either a green "Sent ✓" toast with the messageId or a red toast with the specific reason (from the keyed errors above).
+- Auto-refetch the page query on success so the **Unverified** badge flips to **Verified** without a manual refresh.
+- Add a small "Why is this still showing Unverified?" tooltip next to the badge explaining that verification = a successful SMTP test send.
+- Surface `creds.last_error` more prominently when present (red panel with copy button, like /sources rows).
 
-Add a "Missing keys" banner on `/sources` listing exactly which sources are dark because of which secret, with an "Add key" button per group. The readiness checklist already covers proxy/captcha — extend the same pattern.
+### 5. Trim/normalize input
 
-### Track D — Worker patch (delivered in chat, applied on VPS)
+`saveGmailCredentials` already strips whitespace. Also reject if length ≠ 16 after stripping (Gmail App Passwords are always 16). Show that as a field error before saving.
 
-Small diff that:
+### 6. Worker badge clarification (cosmetic)
 
-- Replaces every hardcoded `"success"` literal with `"succeeded"` in source-run reporting (`sources_runner.py` / wherever `last_run_status` is written).
-- Wraps the status-write in a try/except so even if a status string drifts again, the inserted jobs aren't lost and the next source in the tick still runs.
-- For Apify sources, if `APIFY_TOKEN` is missing, write `last_error = "APIFY_TOKEN not configured"` and `last_run_status = 'failed'` instead of silently skipping — so the UI shows why.
+The "Worker stale" pill in the header currently makes users think this whole feature needs the worker. Add a small caption under it on hover: "Notifications send directly from the app — worker only handles applies + scraping."
 
 ## Out of scope
 
-- Rewriting any scraper logic, adding new portals, captcha changes, or anything in the apply pipeline (worker DLQ work from last turn stays as-is).
+- Python worker code, the apply pipeline, scraping, Lovable Email infrastructure.
+- Storing the App Password encrypted (already stored plaintext per existing schema; switching to Vault-encrypted secrets is a separate hardening pass).
+- IMAP OTP reading (still worker-side; only SMTP sending is moved into the app).
 
-## Order of operations
+## Verification steps after build
 
-1. Migration + data reset (Track A) — immediate effect, no user input needed.
-2. Curated pack + secrets banner UI (Tracks B + C in one batch).
-3. Worker patch posted in chat for you to `git apply` on the VPS (Track D).
-
-After step 1 you should see new jobs from at least 5 REST sources within 15 minutes. After step 2 + you adding `APIFY_TOKEN`, the Apify portals (Indeed/LinkedIn/Glassdoor/Zip/Google) start producing within their cadence (60–120 min). After you load the curated pack, board scrapers start producing within 3 hours.
+1. Reload `/notifications`, click **Send test email**.
+2. Expect either:
+   - green toast "Test email sent — check your inbox" + badge flips to **Verified** in <2s, OR
+   - red toast with a specific actionable reason and `last_error` panel populated.
+3. Inspect `notification_log` — should have exactly one new row per click.
+4. The Gmail inbox `yeswanth.986ch@gmail.com` should receive the message within ~5 seconds.

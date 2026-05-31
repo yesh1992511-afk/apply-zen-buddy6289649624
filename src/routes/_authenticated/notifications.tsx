@@ -95,10 +95,10 @@ function NotificationsPage() {
   });
 
   const testMutation = useMutation({
-    mutationFn: () => sendTest({}),
-    onSuccess: () => {
-      toastSaved("Test queued — check your inbox in a few seconds");
-      setTimeout(() => qc.invalidateQueries({ queryKey: ["notifications"] }), 8000);
+    mutationFn: () => sendTest({}) as Promise<{ ok: true; messageId: string; recipient: string }>,
+    onSuccess: (res) => {
+      toastSaved(`Test email sent to ${res.recipient} ✓`);
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (e: Error) => toastError(e),
   });
@@ -193,8 +193,9 @@ function NotificationsPage() {
             >
               myaccount.google.com/apppasswords <ExternalLink className="h-3 w-3" />
             </a>
-            . The worker uses it via IMAP (read OTPs) + SMTP (send notifications). Requires 2-Step
-            Verification enabled on your Google account.
+            . Notifications send directly from the app — clicking <strong>Send test email</strong>{" "}
+            sends a real message via SMTP and flips the badge to Verified if it succeeds. Requires
+            2-Step Verification enabled on your Google account.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -235,7 +236,7 @@ function NotificationsPage() {
               onClick={() => testMutation.mutate()}
               disabled={!creds || testMutation.isPending}
             >
-              Send test email
+              {testMutation.isPending ? "Sending…" : "Send test email"}
             </Button>
             {creds && (
               <Button
