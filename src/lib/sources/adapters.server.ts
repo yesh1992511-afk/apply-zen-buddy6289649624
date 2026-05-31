@@ -598,7 +598,7 @@ async function runApifyActor(
 export type ApifyCtx = { queries: string[]; locations: string[] };
 
 const defaultCtx = (ctx?: ApifyCtx): ApifyCtx => ({
-  queries: ctx?.queries?.length ? ctx.queries : ['software engineer'],
+  queries: ctx?.queries?.length ? ctx.queries : ['cybersecurity', 'security engineer', 'SOC analyst'],
   locations: ctx?.locations?.length ? ctx.locations : ['United States'],
 });
 
@@ -925,7 +925,7 @@ export async function runSource(spec: SourceSpec, ctx?: ApifyCtx): Promise<Norma
   let jobs: NormalizedJob[];
   switch (spec.provider) {
     case 'remoteok': jobs = await fetchRemoteOK(); break;
-    case 'remotive': jobs = await fetchRemotive(); break;
+    case 'remotive': jobs = await fetchRemotive(ctx); break;
     case 'arbeitnow': jobs = await fetchArbeitnow(); break;
     case 'himalayas': jobs = await fetchHimalayas(); break;
     case 'jobicy': jobs = await fetchJobicy(); break;
