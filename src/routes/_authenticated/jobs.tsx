@@ -63,6 +63,9 @@ function JobsPage() {
   const rescore = useRescoreAllJobs();
   const loosen = useLoosenActiveFilter();
   const disableNoisy = useDisableNoisySources();
+  const budgetQuery = useDailyApplyBudget();
+  const atCap = budgetQuery.data?.atCap ?? false;
+  const capLabel = budgetQuery.data ? `${budgetQuery.data.used}/${budgetQuery.data.cap} today` : "";
 
   const jobs = jobsQuery.data ?? [];
   const savedFilters = filtersQuery.data ?? [];
