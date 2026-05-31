@@ -1,80 +1,59 @@
-# Why you got 2000 jobs but 0 matches
+## What I found
 
-I dug into the database and the scrapers. The system is **not** broken at random — there are two specific, fixable bugs:
+- The `jobs` table is currently empty, so there are no jobs for the dashboard to show.
+- `automation_settings.enabled` is currently `false`, so cron only processes the user when triggered manually with a logged-in token or forced user ID.
+- Your cybersecurity filter exists and is active: `Cybersecurity — USA`, `min_score = 20`, cyber keywords applied.
+- The latest source run shows old generic sources still ran recently (`lever:mistral`, `usajobs:software`), meaning the previous source refactor likely has not been fully deployed/activated in the live runner yet.
+- Apify is not throwing token errors in the latest tier run, but every Apify provider returned `0` items. That points to actor input/schema mismatch or actor choice, not your API key.
+- `infosec_jobs` exists in code/database but has never run yet.
+- A USAJobs run had a salary parsing insert error: `invalid input syntax for type integer: "43.54"`, which can cause chunks of otherwise valid jobs to be skipped.
 
-## Diagnosis
+## Why you are not getting cybersecurity jobs
 
-**1. All 6 Apify sources return 0 jobs (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Wellfound, Google Jobs).**
-Your APIFY_TOKEN works. The bug is in the adapter: it calls
-`/v2/acts/{actor}/runs/last/dataset/items` — that endpoint only returns the dataset of an actor's **last completed run**. It never starts a new run. So unless you've manually scheduled those actors on apify.com (you haven't), the dataset is empty and the adapter happily returns `[]` and reports "succeeded, 0 items".
+The system is currently scraping and recording source runs, but the jobs are not being saved now. The live runner is either still using stale source data/routing or failing inserts for some sources. Also, Apify is configured with actors that return `0` with the current payload shape, so your valid API key is not enough — the actor inputs must match what each actor expects.
 
-The Python worker has the correct behavior (POSTs `run-sync-get-dataset-items` with your keywords) — but the cron path uses the TanStack route, which doesn't.
+## Plan to fix it
 
-**2. The 2088 jobs we DO have are almost all not cybersecurity, and the country filter drops the rest.**
+1. **Make source runs actually persist jobs**
+   - Fix numeric salary normalization so decimal salary values from USAJobs cannot break job inserts.
+   - Ensure source upserts do not report success while saving zero jobs because of preventable mapping errors.
 
-The active filter is `Cybersecurity — USA`, keywords like `security engineer`, `SOC analyst`, `penetration tester`, locations `[United States]`.
+2. **Make cybersecurity sources first-class**
+   - Force the hot tier to include `infosec_jobs` and verify it is called.
+   - Keep generic remote boards, but add a pre-filter so they only save cybersecurity-relevant jobs instead of filling the pipeline with unrelated roles.
+   - Ensure the warm tier uses the current cyber-focused company seed list, not old generic slugs.
 
-But the boards being scraped are generic engineering:
-```
-greenhouse:mongodb       429 jobs
-usajobs                  411
-greenhouse:roblox        260
-greenhouse:airbnb        236
-lever:mistral            165
-jobicy / arbeitnow       100 each
-remoteok                 100
-```
-None of these are cyber-focused, so almost nothing hits the cyber keywords. The few that might match get killed by the country gate in `match_job_to_filters`: it requires the job's `location` string to contain `"united states"`, `" usa"`, `", us"`, `"remote"`, `"anywhere"`, or a US state name — jobs with a blank location or `"New York, US"` (no comma-space) fall through and are marked country_ok=false.
+3. **Fix Apify actor execution**
+   - Replace/adjust Apify payloads per actor so each actor receives the query/location fields it actually expects.
+   - Treat `0 items` from Apify as a visible warning in source health when the actor ran but returned nothing for cyber keywords.
+   - Keep using your existing `APIFY_TOKEN`; no new key needed.
 
-Cybersecurity-specialist boards (**InfoSec-Jobs, CyberSecJobs, ClearedJobs, HN cybersec**) exist in the Python worker but are **not** wired into the TanStack adapter set the cron actually runs.
+4. **Turn matching into a stricter cybersecurity gate**
+   - Only save or match jobs that contain cyber keywords in title/description/company unless they come from a dedicated cybersecurity board.
+   - Keep your exclude list active for sales, marketing, recruiter, intern, physical security, guard, etc.
 
-## Fix plan
+5. **Run a controlled refresh after implementation**
+   - Re-enable automation if you want it running continuously.
+   - Trigger hot, USAJobs, warm, and Apify tiers for your user.
+   - Check counts by source: fetched, inserted, matched, discarded.
+   - Show sample matched jobs with title/company/source/score so we can verify relevance.
 
-### 1. Make Apify actually scrape (TanStack adapter)
-File: `src/lib/sources/adapters.server.ts`
+## Technical details
 
-Replace `fetchApifyLastRun` with `runApifyActor` that POSTs to
-`https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token=…&timeout=120`
-with a per-actor payload built from `automation_settings.target_titles` + `target_locations`:
+Files likely involved:
 
-- `bebity~linkedin-jobs-scraper`: `{ queries:[…], locations:[…], rows:100, proxy:{useApifyProxy:true} }`
-- `misceres~indeed-scraper`: `{ position, country:"US", location, maxItems:100 }`
-- `bebity~glassdoor-jobs-scraper` / `bebity~ziprecruiter-scraper`: same shape as LinkedIn
-- `dan.poltawski~google-jobs-scraper`: `{ queries, countryCode:"us", maxPagesPerQuery:2 }`
-- `epctex~wellfound-scraper`: `{ search:queries[0], maxItems:100 }`
+- `src/lib/sources/adapters.server.ts`
+  - Normalize salary numbers safely.
+  - Fix Apify actor payloads and item mapping.
+  - Add cybersecurity relevance filtering for non-cyber sources.
 
-Cap each actor at ~120s, errors → mark source `failed` with the upstream message (right now they all silently say "succeeded, 0").
+- `src/routes/api/public/sources/run-tier.ts`
+  - Make source health more honest.
+  - Ensure active user settings drive source context.
 
-### 2. Add cybersecurity-specific sources
-File: `src/lib/sources/adapters.server.ts`
+- Database data updates after code changes
+  - Re-enable automation if desired.
+  - Clear stale source health rows if they are misleading.
+  - Trigger new tier runs and inspect saved jobs.
 
-Port these adapters from the Python worker (`worker/app/sources/`) into the TanStack module:
-- `infosec-jobs.com` (JSON feed)
-- `cybersecjobs.com` RSS
-- `clearedjobs.net` RSS
-- `hn:who-is-hiring` (filter latest thread for cyber keywords)
-
-Register them in `AGGREGATOR_PROVIDERS` so the hot tier picks them up every 15 min.
-
-### 3. Loosen `match_job_to_filters` country gate
-Migration:
-
-- Treat **blank/empty location** as `country_ok = true` (don't drop — many ATS feeds omit location).
-- Extend the US regex to also match `"\m(us|usa)\M"` as a standalone word at the end of the string, so `"New York, US"` and `"Remote — US"` pass.
-- Leave the explicit non-US case alone (jobs in "Bangalore, India" still drop).
-
-### 4. Trim the generic ATS seed list
-File: `src/lib/sources/seed-slugs.ts` — keep slugs that actually post security roles (CrowdStrike, Cloudflare, Palo Alto, Datadog, HashiCorp, Snyk, Wiz, Okta, 1Password, Tailscale, Cisco-Talos via greenhouse where available; drop pure consumer/non-cyber boards like mongodb/roblox/airbnb/mistral that flood your queue).
-
-### 5. Re-run and rescore
-After deploy:
-- Run `DELETE FROM jobs WHERE matched = false AND scraped_at < now()` to clear the noise.
-- Trigger `/api/public/sources/run-tier?tier=hot`, `…?tier=apify`, `…?tier=warm&shard=0` manually so you see fresh, scored, cyber-targeted jobs in minutes.
-
-## Expected outcome
-- Apify sources return real LinkedIn/Indeed/Glassdoor postings filtered by `cybersecurity` + `United States` (no manual Apify scheduling needed).
-- New cyber-specialist boards feed dozens of relevant matches per run.
-- The relaxed country gate stops silently killing US jobs with sloppy location strings.
-- Your Jobs page should fill with scored, matched roles within one hot+apify cycle.
-
-Approve and I'll implement.
+No schema change is expected unless we decide to store more detailed Apify diagnostics.
