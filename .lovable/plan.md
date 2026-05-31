@@ -1,40 +1,39 @@
-# Make compiled resume PDFs visible (bypass ad blockers)
+# Move Resume into its own sidebar route with split-view PDF preview
 
-## Problem
-Opera/uBlock blocks the Supabase Storage subdomain (`iarfebnnnoswymgfvnel.supabase.co`), so the compiled resume PDF fails to load in the preview iframe with `ERR_BLOCKED_BY_CLIENT`.
-
-## Fix
-Stream the PDF through our own app domain so the browser only sees a same-origin URL.
+## Goal
+- Resume gets its own top-level page (separate from Profile).
+- Layout: editor/templates on the LEFT half, sticky PDF preview on the RIGHT half (full viewport height).
 
 ## Changes
 
-### 1. New server route — `src/routes/api/pdf.$id.ts`
-- Path: `/api/pdf/$id` where `$id` is the resume row id
-- `GET` handler:
-  - Require auth via `requireSupabaseAuth` middleware (or check session cookie) so users can only fetch their own resume
-  - Look up `resumes` row by id, confirm `user_id = auth.uid()`, read its `storage_path`
-  - Use `supabaseAdmin.storage.from('resumes').download(storage_path)` to get the bytes
-  - Return `new Response(blob, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="resume.pdf"', 'Cache-Control': 'private, max-age=60' } })`
-  - 404 if missing, 403 if not owner, 401 if unauthenticated
+### 1. New route — `src/routes/_authenticated/resume.tsx`
+- Standard `_authenticated` route, `head()` with "Resume — JobPilot" meta.
+- Layout: `grid grid-cols-1 lg:grid-cols-2 gap-4 h-[calc(100vh-4rem)]`
+  - **Left column** (scrollable, `overflow-y-auto`):
+    - "Add a LaTeX template" card (name input + Open .tex + Save & compile)
+    - "Templates" list card (select / set default / delete)
+    - "Edit LaTeX" textarea card (only when a template is selected)
+    - "Tailored preview (top job)" card
+  - **Right column** (sticky, full height):
+    - PDF preview iframe filling the column (`h-full w-full`)
+    - Header shows currently-previewed template name + a small "Tailored / Template" toggle if a tailored preview also exists
+    - Empty/compiling/blocked states stay the same
 
-Note: Server routes can't use `requireSupabaseAuth` middleware (that's for serverFns). We'll read the `Authorization: Bearer` header or the Supabase auth cookie, validate it with `supabaseAdmin.auth.getUser(token)`, then check ownership.
+### 2. Extract the existing `ResumeUploader` from `profile.tsx`
+- Move the component (lines 679–924 of `src/routes/_authenticated/profile.tsx`) into the new route file, then refactor the JSX into the two-column layout above. No business logic changes — same `useState`, same `getResumePdfUrl`, same `triggerCompileResume`, etc.
+- Remove the `<TabsContent value="resume"><ResumeUploader /></TabsContent>` and the `<TabsTrigger value="resume">Resume</TabsTrigger>` from `profile.tsx`. Profile keeps Personal / Experience / Education / Skills / Projects tabs only.
 
-### 2. Update PDF viewer call sites
-- Replace `getResumePdfUrl()` (signed Supabase URL) with `/api/pdf/${resumeId}` in components that embed the compiled resume preview (e.g. resume preview dialog, profile, applications detail).
-- Keep `getResumePdfUrl` for explicit "download" links if desired, but switch the iframe/embed `src` to the proxy route.
-
-### 3. Pass auth to the proxy
-Since `<iframe src>` can't set headers, the route must accept either:
-- the Supabase auth cookie (works because same-origin), OR
-- a short-lived signed token in the URL (`?token=...`)
-
-Simplest: rely on the Supabase auth cookie that's already on the app's domain. Validate via `supabaseAdmin.auth.getUser(accessTokenFromCookie)`.
+### 3. Sidebar — `src/components/AppSidebar.tsx`
+- Add `{ title: "Resume", to: "/resume", icon: FileText }` to the `profile` group (placed right after Profile).
+- Use a different icon than Automation (which already uses FileText) — use `FileSignature` or `FileBadge` from lucide.
 
 ## Files touched
-- `src/routes/api/pdf.$id.ts` (new)
-- 1–2 components that render the compiled PDF preview (search for `getResumePdfUrl` and iframe/embed of resume URL)
+- `src/routes/_authenticated/resume.tsx` (new)
+- `src/routes/_authenticated/profile.tsx` (remove Resume tab + ResumeUploader)
+- `src/components/AppSidebar.tsx` (add nav item)
 
 ## Out of scope
-- No DB schema changes
-- No worker changes
-- No styling changes
+- No schema changes.
+- No worker changes.
+- Resume compile/AI tailoring logic unchanged.
+- Cover-letter / application PDF previews unchanged.
