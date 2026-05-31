@@ -15,7 +15,7 @@ import { waitForCommand } from "@/lib/commands";
 import { Play, FlaskConical, Database, Trash2, Plus, CheckCircle2, AlertCircle, Loader2, Target, KeyRound, PackagePlus, EyeOff } from "lucide-react";
 import { useDisableNoisySources } from "@/lib/queries/jobs";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
-import { PACKS, configFieldFor, mergePackIntoConfig } from "@/lib/sources/curated-packs";
+import { PACKS, PACK_KEYS, configFieldFor, mergePackIntoConfig, type PackKey } from "@/lib/sources/curated-packs";
 
 import { PageHeader } from "@/components/PageHeader";
 import { PortalBadge } from "@/components/PortalBadge";
@@ -81,6 +81,13 @@ const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_s
   { key: "workable_boards", display_name: "Workable boards", kind: "board", cadence_minutes: 180, config: { subdomains: [] } },
   { key: "recruitee_boards", display_name: "Recruitee boards", kind: "board", cadence_minutes: 240, config: { companies: [] } },
   { key: "teamtailor_boards", display_name: "Teamtailor boards", kind: "board", cadence_minutes: 240, config: { companies: [], api_keys: {} } },
+  // Enterprise ATS adapters (new)
+  { key: "workday_boards", display_name: "Workday CXS boards", kind: "board", cadence_minutes: 240, config: { sites: [] } },
+  { key: "bamboohr_boards", display_name: "BambooHR boards", kind: "board", cadence_minutes: 240, config: { subdomains: [] } },
+  { key: "personio_boards", display_name: "Personio boards", kind: "board", cadence_minutes: 240, config: { subdomains: [] } },
+  { key: "breezyhr_boards", display_name: "Breezy HR boards", kind: "board", cadence_minutes: 240, config: { companies: [] } },
+  { key: "jobvite_boards", display_name: "Jobvite boards", kind: "board", cadence_minutes: 240, config: { companies: [] } },
+  { key: "icims_boards", display_name: "iCIMS career portals", kind: "board", cadence_minutes: 240, config: { portals: [] } },
 ];
 
 
@@ -131,16 +138,37 @@ function SourcesPage() {
   useEffect(() => { load(); }, []);
   useRealtimeInvalidate({ table: "sources", onChange: load });
 
-  const loadPack = async (s: Source) => {
+  const loadPack = async (s: Source, pack: PackKey = "cybersecurity") => {
     const field = configFieldFor(s.key);
     if (!field) { toast.error("Pack not supported for this source"); return; }
-    const { config, added } = mergePackIntoConfig(s.key as keyof typeof PACKS.cybersecurity.data, s.config, "cybersecurity");
+    const { config, added } = mergePackIntoConfig(s.key, s.config, pack);
     if (added === 0) { toast.info("All companies in the pack are already configured"); return; }
     const { error } = await supabase.from("sources").update({ config } as never).eq("id", s.id);
     if (error) { toast.error(error.message); return; }
-    toast.success(`Added ${added} compan${added === 1 ? "y" : "ies"} to ${s.display_name}`);
+    toast.success(`Added ${added} compan${added === 1 ? "y" : "ies"} from "${PACKS[pack].label}" to ${s.display_name}`);
     load();
   };
+
+  /** Apply a curated pack across every relevant board source in one click. */
+  const applyPackEverywhere = async (pack: PackKey) => {
+    let totalAdded = 0;
+    let touched = 0;
+    for (const s of sources) {
+      const field = configFieldFor(s.key);
+      if (!field) continue;
+      const { config, added } = mergePackIntoConfig(s.key, s.config, pack);
+      if (added === 0) continue;
+      const { error } = await supabase.from("sources").update({ config } as never).eq("id", s.id);
+      if (error) { toast.error(`${s.display_name}: ${error.message}`); continue; }
+      totalAdded += added;
+      touched++;
+    }
+    if (totalAdded === 0) toast.info(`Pack "${PACKS[pack].label}" already applied`);
+    else toast.success(`Applied "${PACKS[pack].label}": +${totalAdded} compan${totalAdded === 1 ? "y" : "ies"} across ${touched} source${touched === 1 ? "" : "s"}`);
+    load();
+  };
+
+
 
 
   // First-visit autopilot: if the user has zero sources, seed + enable everything
@@ -344,6 +372,39 @@ function SourcesPage() {
           </div>
         }
       />
+
+      {/* Curated company packs — one-click load 30–100+ company boards across all ATS sources */}
+      <div className="rounded-xl border border-border/60 bg-card p-5">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="h-10 w-10 rounded-full bg-primary/15 flex items-center justify-center">
+            <PackagePlus className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-heading font-semibold">Curated company packs</h3>
+            <p className="text-xs text-muted-foreground">
+              One click loads pre-vetted company boards into every supported ATS source (Greenhouse, Lever, Ashby, Workday, BambooHR, etc.).
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {PACK_KEYS.map((key) => {
+            const p = PACKS[key];
+            return (
+              <div key={key} className="rounded-lg border border-border/60 bg-surface-1/40 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm">{p.label}</div>
+                    <div className="text-xs text-muted-foreground line-clamp-2">{p.description}</div>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => applyPackEverywhere(key)} className="gap-1.5 shrink-0">
+                    <Plus className="h-3.5 w-3.5" /> Apply
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Job Target — drives keywords across every source + default filter */}
       <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/10 via-card to-card p-5">

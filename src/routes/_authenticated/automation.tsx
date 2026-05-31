@@ -49,39 +49,48 @@ export const Route = createFileRoute("/_authenticated/automation")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
-const DECODO_SECRETS = ["DECODO_USERNAME", "DECODO_PASSWORD", "DECODO_HOST"] as const;
+const SECRET_GROUPS = {
+  decodo: { label: "Decodo residential proxy", names: ["DECODO_USERNAME", "DECODO_PASSWORD", "DECODO_HOST"] as const, hint: "Sticky session per portal, rotating exit IPs." },
+  capsolver: { label: "CapSolver", names: ["CAPSOLVER_API_KEY"] as const, hint: "Solves reCAPTCHA, hCaptcha, image puzzles during apply." },
+  openai: { label: "OpenAI", names: ["OPENAI_API_KEY", "OPENAI_MODEL"] as const, hint: "Used for resume tailoring + cover-letter generation." },
+  deepseek: { label: "DeepSeek (reasoner)", names: ["DEEPSEEK_API_KEY", "DEEPSEEK_REASONER_MODEL", "DEEPSEEK_CHAT_MODEL"] as const, hint: "Cheap reasoning model for JD analysis." },
+  gmail: { label: "Gmail OAuth (OTP)", names: ["GMAIL_OAUTH_CLIENT_ID", "GMAIL_OAUTH_CLIENT_SECRET", "GMAIL_OAUTH_REFRESH_TOKEN", "GMAIL_EMAIL"] as const, hint: "Reads OTP / email-verification codes during apply." },
+  apply: { label: "Apply identity", names: ["APPLY_EMAIL", "APPLY_PASSWORD", "APPLY_DEFAULT_PHONE"] as const, hint: "Default credentials worker uses to log in to portals." },
+} as const;
 
-function DecodoStatus() {
+type SecretGroupKey = keyof typeof SECRET_GROUPS;
+
+function SecretStatusPanel({ group }: { group: SecretGroupKey }) {
+  const cfg = SECRET_GROUPS[group];
+  const names = cfg.names as readonly string[];
   const q = useQuery({
-    queryKey: ["secrets_meta", "decodo"],
+    queryKey: ["secrets_meta", group],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("secrets_meta")
         .select("name,status")
-        .in("name", DECODO_SECRETS as unknown as string[]);
+        .in("name", names as unknown as string[]);
       if (error) throw new Error(error.message);
       return (data ?? []) as Array<{ name: string; status: string }>;
     },
     staleTime: 30_000,
   });
   const setNames = new Set((q.data ?? []).filter((r) => r.status === "set").map((r) => r.name));
-  const missing = DECODO_SECRETS.filter((n) => !setNames.has(n));
+  const missing = names.filter((n) => !setNames.has(n));
   const allSet = missing.length === 0;
-
   return (
-    <div className="mt-2 rounded-md border border-border/60 bg-surface-1/40 p-3 text-xs">
+    <div className="rounded-md border border-border/60 bg-surface-1/40 p-3 text-xs">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Badge variant={allSet ? "secondary" : "outline"} className={allSet ? "bg-emerald-500/15 text-emerald-300" : "text-amber-300"}>
+        <div className="flex items-center gap-2 min-w-0">
+          <Badge variant={allSet ? "secondary" : "outline"} className={allSet ? "bg-emerald-500/15 text-emerald-300 shrink-0" : "text-amber-300 shrink-0"}>
             {allSet ? "Configured" : "Not configured"}
           </Badge>
-          <span className="text-muted-foreground">
-            Decodo residential proxy — sticky session per portal, rotating exit IPs.
-          </span>
+          <span className="font-medium truncate">{cfg.label}</span>
         </div>
       </div>
-      <ul className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-3">
-        {DECODO_SECRETS.map((n) => {
+      <p className="mt-1 text-muted-foreground">{cfg.hint}</p>
+      <ul className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+        {names.map((n) => {
           const ok = setNames.has(n);
           return (
             <li key={n} className="flex items-center gap-2">
@@ -93,11 +102,15 @@ function DecodoStatus() {
       </ul>
       {!allSet && (
         <p className="mt-2 text-muted-foreground">
-          Add the missing secret{missing.length === 1 ? "" : "s"} ({missing.join(", ")}) in Lovable Cloud → Secrets. The worker reads them at runtime.
+          Add the missing secret{missing.length === 1 ? "" : "s"} in Lovable Cloud → Secrets. The worker reads them at runtime.
         </p>
       )}
     </div>
   );
+}
+
+function DecodoStatus() {
+  return <SecretStatusPanel group="decodo" />;
 }
 
 function AutomationPage() {
@@ -373,6 +386,20 @@ function AutomationPage() {
               placeholder="deepseek/deepseek-reasoner"
             />
           </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Worker secrets"
+        description="Status of every secret the worker pulls from Lovable Cloud at runtime. Green = ready, amber = missing."
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <SecretStatusPanel group="decodo" />
+          <SecretStatusPanel group="capsolver" />
+          <SecretStatusPanel group="openai" />
+          <SecretStatusPanel group="deepseek" />
+          <SecretStatusPanel group="gmail" />
+          <SecretStatusPanel group="apply" />
         </div>
       </SectionCard>
     </div>

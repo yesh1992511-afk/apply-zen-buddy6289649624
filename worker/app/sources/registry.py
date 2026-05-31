@@ -1,4 +1,5 @@
 """Source registry + orchestration."""
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Any
 from .base import Source
@@ -22,6 +23,12 @@ from .ats_smartrecruiters import SmartRecruitersBoards
 from .ats_workable import WorkableBoards
 from .ats_recruitee import RecruiteeBoards
 from .ats_teamtailor import TeamtailorBoards
+from .ats_workday import WorkdayBoards
+from .ats_bamboohr import BambooHRBoards
+from .ats_personio import PersonioBoards
+from .ats_breezyhr import BreezyHRBoards
+from .ats_jobvite import JobviteBoards
+from .ats_icims import ICIMSBoards
 from .builtin import BuiltIn
 from .usajobs import USAJobs
 from .infosec_jobs import InfosecJobs
@@ -46,6 +53,9 @@ ADAPTERS: dict[str, Source] = {a.key: a for a in [
     # Startups + direct ATS boards
     WorkAtAStartup(), GreenhouseBoards(), LeverBoards(), AshbyBoards(),
     SmartRecruitersBoards(), WorkableBoards(), RecruiteeBoards(), TeamtailorBoards(),
+    # Enterprise ATS (new)
+    WorkdayBoards(), BambooHRBoards(), PersonioBoards(), BreezyHRBoards(),
+    JobviteBoards(), ICIMSBoards(),
     # US tech boards + federal
     BuiltIn(), USAJobs(),
     # Cybersecurity-focused free sources
@@ -65,11 +75,29 @@ def _due(row: dict[str, Any], now: datetime) -> bool:
 
 
 async def run_due_sources(force: bool = False) -> None:
+    """Run all due sources in parallel (capped by user parallelism setting)."""
     now = datetime.now(timezone.utc)
     rows = db().table("sources").select("*").eq("user_id", user_id()).execute().data or []
-    for r in rows:
-        if force or _due(r, now):
-            await _run_source(r)
+    due = [r for r in rows if force or _due(r, now)]
+    if not due:
+        return
+    # Read user's parallelism preference (1-10) → scrape concurrency = parallelism * 4 (cap 16).
+    s = db().table("automation_settings").select("parallelism").eq(
+        "user_id", user_id()
+    ).single().execute().data or {}
+    concurrency = max(2, min(int(s.get("parallelism") or 2) * 4, 16))
+    sem = asyncio.Semaphore(concurrency)
+
+    async def _bounded(r: dict[str, Any]) -> None:
+        async with sem:
+            try:
+                await asyncio.wait_for(_run_source(r), timeout=180)
+            except asyncio.TimeoutError:
+                db_log("warning", f"source {r['key']} timed out after 180s", scope="sources")
+            except Exception as e:
+                db_log("error", f"source {r['key']} crashed: {e}", scope="sources")
+
+    await asyncio.gather(*[_bounded(r) for r in due], return_exceptions=True)
 
 
 async def run_source_by_key(key: str, force: bool = True, match_limit: int | None = None) -> list[str]:
@@ -95,7 +123,7 @@ async def _run_source(row: dict[str, Any], match_limit: int | None = None) -> li
     }).execute().data[0]
     run_id = run["id"]
 
-    items_in = items_out = errors = 0
+    items_in = items_out = errors = filtered_out = 0
     try:
         items = list(await adapter.fetch(row.get("config") or {}))
         items_in = len(items)
@@ -106,17 +134,18 @@ async def _run_source(row: dict[str, Any], match_limit: int | None = None) -> li
                 j["dedupe_hash"] = dedupe_hash(j["title"], j["company"], j["url"])
                 if exists(j["dedupe_hash"]):
                     continue
+                # Matched-only ingest: drop unmatched at the source. Jobs page
+                # is matched-only from here on — never store discarded rows.
                 if active_filter and not passes(j, active_filter):
-                    j["matched"] = False
-                    j["score"] = 0
-                else:
-                    j["matched"] = True
-                    j["score"] = match_score(j, active_filter) if active_filter else 50
-                    j["matched_filter_ids"] = [active_filter["id"]] if active_filter else []
+                    filtered_out += 1
+                    continue
+                j["matched"] = True
+                j["score"] = match_score(j, active_filter) if active_filter else 50
+                j["matched_filter_ids"] = [active_filter["id"]] if active_filter else []
                 j["user_id"] = user_id()
                 inserted = db().table("jobs").insert(j).execute().data
                 items_out += 1
-                if inserted and j.get("matched"):
+                if inserted:
                     inserted_matched_ids.append(inserted[0]["id"])
                     if (j.get("score") or 0) >= 95:
                         try:
@@ -139,10 +168,11 @@ async def _run_source(row: dict[str, Any], match_limit: int | None = None) -> li
         db().table("automation_runs").update({
             "status": "success", "items_in": items_in, "items_out": items_out,
             "errors": errors, "finished_at": datetime.now(timezone.utc).isoformat(),
+            "metadata": {"filtered_out": filtered_out, "kept": items_out},
         }).eq("id", run_id).execute()
-        db_log("info", f"scraped {items_out}/{items_in} from {row['key']}",
+        db_log("info", f"scraped {items_out}/{items_in} from {row['key']} (filtered {filtered_out})",
                scope="sources", run_id=run_id,
-               metadata={"items_in": items_in, "items_out": items_out, "errors": errors})
+               metadata={"items_in": items_in, "items_out": items_out, "errors": errors, "filtered_out": filtered_out})
     except Exception as e:
         db().table("sources").update({
             "last_run_at": datetime.now(timezone.utc).isoformat(),
