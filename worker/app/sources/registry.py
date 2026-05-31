@@ -123,7 +123,7 @@ async def _run_source(row: dict[str, Any], match_limit: int | None = None) -> li
     }).execute().data[0]
     run_id = run["id"]
 
-    items_in = items_out = errors = 0
+    items_in = items_out = errors = filtered_out = 0
     try:
         items = list(await adapter.fetch(row.get("config") or {}))
         items_in = len(items)
@@ -134,17 +134,18 @@ async def _run_source(row: dict[str, Any], match_limit: int | None = None) -> li
                 j["dedupe_hash"] = dedupe_hash(j["title"], j["company"], j["url"])
                 if exists(j["dedupe_hash"]):
                     continue
+                # Matched-only ingest: drop unmatched at the source. Jobs page
+                # is matched-only from here on — never store discarded rows.
                 if active_filter and not passes(j, active_filter):
-                    j["matched"] = False
-                    j["score"] = 0
-                else:
-                    j["matched"] = True
-                    j["score"] = match_score(j, active_filter) if active_filter else 50
-                    j["matched_filter_ids"] = [active_filter["id"]] if active_filter else []
+                    filtered_out += 1
+                    continue
+                j["matched"] = True
+                j["score"] = match_score(j, active_filter) if active_filter else 50
+                j["matched_filter_ids"] = [active_filter["id"]] if active_filter else []
                 j["user_id"] = user_id()
                 inserted = db().table("jobs").insert(j).execute().data
                 items_out += 1
-                if inserted and j.get("matched"):
+                if inserted:
                     inserted_matched_ids.append(inserted[0]["id"])
                     if (j.get("score") or 0) >= 95:
                         try:
@@ -167,10 +168,11 @@ async def _run_source(row: dict[str, Any], match_limit: int | None = None) -> li
         db().table("automation_runs").update({
             "status": "success", "items_in": items_in, "items_out": items_out,
             "errors": errors, "finished_at": datetime.now(timezone.utc).isoformat(),
+            "metadata": {"filtered_out": filtered_out, "kept": items_out},
         }).eq("id", run_id).execute()
-        db_log("info", f"scraped {items_out}/{items_in} from {row['key']}",
+        db_log("info", f"scraped {items_out}/{items_in} from {row['key']} (filtered {filtered_out})",
                scope="sources", run_id=run_id,
-               metadata={"items_in": items_in, "items_out": items_out, "errors": errors})
+               metadata={"items_in": items_in, "items_out": items_out, "errors": errors, "filtered_out": filtered_out})
     except Exception as e:
         db().table("sources").update({
             "last_run_at": datetime.now(timezone.utc).isoformat(),
