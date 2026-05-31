@@ -83,12 +83,42 @@ function SetupPage() {
   const sshCmd = "ssh root@147.93.47.24";
   const deployCmd = `cd /root/jobpilot/worker && bash bootstrap.sh`;
 
+  const readiness = useReadiness();
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <PageHeader
         title="Worker setup"
-        description="Verify the system end-to-end with one click, then read the optional VPS instructions below."
+        description="Track every prerequisite for end-to-end auto-apply. Green = ready, amber = optional, red = blocking."
       />
+
+      {/* Readiness checklist — the source of truth */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-success" /> System readiness
+            </CardTitle>
+            <CardDescription>
+              {readiness.data
+                ? `${readiness.data.okCount} ready · ${readiness.data.warnCount} warning · ${readiness.data.failCount} blocking`
+                : "Loading checklist…"}
+            </CardDescription>
+          </div>
+          {readiness.data?.ready ? (
+            <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-600">
+              <CheckCircle2 className="h-3 w-3" /> Autopilot ready
+            </Badge>
+          ) : (
+            <Badge variant="destructive" className="gap-1">
+              <AlertCircle className="h-3 w-3" /> Autopilot blocked
+            </Badge>
+          )}
+        </CardHeader>
+        <CardContent>
+          <ReadinessChecklist />
+        </CardContent>
+      </Card>
 
       {/* Mac-level "Test pipeline" card — the most important thing on this page */}
       <Card className="border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card">
