@@ -41,7 +41,7 @@ export const getSystemReadiness = createServerFn({ method: "GET" })
       supabase.from("resumes").select("id,is_default,tex_content").eq("user_id", userId),
       supabase.from("gmail_credentials").select("verified_at,last_error,email").eq("user_id", userId).maybeSingle(),
       supabase.from("worker_heartbeat").select("last_seen,version").eq("user_id", userId).maybeSingle(),
-      supabase.from("automation_settings").select("enabled,target_titles,target_country").eq("user_id", userId).maybeSingle(),
+      supabase.from("automation_settings").select("enabled,target_titles,target_country,proxy_provider").eq("user_id", userId).maybeSingle(),
       supabase.from("sources").select("id,enabled").eq("user_id", userId),
       supabase.from("filters").select("id,is_default").eq("user_id", userId),
       supabase.from("secrets_meta").select("name,status,category").eq("user_id", userId),
