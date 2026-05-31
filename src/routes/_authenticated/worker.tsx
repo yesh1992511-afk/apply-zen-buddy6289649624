@@ -25,6 +25,27 @@ type Cmd = {
   last_error: string | null;
   payload: Record<string, unknown> | null;
 };
+type Run = {
+  id: string;
+  kind: string;
+  source_key: string | null;
+  status: string;
+  items_in: number | null;
+  items_out: number | null;
+  errors: number | null;
+  started_at: string;
+  finished_at: string | null;
+};
+type SourceHealth = {
+  key: string;
+  display_name: string;
+  enabled: boolean;
+  cadence_minutes: number;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  last_run_count: number | null;
+  last_error: string | null;
+};
 
 const QUICK_COMMANDS: Array<{ kind: string; label: string; description: string }> = [
   { kind: "refresh_sources", label: "Refresh sources", description: "Wake the worker and re-read enabled sources" },
@@ -36,24 +57,38 @@ const QUICK_COMMANDS: Array<{ kind: string; label: string; description: string }
 function WorkerPage() {
   const [hb, setHb] = useState<HB | null>(null);
   const [cmds, setCmds] = useState<Cmd[]>([]);
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [srcHealth, setSrcHealth] = useState<SourceHealth[]>([]);
   const [sending, setSending] = useState<string | null>(null);
 
   const load = async () => {
-    const [{ data: h }, { data: c }] = await Promise.all([
+    const [{ data: h }, { data: c }, { data: r }, { data: s }] = await Promise.all([
       supabase.from("worker_heartbeat").select("last_seen, version").maybeSingle(),
       supabase
         .from("worker_commands")
         .select("id, kind, status, created_at, started_at, finished_at, last_error, payload")
         .order("created_at", { ascending: false })
         .limit(50),
+      supabase
+        .from("automation_runs")
+        .select("id, kind, source_key, status, items_in, items_out, errors, started_at, finished_at")
+        .order("started_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("sources")
+        .select("key, display_name, enabled, cadence_minutes, last_run_at, last_run_status, last_run_count, last_error")
+        .order("display_name"),
     ]);
     setHb(h as HB);
     setCmds((c ?? []) as Cmd[]);
+    setRuns((r ?? []) as Run[]);
+    setSrcHealth((s ?? []) as SourceHealth[]);
   };
 
   useEffect(() => { load(); }, []);
   useRealtimeInvalidate({ table: "worker_heartbeat", onChange: load });
   useRealtimeInvalidate({ table: "worker_commands", onChange: load });
+  useRealtimeInvalidate({ table: "automation_runs", onChange: load });
 
   const send = async (kind: string) => {
     setSending(kind);
@@ -72,6 +107,14 @@ function WorkerPage() {
 
   const ageMs = hb?.last_seen ? Date.now() - new Date(hb.last_seen).getTime() : Infinity;
   const ageStr = hb?.last_seen ? `${Math.round(ageMs / 1000)}s ago` : "never";
+  const hbTone = ageMs < 30_000 ? "bg-emerald-500" : ageMs < 5 * 60_000 ? "bg-amber-500" : "bg-red-500";
+  const fmtDur = (a: string, b: string | null) => {
+    if (!b) return "running…";
+    const ms = new Date(b).getTime() - new Date(a).getTime();
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${Math.round(ms / 1000 / 60)}m`;
+  };
 
   return (
     <div className="space-y-6 max-w-[1200px]">
@@ -89,7 +132,10 @@ function WorkerPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-2xl border border-border/60 bg-card p-5">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Last seen</div>
-          <div className="mt-2 font-heading text-2xl tabular-nums">{ageStr}</div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className={"inline-block h-2 w-2 rounded-full " + hbTone + (ageMs < 30_000 ? " animate-pulse" : "")} />
+            <span className="font-heading text-2xl tabular-nums">{ageStr}</span>
+          </div>
         </div>
         <div className="rounded-2xl border border-border/60 bg-card p-5">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Version</div>
@@ -102,6 +148,59 @@ function WorkerPage() {
       </div>
 
       <div className="rounded-2xl border border-border/60 bg-card p-5">
+      {/* Per-source health */}
+      <div className="rounded-2xl border border-border/60 bg-card p-5">
+        <h2 className="font-heading text-base font-semibold mb-3">Source health</h2>
+        {srcHealth.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No sources configured yet.</p>
+        ) : (
+          <div className="space-y-1 max-h-[360px] overflow-y-auto">
+            {srcHealth.map((s) => {
+              const age = s.last_run_at ? Date.now() - new Date(s.last_run_at).getTime() : Infinity;
+              const overdue = s.enabled && age > s.cadence_minutes * 60_000 * 2;
+              const tone = !s.enabled
+                ? "bg-zinc-500"
+                : s.last_run_status === "ok"
+                  ? overdue ? "bg-amber-500" : "bg-emerald-500"
+                  : s.last_run_status === "failed" ? "bg-red-500" : "bg-zinc-500";
+              return (
+                <div key={s.key} className="flex items-center gap-3 text-xs py-1.5 border-b border-border/40 last:border-0">
+                  <span className={"inline-block h-1.5 w-1.5 rounded-full " + tone} />
+                  <span className="font-medium w-44 shrink-0 truncate">{s.display_name}</span>
+                  <span className="text-muted-foreground w-20 shrink-0">{s.enabled ? `${s.cadence_minutes}m` : "off"}</span>
+                  <span className="text-muted-foreground tabular-nums w-28 shrink-0">
+                    {s.last_run_at ? new Date(s.last_run_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "never"}
+                  </span>
+                  <span className="text-muted-foreground tabular-nums w-12 shrink-0">{s.last_run_count ?? "—"}</span>
+                  {s.last_error && <span className="text-red-400 truncate flex-1" title={s.last_error}>{s.last_error}</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Recent runs */}
+      <div className="rounded-2xl border border-border/60 bg-card p-5">
+        <h2 className="font-heading text-base font-semibold mb-3">Recent runs</h2>
+        {runs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No runs yet.</p>
+        ) : (
+          <div className="space-y-1 max-h-[360px] overflow-y-auto">
+            {runs.map((r) => (
+              <div key={r.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-border/40 last:border-0">
+                <span className={"inline-block h-1.5 w-1.5 rounded-full " + (r.status === "ok" ? "bg-emerald-500" : r.status === "failed" ? "bg-red-500" : "bg-amber-500 animate-pulse")} />
+                <span className="font-mono text-[11px] text-muted-foreground tabular-nums w-32 shrink-0">{new Date(r.started_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                <span className="font-medium w-32 shrink-0">{r.source_key ?? r.kind}</span>
+                <span className="text-muted-foreground capitalize w-16 shrink-0">{r.status}</span>
+                <span className="text-muted-foreground tabular-nums w-16 shrink-0">{fmtDur(r.started_at, r.finished_at)}</span>
+                <span className="text-muted-foreground tabular-nums">in {r.items_in ?? 0} · out {r.items_out ?? 0}{r.errors ? ` · err ${r.errors}` : ""}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
         <h2 className="font-heading text-base font-semibold mb-3">Quick commands</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {QUICK_COMMANDS.map((q) => (

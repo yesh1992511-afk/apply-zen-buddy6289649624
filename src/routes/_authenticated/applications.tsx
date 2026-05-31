@@ -7,9 +7,13 @@ import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { Send, Clock, Loader2, CheckCircle2, AlertTriangle, AlertCircle, ExternalLink, Eye, Mail, MessageCircle, Award, ThumbsDown, FileEdit, Inbox } from "lucide-react";
+import { Send, Clock, Loader2, CheckCircle2, AlertTriangle, AlertCircle, ExternalLink, Eye, Mail, MessageCircle, Award, ThumbsDown, FileEdit, Inbox, RotateCcw, Trash2, Skull } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMutation } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { retryApplication, discardApplication } from "@/lib/applications.functions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/applications")({
   head: () => ({ meta: [{ title: "Applications — JobPilot" }] }),
@@ -20,7 +24,7 @@ export const Route = createFileRoute("/_authenticated/applications")({
 
 type Phase =
   | "discovered" | "scored" | "tailored" | "queued" | "applying" | "submitted"
-  | "needs_review" | "failed" | "follow_up_sent" | "replied" | "interview" | "offer" | "rejected";
+  | "needs_review" | "failed" | "dead_letter" | "follow_up_sent" | "replied" | "interview" | "offer" | "rejected";
 
 type App = {
   id: string;
@@ -30,6 +34,7 @@ type App = {
   attempts: number;
   retry_count: number;
   last_error: string | null;
+  dlq_reason: string | null;
   queued_at: string;
   applied_at: string | null;
   job?: { title: string; company: string; url: string } | null;
@@ -44,6 +49,7 @@ const COLS: Array<{ phase: Phase; label: string; icon: LucideIcon; accent: strin
   { phase: "submitted", label: "Submitted", icon: CheckCircle2, accent: "text-success" },
   { phase: "needs_review", label: "Needs review", icon: AlertTriangle, accent: "text-warning" },
   { phase: "failed", label: "Failed", icon: AlertCircle, accent: "text-destructive" },
+  { phase: "dead_letter", label: "Dead letter", icon: Skull, accent: "text-destructive" },
   { phase: "follow_up_sent", label: "Followed up", icon: Mail, accent: "text-primary/80" },
   { phase: "replied", label: "Replied", icon: MessageCircle, accent: "text-success" },
   { phase: "interview", label: "Interview", icon: Award, accent: "text-gold" },
@@ -58,7 +64,7 @@ function ApplicationsPage() {
   const load = useCallback(() => {
     supabase
       .from("applications")
-      .select("id, status, phase, job_id, attempts, retry_count, last_error, queued_at, applied_at, job:jobs(title, company, url)")
+      .select("id, status, phase, job_id, attempts, retry_count, last_error, dlq_reason, queued_at, applied_at, job:jobs(title, company, url)")
       .order("queued_at", { ascending: false })
       .limit(500)
       .then(({ data }) => {
@@ -69,6 +75,19 @@ function ApplicationsPage() {
   useEffect(() => { load(); }, [load]);
   useRealtimeInvalidate({ table: "applications", onChange: load });
   useRealtimeInvalidate({ table: "application_events", onChange: load });
+
+  const retryFn = useServerFn(retryApplication);
+  const discardFn = useServerFn(discardApplication);
+  const retryMut = useMutation({
+    mutationFn: (id: string) => retryFn({ data: { id } }),
+    onSuccess: () => { toast.success("Re-queued"); load(); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Retry failed"),
+  });
+  const discardMut = useMutation({
+    mutationFn: (id: string) => discardFn({ data: { id } }),
+    onSuccess: () => { toast.success("Discarded"); load(); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Discard failed"),
+  });
 
   // Back-compat: derive phase from legacy status when phase is missing/discovered
   const phaseOf = (a: App): Phase => {
@@ -153,9 +172,27 @@ function ApplicationsPage() {
                         </span>
                       )}
                     </div>
-                    {a.last_error && (
+                    {(a.last_error || a.dlq_reason) && (
                       <div className="mt-1.5 line-clamp-2 rounded border border-destructive/20 bg-destructive/5 p-1.5 text-[10px] text-destructive">
-                        {a.last_error}
+                        {a.dlq_reason || a.last_error}
+                      </div>
+                    )}
+                    {(phase === "failed" || phase === "dead_letter" || phase === "needs_review") && (
+                      <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.preventDefault()}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); retryMut.mutate(a.id); }}
+                          disabled={retryMut.isPending}
+                          className="inline-flex items-center gap-1 rounded border border-border/60 bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium hover:bg-surface-3 disabled:opacity-50"
+                        >
+                          <RotateCcw className="h-3 w-3" /> Retry
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); if (confirm("Discard this application?")) discardMut.mutate(a.id); }}
+                          disabled={discardMut.isPending}
+                          className="inline-flex items-center gap-1 rounded border border-border/60 bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3 w-3" /> Discard
+                        </button>
                       </div>
                     )}
                   </Link>

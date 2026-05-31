@@ -1,6 +1,22 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toastError, toastQueued, toastSaved } from "@/lib/toast";
+import { useServerFn } from "@tanstack/react-start";
+import { rescoreAllJobs } from "@/lib/applications.functions";
+
+/** Re-score every existing job using the latest filter + Job Target settings. */
+export function useRescoreAllJobs() {
+  const queryClient = useQueryClient();
+  const fn = useServerFn(rescoreAllJobs);
+  return useMutation({
+    mutationFn: () => fn(),
+    onSuccess: ({ rescored }) => {
+      toastSaved(`Re-scored ${rescored} job${rescored === 1 ? "" : "s"}`);
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    onError: (e) => toastError(e),
+  });
+}
 
 /** Delete every scraped job (and dependent rows) for the signed-in user. */
 export function useClearAllJobs() {

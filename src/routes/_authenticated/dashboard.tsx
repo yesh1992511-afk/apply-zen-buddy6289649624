@@ -15,6 +15,7 @@ import { CardSkeleton, Skeleton } from "@/components/skeletons";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { LiveDot } from "@/components/LiveDot";
 import { SyncHealthCard } from "@/components/SyncHealthCard";
+import { ReadinessBanner } from "@/components/ReadinessChecklist";
 import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
@@ -195,6 +196,8 @@ function Dashboard() {
           <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent shimmer" />
         </div>
       )}
+
+      <ReadinessBanner />
 
       <SyncHealthCard />
 
