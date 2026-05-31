@@ -49,6 +49,7 @@ const COLS: Array<{ phase: Phase; label: string; icon: LucideIcon; accent: strin
   { phase: "submitted", label: "Submitted", icon: CheckCircle2, accent: "text-success" },
   { phase: "needs_review", label: "Needs review", icon: AlertTriangle, accent: "text-warning" },
   { phase: "failed", label: "Failed", icon: AlertCircle, accent: "text-destructive" },
+  { phase: "dead_letter", label: "Dead letter", icon: Skull, accent: "text-destructive" },
   { phase: "follow_up_sent", label: "Followed up", icon: Mail, accent: "text-primary/80" },
   { phase: "replied", label: "Replied", icon: MessageCircle, accent: "text-success" },
   { phase: "interview", label: "Interview", icon: Award, accent: "text-gold" },
