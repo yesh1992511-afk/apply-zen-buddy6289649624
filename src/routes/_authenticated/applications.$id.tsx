@@ -296,7 +296,8 @@ function ApplicationDetailPage() {
               <ApplicationTimeline events={eventsQuery.data ?? []} lastError={app.last_error} />
             </TabsContent>
 
-            <TabsContent value="resume" className="mt-0">
+            <TabsContent value="resume" className="mt-0 space-y-4">
+              <TailoredResumePanel jobId={app.job_id} />
               <PdfViewer url={resumeUrl} title={resume?.name ?? "Tailored resume"} isGenerating={isActive && !resumeUrl} />
             </TabsContent>
             <TabsContent value="cover" className="mt-0">
