@@ -47,12 +47,17 @@ function SetupPage() {
     toast.success("Copied");
   };
 
+  const authHeaders = async (): Promise<HeadersInit> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  };
+
   const runSources = async () => {
     if (!userId) return;
     setTesting("sources");
     setPipelineResult(null);
     try {
-      const res = await fetch(`/api/public/sources/run-tier?tier=hot&user_id=${userId}`);
+      const res = await fetch(`/api/public/sources/run-tier?tier=hot`, { headers: await authHeaders() });
       const json = await res.json() as { ok?: boolean; summary?: Record<string, { fetched: number; inserted: number }> };
       const totals = Object.values(json.summary ?? {}).reduce(
         (a, b) => ({ fetched: a.fetched + b.fetched, inserted: a.inserted + b.inserted }),
@@ -70,7 +75,7 @@ function SetupPage() {
   const runApplyWorker = async () => {
     setTesting("apply");
     try {
-      const res = await fetch("/api/public/hooks/apply-worker");
+      const res = await fetch("/api/public/hooks/apply-worker", { headers: await authHeaders() });
       const json = await res.json() as { ok?: boolean; processed?: number; results?: Array<{ id: string; status: string; error?: string }> };
       const okCount = (json.results ?? []).filter((r) => r.status === "ok").length;
       setPipelineResult(`Step 2 ✓ Apply worker processed ${json.processed ?? 0} application(s) · ${okCount} ok`);

@@ -28,21 +28,36 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        // Auth: either cron secret OR a logged-in user JWT.
+        const { requireUserOrCron } = await import('@/lib/api-auth.server');
+        let auth;
+        try {
+          auth = await requireUserOrCron(request);
+        } catch {
+          return Response.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const url = new URL(request.url);
         const tier = (url.searchParams.get('tier') ?? 'hot') as 'hot' | 'warm' | 'usajobs' | 'apify';
         const shard = Number(url.searchParams.get('shard') ?? 0);
-        const forcedUserId = url.searchParams.get('user_id');
 
         let users: Array<{ user_id: string }> | null = null;
-        if (forcedUserId) {
-          users = [{ user_id: forcedUserId }];
+        if (!auth.isCron) {
+          // User-scoped: ignore any ?user_id= query param, always use the JWT user.
+          users = [{ user_id: auth.userId }];
         } else {
-          const { data, error: usersErr } = await supabaseAdmin
-            .from('automation_settings')
-            .select('user_id, enabled')
-            .eq('enabled', true);
-          if (usersErr) return Response.json({ error: usersErr.message }, { status: 500 });
-          users = (data ?? []) as Array<{ user_id: string }>;
+          // Cron: optional user_id forces a single user, else process all enabled.
+          const forcedUserId = url.searchParams.get('user_id');
+          if (forcedUserId) {
+            users = [{ user_id: forcedUserId }];
+          } else {
+            const { data, error: usersErr } = await supabaseAdmin
+              .from('automation_settings')
+              .select('user_id, enabled')
+              .eq('enabled', true);
+            if (usersErr) return Response.json({ error: usersErr.message }, { status: 500 });
+            users = (data ?? []) as Array<{ user_id: string }>;
+          }
         }
         if (!users.length) {
           return Response.json({ ok: true, message: 'no enabled users', tier, shard });

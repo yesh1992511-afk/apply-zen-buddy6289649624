@@ -102,12 +102,17 @@ export function CommandPalette({ onShowHelp }: { onShowHelp?: () => void }) {
     [recentIds],
   );
 
+  const authHeaders = async (): Promise<HeadersInit> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  };
+
   const runSources = async () => {
     close();
     if (!user) return;
     toast.loading("Fetching jobs from all sources…", { id: "run-sources" });
     try {
-      const res = await fetch(`/api/public/sources/run-tier?tier=hot&user_id=${user.id}`);
+      const res = await fetch(`/api/public/sources/run-tier?tier=hot`, { headers: await authHeaders() });
       const json = await res.json() as { ok?: boolean; summary?: Record<string, { fetched: number; inserted: number }> };
       const totals = Object.values(json.summary ?? {}).reduce(
         (a, b) => ({ fetched: a.fetched + b.fetched, inserted: a.inserted + b.inserted }),
@@ -133,7 +138,7 @@ export function CommandPalette({ onShowHelp }: { onShowHelp?: () => void }) {
     close();
     toast.loading("Running apply worker…", { id: "apply-worker" });
     try {
-      const res = await fetch("/api/public/hooks/apply-worker");
+      const res = await fetch("/api/public/hooks/apply-worker", { headers: await authHeaders() });
       const json = await res.json() as { ok?: boolean; processed?: number };
       toast.success(`Worker processed ${json.processed ?? 0} application(s)`, { id: "apply-worker" });
     } catch (e) {

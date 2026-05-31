@@ -47,12 +47,15 @@ export function useRetryApplication() {
         .eq("id", id);
       if (error) throw new Error(error.message);
       // Best-effort kick; read counts so we can surface skipped/requeued
-      const summary = await fetch(`/api/public/hooks/apply-worker?application_id=${id}`, {
-        method: "POST",
-        headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string },
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null);
+      const { data: { session } } = await supabase.auth.getSession();
+      const summary = session?.access_token
+        ? await fetch(`/api/public/hooks/apply-worker?application_id=${id}`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        : null;
       return { id, summary } as { id: string; summary: { counts?: Record<string, number> } | null };
     },
     onSuccess: ({ id, summary }) => {
