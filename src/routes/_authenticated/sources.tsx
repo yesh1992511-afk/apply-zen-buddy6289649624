@@ -138,16 +138,37 @@ function SourcesPage() {
   useEffect(() => { load(); }, []);
   useRealtimeInvalidate({ table: "sources", onChange: load });
 
-  const loadPack = async (s: Source) => {
+  const loadPack = async (s: Source, pack: PackKey = "cybersecurity") => {
     const field = configFieldFor(s.key);
     if (!field) { toast.error("Pack not supported for this source"); return; }
-    const { config, added } = mergePackIntoConfig(s.key as keyof typeof PACKS.cybersecurity.data, s.config, "cybersecurity");
+    const { config, added } = mergePackIntoConfig(s.key, s.config, pack);
     if (added === 0) { toast.info("All companies in the pack are already configured"); return; }
     const { error } = await supabase.from("sources").update({ config } as never).eq("id", s.id);
     if (error) { toast.error(error.message); return; }
-    toast.success(`Added ${added} compan${added === 1 ? "y" : "ies"} to ${s.display_name}`);
+    toast.success(`Added ${added} compan${added === 1 ? "y" : "ies"} from "${PACKS[pack].label}" to ${s.display_name}`);
     load();
   };
+
+  /** Apply a curated pack across every relevant board source in one click. */
+  const applyPackEverywhere = async (pack: PackKey) => {
+    let totalAdded = 0;
+    let touched = 0;
+    for (const s of sources) {
+      const field = configFieldFor(s.key);
+      if (!field) continue;
+      const { config, added } = mergePackIntoConfig(s.key, s.config, pack);
+      if (added === 0) continue;
+      const { error } = await supabase.from("sources").update({ config } as never).eq("id", s.id);
+      if (error) { toast.error(`${s.display_name}: ${error.message}`); continue; }
+      totalAdded += added;
+      touched++;
+    }
+    if (totalAdded === 0) toast.info(`Pack "${PACKS[pack].label}" already applied`);
+    else toast.success(`Applied "${PACKS[pack].label}": +${totalAdded} compan${totalAdded === 1 ? "y" : "ies"} across ${touched} source${touched === 1 ? "" : "s"}`);
+    load();
+  };
+
+
 
 
   // First-visit autopilot: if the user has zero sources, seed + enable everything
