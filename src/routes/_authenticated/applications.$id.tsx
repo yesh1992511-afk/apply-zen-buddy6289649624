@@ -56,6 +56,14 @@ type AppRow = {
   } | null;
 };
 
+if (typeof window !== "undefined") {
+  DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "A") {
+      node.setAttribute("rel", "noopener noreferrer");
+      node.setAttribute("target", "_blank");
+    }
+  });
+}
 function sanitizeJdHtml(html: string): string {
   // DOMPurify with a strict allowlist — strips scripts, event handlers,
   // javascript: URLs, svg/object/embed, and all unknown attributes.
@@ -63,7 +71,6 @@ function sanitizeJdHtml(html: string): string {
     ALLOWED_TAGS: ["p", "br", "ul", "ol", "li", "b", "strong", "em", "i", "u", "h1", "h2", "h3", "h4", "h5", "h6", "a", "span", "div", "blockquote", "code", "pre", "hr"],
     ALLOWED_ATTR: ["href", "target", "rel"],
     ALLOW_DATA_ATTR: false,
-    ADD_ATTR: ["target"],
   });
 }
 
