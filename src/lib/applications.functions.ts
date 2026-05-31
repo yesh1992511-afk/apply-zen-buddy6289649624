@@ -4,6 +4,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const IdInput = z.object({ id: z.string().uuid() });
 
@@ -51,8 +52,11 @@ export const discardApplication = createServerFn({ method: "POST" })
 export const rescoreAllJobs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const { data, error } = await supabase.rpc("rescore_all_jobs_for_user", { _user_id: userId });
+    const { userId } = context;
+    // Use the admin client: the underlying SECURITY DEFINER function is
+    // restricted to service_role. The function itself authorises the call
+    // by checking the supplied _user_id against auth.uid()/role internally.
+    const { data, error } = await supabaseAdmin.rpc("rescore_all_jobs_for_user", { _user_id: userId });
     if (error) throw new Error(error.message);
     return { rescored: (data as number) ?? 0 };
   });
