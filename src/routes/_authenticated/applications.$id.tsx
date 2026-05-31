@@ -2,6 +2,7 @@ import { createFileRoute, useRouter, notFound } from "@tanstack/react-router";
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import DOMPurify from "dompurify";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -56,13 +57,14 @@ type AppRow = {
 };
 
 function sanitizeJdHtml(html: string): string {
-  // Strip script/iframe/style tags and inline event handlers before injecting.
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/\son\w+="[^"]*"/gi, "")
-    .replace(/\son\w+='[^']*'/gi, "");
+  // DOMPurify with a strict allowlist — strips scripts, event handlers,
+  // javascript: URLs, svg/object/embed, and all unknown attributes.
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ["p", "br", "ul", "ol", "li", "b", "strong", "em", "i", "u", "h1", "h2", "h3", "h4", "h5", "h6", "a", "span", "div", "blockquote", "code", "pre", "hr"],
+    ALLOWED_ATTR: ["href", "target", "rel"],
+    ALLOW_DATA_ATTR: false,
+    ADD_ATTR: ["target"],
+  });
 }
 
 type ResumeRow = { id: string; name: string; pdf_storage_path: string | null; kind: string };
