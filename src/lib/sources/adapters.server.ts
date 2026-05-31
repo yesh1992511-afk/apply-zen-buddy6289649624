@@ -822,11 +822,12 @@ function stripTags(input: string): string {
 }
 
 function parseIsecJobsHtml(html: string): NormalizedJob[] {
+  const abs = (u: string) => (u.startsWith('http') ? u : `https://isecjobs.com${u.startsWith('/') ? '' : '/'}${u}`);
   const blocks = html.match(/<li class="d-flex justify-content-between position-relative pb-2">[\s\S]*?<\/li>/g) ?? [];
   return blocks.map((block) => {
     const linkMatch = block.match(/<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?([^<]+)\s*<\/a>/i);
     if (!linkMatch) return null;
-    const url = decodeHtml(linkMatch[1]);
+    const url = abs(decodeHtml(linkMatch[1]));
     const title = decodeHtml(linkMatch[2]);
     const salary = block.match(/<span class="text-bg-secondary px-1 rounded">([^<]+)<\/span>/i)?.[1] ?? '';
     const tagLine = Array.from(block.matchAll(/<span>([^<]+)<\/span>/g)).map((m) => decodeHtml(m[1])).join(' | ');
@@ -851,7 +852,11 @@ function parseIsecJobsHtml(html: string): NormalizedJob[] {
       posted_at: null,
       raw: { url, title, salary, tagLine, location },
     } as NormalizedJob;
-  }).filter((j): j is NormalizedJob => j !== null);
+  }).filter((j): j is NormalizedJob => j !== null)
+    .filter((j) => {
+      const loc = (j.location ?? '').toLowerCase();
+      return loc.includes('united states') || loc.includes('remote');
+    });
 }
 
 export async function fetchInfosecJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
