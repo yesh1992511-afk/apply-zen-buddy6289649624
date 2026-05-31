@@ -48,6 +48,8 @@ ADAPTERS: dict[str, Source] = {a.key: a for a in [
     SmartRecruitersBoards(), WorkableBoards(), RecruiteeBoards(), TeamtailorBoards(),
     # US tech boards + federal
     BuiltIn(), USAJobs(),
+    # Cybersecurity-focused free sources
+    InfosecJobs(), HNJobs(), HNWhoIsHiring(),
 ]}
 
 
