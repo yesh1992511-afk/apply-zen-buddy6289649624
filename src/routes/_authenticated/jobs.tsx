@@ -140,13 +140,19 @@ function JobsPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            <Button onClick={queueApply} disabled={selected.size === 0} className="bg-gradient-emerald gap-1.5 shadow-glow disabled:shadow-none">
+            <Button
+              onClick={queueApply}
+              disabled={selected.size === 0 || atCap}
+              title={atCap ? `Daily apply cap reached (${capLabel})` : undefined}
+              className="bg-gradient-emerald gap-1.5 shadow-glow disabled:shadow-none"
+            >
               <Send className="h-4 w-4" />
-              Queue {selected.size > 0 ? selected.size : ""} apply
+              {atCap ? "Daily cap reached" : `Queue ${selected.size > 0 ? selected.size : ""} apply`}
             </Button>
           </div>
         }
       />
+
 
       <div className="sticky top-14 z-10 -mx-4 px-4 py-3 md:-mx-6 md:px-6 surface-frost rounded-none border-x-0 border-y border-border/40 space-y-2">
         <div className="flex flex-wrap items-center gap-3">
