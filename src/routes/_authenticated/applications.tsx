@@ -34,6 +34,7 @@ type App = {
   attempts: number;
   retry_count: number;
   last_error: string | null;
+  dlq_reason: string | null;
   queued_at: string;
   applied_at: string | null;
   job?: { title: string; company: string; url: string } | null;
