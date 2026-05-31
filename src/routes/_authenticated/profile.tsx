@@ -313,9 +313,7 @@ function ProfilePage() {
     </div>
   );
 }
-    </div>
-  );
-}
+
 
 function Field({ label, value, onChange, type, className }: { label: string; value: string; onChange: (v: string) => void; type?: string; className?: string }) {
   return (
