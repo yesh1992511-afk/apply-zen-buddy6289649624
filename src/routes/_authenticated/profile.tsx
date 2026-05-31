@@ -379,6 +379,7 @@ function ProfilePage() {
         <TabsContent value="educations"><ListSection table="educations" /></TabsContent>
         <TabsContent value="languages"><ListSection table="languages" /></TabsContent>
         <TabsContent value="certifications"><ListSection table="certifications" /></TabsContent>
+        <TabsContent value="publications"><ListSection table="publications" /></TabsContent>
         <TabsContent value="references_list"><ListSection table="references_list" /></TabsContent>
 
         <TabsContent value="screening"><ScreeningAnswers value={(p.screening_answers as Record<string, string>) ?? {}} onChange={(v) => set("screening_answers", v)} /></TabsContent>
