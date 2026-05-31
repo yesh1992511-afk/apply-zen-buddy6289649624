@@ -95,10 +95,10 @@ function NotificationsPage() {
   });
 
   const testMutation = useMutation({
-    mutationFn: () => sendTest({}),
-    onSuccess: () => {
-      toastSaved("Test queued — check your inbox in a few seconds");
-      setTimeout(() => qc.invalidateQueries({ queryKey: ["notifications"] }), 8000);
+    mutationFn: () => sendTest({}) as Promise<{ ok: true; messageId: string; recipient: string }>,
+    onSuccess: (res) => {
+      toastSaved(`Test email sent to ${res.recipient} ✓`);
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (e: Error) => toastError(e),
   });
