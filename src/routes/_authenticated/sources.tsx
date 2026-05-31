@@ -98,6 +98,7 @@ function SourcesPage() {
   const [lastIngestResult, setLastIngestResult] = useState<string | null>(null);
   const [target, setTarget] = useState<JobTarget>(DEFAULT_TARGET);
   const [applyingTarget, setApplyingTarget] = useState(false);
+  const [secretNames, setSecretNames] = useState<Set<string>>(new Set());
 
   const load = () => {
     supabase.from("sources").select("*").order("display_name").then(({ data }) => setSources((data ?? []) as Source[]));
