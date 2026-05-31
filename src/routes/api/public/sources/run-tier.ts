@@ -1,29 +1,38 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { supabaseAdmin } from '@/integrations/supabase/client.server';
-import { runSource, AGGREGATOR_PROVIDERS, type NormalizedJob } from '@/lib/sources/adapters.server';
+import {
+  runSource,
+  AGGREGATOR_PROVIDERS,
+  APIFY_PROVIDERS,
+  USAJOBS_QUERIES,
+  type NormalizedJob,
+} from '@/lib/sources/adapters.server';
 import { SEED_SLUGS } from '@/lib/sources/seed-slugs';
 
 /**
- * Public cron endpoint. Called by pg_cron every 15min (hot) and 60min (warm).
+ * Public cron endpoint. Called by pg_cron at multiple cadences.
  *
- * GET /api/public/sources/run-tier?tier=hot|warm&shard=0..3
+ * GET /api/public/sources/run-tier?tier=hot|warm|usajobs|apify&shard=0..3[&user_id=<uuid>]
  *
- * For every user with `automation_settings.enabled = true`, fetch the
- * configured sources, upsert into jobs, and run the scoring function.
- * No auth header needed — /api/public/* bypasses auth at the edge.
- * We rate-limit per-IP at the cron layer (only pg_cron calls this).
+ * Tiers:
+ *  - hot     → aggregators (RemoteOK, Remotive, …) — every 15min
+ *  - warm    → ATS slugs (Greenhouse, Lever, Ashby, …) — every 60min, 4 shards
+ *  - usajobs → federal API keyword queries — every 60min
+ *  - apify   → cached datasets from last-succeeded Apify runs — every 4h
+ *
+ * For every user with `automation_settings.enabled = true`, fetch the configured
+ * sources, upsert into jobs, score them via match_job_to_filters, and write
+ * heartbeat rows to automation_runs + per-source health to sources.
  */
 export const Route = createFileRoute('/api/public/sources/run-tier')({
   server: {
     handlers: {
       GET: async ({ request }) => {
         const url = new URL(request.url);
-        const tier = (url.searchParams.get('tier') ?? 'hot') as 'hot' | 'warm';
+        const tier = (url.searchParams.get('tier') ?? 'hot') as 'hot' | 'warm' | 'usajobs' | 'apify';
         const shard = Number(url.searchParams.get('shard') ?? 0);
         const forcedUserId = url.searchParams.get('user_id');
 
-        // If a user_id is passed (manual "Run now" from the UI) we run for that user
-        // regardless of automation_settings.enabled. Otherwise cron-mode: only enabled users.
         let users: Array<{ user_id: string }> | null = null;
         if (forcedUserId) {
           users = [{ user_id: forcedUserId }];
@@ -39,12 +48,45 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
           return Response.json({ ok: true, message: 'no enabled users', tier, shard });
         }
 
-        const sourceSpecs: Array<{ provider: string; slug?: string }> =
-          tier === 'hot'
-            ? AGGREGATOR_PROVIDERS.map((provider) => ({ provider }))
-            : SEED_SLUGS.filter((_, i) => i % 4 === shard).map((s) => ({ provider: s.provider, slug: s.slug }));
+        let sourceSpecs: Array<{ provider: string; slug?: string }>;
+        switch (tier) {
+          case 'hot':
+            sourceSpecs = AGGREGATOR_PROVIDERS.map((provider) => ({ provider }));
+            break;
+          case 'warm':
+            sourceSpecs = SEED_SLUGS
+              .filter((_, i) => i % 4 === shard)
+              .map((s) => ({ provider: s.provider, slug: s.slug }));
+            break;
+          case 'usajobs':
+            sourceSpecs = USAJOBS_QUERIES;
+            break;
+          case 'apify':
+            sourceSpecs = APIFY_PROVIDERS.map((provider) => ({ provider }));
+            break;
+          default:
+            return Response.json({ error: `unknown tier: ${tier}` }, { status: 400 });
+        }
 
-        const summary: Record<string, { fetched: number; inserted: number; errors: number }> = {};
+        // Per-tier hard timeout on each adapter
+        const adapterTimeoutMs = tier === 'apify' ? 45_000 : 12_000;
+        const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+          Promise.race([
+            p,
+            new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)),
+          ]);
+
+        // sources.kind is an enum: 'apify' | 'rest' | 'board'
+        const sourceKindFor = (provider: string): 'apify' | 'rest' | 'board' => {
+          if (provider.startsWith('apify:')) return 'apify';
+          if (['greenhouse','lever','ashby','workable','smartrecruiters','recruitee','teamtailor','personio','bamboohr'].includes(provider)) return 'board';
+          return 'rest';
+        };
+
+        const summary: Record<
+          string,
+          { fetched: number; inserted: number; errors: number; error_message?: string }
+        > = {};
 
         for (const userRow of users) {
           const userId = userRow.user_id as string;
@@ -55,28 +97,49 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
           let totalOut = 0;
           let totalErr = 0;
 
-          // Fetch in concurrent batches of 8
           for (let i = 0; i < sourceSpecs.length; i += 8) {
             const batch = sourceSpecs.slice(i, i + 8);
-            const results = await Promise.allSettled(batch.map((s) => runSource(s)));
+            const results = await Promise.allSettled(
+              batch.map((s) => withTimeout(runSource(s), adapterTimeoutMs)),
+            );
 
             for (let k = 0; k < results.length; k++) {
               const spec = batch[k];
-              const key = spec.slug ? `${spec.provider}:${spec.slug}` : spec.provider;
-              summary[key] ||= { fetched: 0, inserted: 0, errors: 0 };
+              const sourceKey = spec.slug ? `${spec.provider}:${spec.slug}` : spec.provider;
+              summary[sourceKey] ||= { fetched: 0, inserted: 0, errors: 0 };
               const r = results[k];
+
+              const runAt = new Date().toISOString();
               if (r.status === 'rejected') {
-                summary[key].errors++;
+                summary[sourceKey].errors++;
+                summary[sourceKey].error_message = String(r.reason).slice(0, 200);
                 totalErr++;
+                // Per-source health: failed — upsert base row then update status fields
+                await supabaseAdmin.from('sources').upsert(
+                  {
+                    user_id: userId,
+                    key: sourceKey,
+                    display_name: sourceKey,
+                    kind: sourceKindFor(spec.provider),
+                    enabled: true,
+                    cadence_minutes: tier === 'hot' ? 15 : tier === 'apify' ? 240 : 60,
+                  },
+                  { onConflict: 'user_id,key' },
+                );
+                await supabaseAdmin.from('sources').update({
+                  last_run_at: runAt,
+                  last_run_status: 'failed',
+                  last_run_count: 0,
+                  last_error: String(r.reason).slice(0, 500),
+                }).eq('user_id', userId).eq('key', sourceKey);
                 continue;
               }
+
               const jobs: NormalizedJob[] = r.value;
-              summary[key].fetched += jobs.length;
+              summary[sourceKey].fetched += jobs.length;
               totalIn += jobs.length;
 
-              if (!jobs.length) continue;
-
-              // Upsert in chunks
+              let insertedForSource = 0;
               for (let j = 0; j < jobs.length; j += 100) {
                 const chunk = jobs.slice(j, j + 100).map((nj) => ({
                   ...nj,
@@ -91,14 +154,15 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                   .upsert(chunk, { onConflict: 'user_id,dedupe_hash', ignoreDuplicates: true })
                   .select('id');
                 if (error) {
-                  summary[key].errors++;
+                  summary[sourceKey].errors++;
+                  summary[sourceKey].error_message = error.message.slice(0, 200);
                   totalErr++;
                   continue;
                 }
-                summary[key].inserted += upserted?.length ?? 0;
+                summary[sourceKey].inserted += upserted?.length ?? 0;
+                insertedForSource += upserted?.length ?? 0;
                 totalOut += upserted?.length ?? 0;
 
-                // Score newly-inserted jobs against user filters
                 if (upserted?.length) {
                   await Promise.all(
                     upserted.map((row) =>
@@ -107,6 +171,25 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                   );
                 }
               }
+
+              // Per-source health: ok — upsert base row then update status fields
+              await supabaseAdmin.from('sources').upsert(
+                {
+                  user_id: userId,
+                  key: sourceKey,
+                  display_name: sourceKey,
+                  kind: sourceKindFor(spec.provider),
+                  enabled: true,
+                  cadence_minutes: tier === 'hot' ? 15 : tier === 'apify' ? 240 : 60,
+                },
+                { onConflict: 'user_id,key' },
+              );
+              await supabaseAdmin.from('sources').update({
+                last_run_at: runAt,
+                last_run_status: 'succeeded',
+                last_run_count: insertedForSource,
+                last_error: null,
+              }).eq('user_id', userId).eq('key', sourceKey);
             }
           }
 
@@ -115,13 +198,13 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
             user_id: userId,
             kind: `source.${tier}`,
             source_key: `tier:${tier}:shard:${shard}`,
-            status: 'succeeded',
+            status: totalErr > 0 && totalOut === 0 ? 'failed' : 'succeeded',
             items_in: totalIn,
             items_out: totalOut,
             errors: totalErr,
             started_at: startedAt,
             finished_at: new Date().toISOString(),
-            metadata: { tier, shard, sources: Object.keys(summary).length },
+            metadata: { tier, shard, sources: Object.keys(summary).length, errors: Object.entries(summary).filter(([, v]) => v.errors > 0).map(([k, v]) => ({ source: k, error: v.error_message })).slice(0, 10) },
           });
         }
 

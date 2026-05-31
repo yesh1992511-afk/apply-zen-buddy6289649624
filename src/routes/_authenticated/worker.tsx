@@ -143,8 +143,8 @@ function WorkerPage() {
 
   // Apply worker = VPS heartbeat
   const applyAgeMs = hb?.last_seen ? Date.now() - new Date(hb.last_seen).getTime() : Infinity;
-  // Scraper = most recent scrape-style run
-  const lastScrape = runs.find((r) => r.kind === "scrape" || r.source_key) ?? runs[0];
+  // Scraper = most recent Lovable Cloud source-tier run
+  const lastScrape = runs.find((r) => r.kind?.startsWith("source.")) ?? runs.find((r) => r.kind === "scrape" || r.source_key) ?? runs[0];
   const scrapeAgeMs = lastScrape ? Date.now() - new Date(lastScrape.started_at).getTime() : Infinity;
 
   const fmtDur = (a: string, b: string | null) => {
@@ -265,7 +265,7 @@ function WorkerPage() {
               const overdue = s.enabled && age > s.cadence_minutes * 60_000 * 2;
               const t = !s.enabled
                 ? "bg-zinc-500"
-                : s.last_run_status === "ok"
+                : (s.last_run_status === "ok" || s.last_run_status === "succeeded" || s.last_run_status === "success")
                   ? overdue ? "bg-amber-500" : "bg-emerald-500"
                   : s.last_run_status === "failed" ? "bg-red-500" : "bg-zinc-500";
               return (
