@@ -27,6 +27,19 @@ export type NormalizedJob = {
 };
 
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
+/** Safely parse any date-like value to ISO; returns null for invalid/missing input. */
+function safeIsoDate(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null;
+  try {
+    const n = typeof v === 'number' ? v : Number(v);
+    const d = !Number.isNaN(n) && typeof v !== 'string'
+      ? new Date(n < 1e12 ? n * 1000 : n)
+      : new Date(String(v));
+    const t = d.getTime();
+    if (!Number.isFinite(t)) return null;
+    return d.toISOString();
+  } catch { return null; }
+}
 const mkHash = (source_key: string, id: string | null, url: string) =>
   hash(`${source_key}:${id ?? url}`);
 
