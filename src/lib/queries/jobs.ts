@@ -254,3 +254,33 @@ export function useBulkQueueApplies() {
   });
 }
 
+
+/** Today's apply budget — used count vs. configured daily cap. */
+export function useDailyApplyBudget() {
+  return useQuery({
+    queryKey: ["apply-budget", "today"],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return { used: 0, cap: 0, atCap: false };
+      const uid = u.user.id;
+      const today = new Date().toISOString().slice(0, 10);
+      const [{ data: quota }, { data: settings }] = await Promise.all([
+        supabase
+          .from("usage_quotas")
+          .select("applies_count")
+          .eq("user_id", uid)
+          .eq("day", today)
+          .maybeSingle(),
+        supabase
+          .from("automation_settings")
+          .select("max_applies_per_day")
+          .eq("user_id", uid)
+          .maybeSingle(),
+      ]);
+      const used = quota?.applies_count ?? 0;
+      const cap = settings?.max_applies_per_day ?? 50;
+      return { used, cap, atCap: cap > 0 && used >= cap };
+    },
+  });
+}
