@@ -49,6 +49,57 @@ export const Route = createFileRoute("/_authenticated/automation")({
   notFoundComponent: () => <NotFoundRoute />,
 });
 
+const DECODO_SECRETS = ["DECODO_USERNAME", "DECODO_PASSWORD", "DECODO_HOST"] as const;
+
+function DecodoStatus() {
+  const q = useQuery({
+    queryKey: ["secrets_meta", "decodo"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("secrets_meta")
+        .select("name,status")
+        .in("name", DECODO_SECRETS as unknown as string[]);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<{ name: string; status: string }>;
+    },
+    staleTime: 30_000,
+  });
+  const setNames = new Set((q.data ?? []).filter((r) => r.status === "set").map((r) => r.name));
+  const missing = DECODO_SECRETS.filter((n) => !setNames.has(n));
+  const allSet = missing.length === 0;
+
+  return (
+    <div className="mt-2 rounded-md border border-border/60 bg-surface-1/40 p-3 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Badge variant={allSet ? "secondary" : "outline"} className={allSet ? "bg-emerald-500/15 text-emerald-300" : "text-amber-300"}>
+            {allSet ? "Configured" : "Not configured"}
+          </Badge>
+          <span className="text-muted-foreground">
+            Decodo residential proxy — sticky session per portal, rotating exit IPs.
+          </span>
+        </div>
+      </div>
+      <ul className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-3">
+        {DECODO_SECRETS.map((n) => {
+          const ok = setNames.has(n);
+          return (
+            <li key={n} className="flex items-center gap-2">
+              <span className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-400" : "bg-amber-400"}`} />
+              <code className="text-[11px]">{n}</code>
+            </li>
+          );
+        })}
+      </ul>
+      {!allSet && (
+        <p className="mt-2 text-muted-foreground">
+          Add the missing secret{missing.length === 1 ? "" : "s"} ({missing.join(", ")}) in Lovable Cloud → Secrets. The worker reads them at runtime.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function AutomationPage() {
   const settings = useQuery(automationQueryOptions());
   const filters = useQuery(filtersListQueryOptions());
