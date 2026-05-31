@@ -35,7 +35,13 @@ export const discardApplication = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { error } = await supabase
       .from("applications")
-      .delete()
+      .update({
+        phase: "dead_letter",
+        status: "failed",
+        dlq_reason: "user_discarded",
+        next_retry_at: null,
+        finished_at: new Date().toISOString(),
+      })
       .eq("id", data.id)
       .eq("user_id", userId);
     if (error) throw new Error(error.message);
