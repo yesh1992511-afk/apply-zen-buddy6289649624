@@ -42,6 +42,8 @@ export const Route = createFileRoute("/_authenticated/profile")({
 
 // Fields that count toward "profile complete" for autofill quality.
 const CRITICAL_FIELDS: { key: string; label: string }[] = [
+  { key: "first_name", label: "First name" },
+  { key: "last_name", label: "Last name" },
   { key: "full_name", label: "Full name" },
   { key: "email", label: "Email" },
   { key: "phone", label: "Phone" },
@@ -189,6 +191,16 @@ function ProfilePage() {
         {/* BASIC */}
         <TabsContent value="basic" className="space-y-4 pt-4">
           <Card><CardContent className="grid gap-4 pt-6 md:grid-cols-2">
+            <Field label="First name" value={getStr("first_name")} onChange={(v) => {
+              set("first_name", v);
+              const ln = getStr("last_name");
+              if (v || ln) set("full_name", [v, ln].filter(Boolean).join(" "));
+            }} />
+            <Field label="Last name" value={getStr("last_name")} onChange={(v) => {
+              set("last_name", v);
+              const fn = getStr("first_name");
+              if (v || fn) set("full_name", [fn, v].filter(Boolean).join(" "));
+            }} />
             <Field label="Full name" value={getStr("full_name")} onChange={(v) => set("full_name", v)} />
             <Field label="Preferred name" value={getStr("preferred_name")} onChange={(v) => set("preferred_name", v)} />
             <SelectField label="Pronouns" value={getStr("pronouns")} onChange={(v) => set("pronouns", v)} options={PRONOUNS} />

@@ -5,6 +5,8 @@ import { escapeTex, formatDateRange, fmtYear, TEX_PREAMBLE } from "./resume-temp
 
 type Profile = {
   full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   email: string | null;
   phone: string | null;
   city: string | null;
@@ -74,7 +76,8 @@ export type ResumeData = {
 };
 
 function header(p: Profile): string {
-  const name = (p.full_name || "Your Name").toUpperCase();
+  const composed = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+  const name = (composed || p.full_name || "Your Name").toUpperCase();
   const loc = [p.city, p.state_region].filter(Boolean).join(", ") || p.location || "";
   const parts: string[] = [];
   if (loc) parts.push(escapeTex(loc));
