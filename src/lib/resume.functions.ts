@@ -114,8 +114,10 @@ export const compileResumeToPdf = createServerFn({ method: "POST" })
     const url = `https://latexonline.cc/data?command=pdflatex&text=${encodeURIComponent(row.tex_content)}`;
     const res = await fetch(url, { method: "GET" });
     if (!res.ok) {
+      // Log the raw upstream response server-side only; never forward to the client.
       const errText = await res.text().catch(() => "");
-      throw new Error(`Compile service returned ${res.status}: ${errText.slice(0, 300)}`);
+      console.error("[compileResumeToPdf] latexonline error", res.status, errText.slice(0, 1000));
+      throw new Error("PDF compilation failed. Check the LaTeX source for errors.");
     }
     const ab = await res.arrayBuffer();
     if (ab.byteLength < 200) {
