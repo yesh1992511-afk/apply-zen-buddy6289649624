@@ -25,7 +25,10 @@ import {
 
 import { toast } from "sonner";
 import { useUser } from "@/lib/useAuth";
-import { Plus, Trash2, X } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { syncResumeFromProfile } from "@/lib/resume.functions";
+import { Plus, Trash2, X, FileText } from "lucide-react";
 
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -120,6 +123,7 @@ function ProfilePage() {
           >
             Save now
           </Button>
+          <SyncResumeButton completeness={completeness} flush={flush} />
         </div>
       </div>
 
