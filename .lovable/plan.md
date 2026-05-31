@@ -1,144 +1,67 @@
+# Finish remaining work
 
-## Confirmation of my understanding
+Audited the codebase against the approved plan. Migration, matched-only ingest, parallel scraping, 6 new ATS adapters, curated packs UI, tailored-resume generation in `runner.py`, and the `TailoredResumePanel` are already in place. The items below are still missing or partial.
 
-**Resume flow (your #5):** For each job we auto-apply to, the worker first generates a **tailored resume** (AI picks/rewrites Summary + relevant Experiences + relevant Projects from your master pool, scored against that specific JD). When filling the application form:
-- **From generated resume (per-job):** Summary, Experience bullets, Project bullets, skills emphasis
-- **From Profile (static):** name, email, phone, address, work auth, education, certs, languages, screening answers, demographics, salary expectations, etc.
+## 1. Jobs query — drop matched filter (#1)
 
-The generated resume PDF is what gets uploaded as the "resume" attachment. Confirmed.
+`src/lib/queries/jobs.ts` still has `.eq("matched", true)` and a `matchedRes` count. Since ingest now drops unmatched at the source, every row in `jobs` is matched.
+- Remove the `.eq("matched", true)` on line 153.
+- Collapse `useJobCounts` to return a single `count` (rename UI usages accordingly, or keep `{scraped, matched}` both pointing at the same count for back-compat).
 
----
+## 2. profile_map.py & cover letter use tailored content (#5)
 
-## 1. Jobs pipeline — matched-only at ingest
+`runner.py` already passes `profile["_tailored_lists"]`, but `profile_map.py` and `ai/cover_letter.py` don't read it yet.
+- `worker/app/apply/profile_map.py`: when resolving fields that map to `summary`, `experiences`, `projects`, `skills`, prefer `profile["_tailored_lists"]` over the base tables. All other fields keep reading from `profile`.
+- `worker/app/ai/cover_letter.py`: accept the tailored summary + top experiences/projects and feed them into the prompt so cover letter and resume stay consistent.
 
-- Drop unmatched at ingest in `worker/app/sources/registry.py` `_run_source`: if `passes(j, active_filter)` is False → skip insert entirely (don't store, don't score).
-- Same rule in the server-side ingest paths (`run-tier.ts`, `ingest-extension.ts`).
-- Remove `matched=false` rows in a one-time cleanup migration.
-- Simplify `jobs` query in `src/lib/queries/jobs.ts` — drop the `.eq("matched", true)` filter (everything in `jobs` is matched now). Update `jobCountsQueryOptions` to read total only.
-- Add a "Discarded log" counter (count only, no rows) in `automation_runs.metadata` so user can see how many were filtered out.
+## 3. Automation status panels (#7)
 
-## 2 + 3 + 6. Sources — big expansion + ATS improvements
+`src/routes/_authenticated/automation.tsx` only has `DecodoStatus`. Add sibling components following the same pattern (server-fn check + green/red badge):
+- `CapsolverStatus` — `CAPSOLVER_API_KEY`
+- `OpenaiStatus` — `OPENAI_API_KEY`, `OPENAI_MODEL`
+- `DeepseekStatus` — `DEEPSEEK_API_KEY`, `DEEPSEEK_REASONER_MODEL`, `DEEPSEEK_CHAT_MODEL`
+- `GmailOauthStatus` — `GMAIL_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN`, `GMAIL_EMAIL`
+- `ApplyIdentityStatus` — `APPLY_EMAIL`, `APPLY_PASSWORD`, `APPLY_DEFAULT_PHONE`
 
-**New ATS portal adapters (worker/app/sources/):**
-- `ats_workday.py` — Workday CXS public JSON (`/wday/cxs/{tenant}/{site}/jobs`)
-- `ats_icims.py` — iCIMS public job feed
-- `ats_jobvite.py` — Jobvite XML/JSON feed
-- `ats_successfactors.py` — SuccessFactors public career API
-- `ats_bamboohr.py` — BambooHR `/jobs/embed2.php` JSON
-- `ats_breezyhr.py` — Breezy public JSON
-- `ats_personio.py` — Personio XML
-- `ats_pinpoint.py` — Pinpoint public API
-- `ats_rippling.py` — Rippling careers JSON
+Group them under a "Worker secrets" card. Extend the existing `readiness.functions.ts` server fn so it returns presence flags for all of the above (presence only, never values).
 
-**New direct portals (free, public):**
-- `dice.py`, `levelsfyi.py`, `ycombinator_jobs.py`, `cybersecjobs.py`, `dicecyber.py`, `cleared_jobs.py` (clearance)
+## 4. Setup readiness (#7)
 
-**Curated board pack (100+ companies):** Add `worker/app/sources/curated_boards.py` shipping default board tokens for top tech / cyber / fintech / health / FAANG / unicorn companies. Backed by `src/lib/sources/curated-packs.ts` UI on the `/sources` page — toggle a whole pack on/off (e.g. "Top 50 Tech", "Cybersecurity 30", "Fintech 25").
+`src/routes/_authenticated/setup.tsx` has no checks for the new secrets. Add a "Worker integrations" checklist row per group above, using the same readiness server fn. Each row links to Connectors when missing.
 
-**ATS adapter hardening:** add retry w/ exponential backoff, rotating User-Agent, optional proxy (Decodo) per request, parse `posted_at` properly across all ATS responses, capture salary ranges where exposed (Greenhouse `pay_input_ranges`, Lever `salaryRange`, Ashby `compensation`).
+## 5. bootstrap.sh syncs secrets from Lovable Cloud (#7)
 
-## 4. Parallel scraping
+`worker/bootstrap.sh` currently doesn't pull secrets. On VPS startup, fetch all worker secrets from Supabase Vault (or a new internal `/api/public/worker/env` endpoint guarded by `WORKER_SHARED_TOKEN`) and write them to `worker/.env`. This way we only manage secrets in Lovable Cloud.
 
-In `worker/app/sources/registry.py` `run_due_sources`:
-- Replace serial `for r in rows: await _run_source(r)` with `asyncio.gather(*[_run_source(r) for r in due_rows], return_exceptions=True)` capped via `asyncio.Semaphore(8)` (configurable via `automation_settings.parallelism * 4`).
-- Per-source timeout (180s) so one slow source doesn't block the batch.
-- Same change in server-side `run-tier.ts` for the fast-path Apify/free runs.
+## 6. ATS hardening (#3/#6)
 
-## 5. Tailored resume as the source of truth for auto-apply
+Touch `ats_greenhouse.py`, `ats_lever.py`, `ats_ashby.py`, `ats_workable.py`, `ats_smartrecruiters.py`, `ats_recruitee.py`, `ats_teamtailor.py`:
+- Wrap HTTP calls in a shared `worker/app/sources/_http.py` helper with: exponential backoff (3 tries), rotating User-Agent pool, optional Decodo proxy when `DECODO_*` env is set.
+- Parse salary fields: Greenhouse `pay_input_ranges`, Lever `salaryRange`, Ashby `compensation.compensationTierSummary`. Write into `salary_min` / `salary_max` / `salary_currency`.
 
-**Data model (new migration):**
-- `generated_resumes` table — one row per (user_id, job_id): `tailored_summary text`, `tailored_experiences jsonb` (array of `{company, title, dates, bullets[]}`), `tailored_projects jsonb`, `tailored_skills text[]`, `pdf_storage_path text`, `model text`, `created_at`.
-- Link `applications.generated_resume_id` → `generated_resumes.id`.
+## 7. Extra free sources (#2/#6)
 
-**Worker flow (`worker/app/apply/runner.py`):**
-1. Before opening the portal, run `app/ai/resume_pipeline.py`:
-   - Load full master experiences/projects from Profile tables.
-   - Score each experience/project against JD with AI; pick top-N.
-   - AI rewrites bullets to mirror JD keywords (truthfully — no fabrication).
-   - AI writes a fresh 2–3 line summary.
-   - Render via existing LaTeX template → PDF → upload to `resumes` bucket.
-   - Insert into `generated_resumes`.
-2. `profile_map.py` is updated so any form field that resolves to **summary / experience / projects / skills** reads from `generated_resumes` row, not the base `experiences` / `projects` tables. All other fields keep reading from `profile`.
-3. Cover letter (`ai/cover_letter.py`) gets the same tailored bullets as input so it's consistent with the resume.
+Add the public boards that were promised but not yet shipped:
+- `worker/app/sources/dice.py` (Dice RSS / JSON feed — tech)
+- `worker/app/sources/ycombinator_jobs.py` (YC Jobs JSON)
+- `worker/app/sources/cybersecjobs.py` (cybersecjobs.com RSS)
+- `worker/app/sources/cleared_jobs.py` (clearedjobs.net RSS — US security-cleared roles)
+- `worker/app/sources/levelsfyi.py` (levels.fyi public job board)
 
-**UI (`src/routes/_authenticated/applications.$id.tsx`):** add a "Tailored resume" tab showing the generated summary/experience/projects diff vs. master + a "Download tailored PDF" button.
-
-## 7. Sync worker/.env.example → Lovable Cloud secrets
-
-Push these into Lovable Cloud Secrets (via `secrets--add_secret`) so server functions + `automation.tsx` status panel see them:
-
-```
-DECODO_USERNAME, DECODO_PASSWORD, DECODO_HOST, DECODO_PORT, DECODO_COUNTRY
-CAPSOLVER_API_KEY
-OPENAI_API_KEY, OPENAI_MODEL
-DEEPSEEK_API_KEY, DEEPSEEK_REASONER_MODEL, DEEPSEEK_CHAT_MODEL
-GMAIL_OAUTH_CLIENT_ID, GMAIL_OAUTH_CLIENT_SECRET, GMAIL_OAUTH_REFRESH_TOKEN, GMAIL_EMAIL
-APPLY_EMAIL, APPLY_PASSWORD, APPLY_DEFAULT_PHONE
-```
-
-(`APIFY_TOKEN` already set.) These also need to land in the VPS worker `.env` — the bootstrap script will pull them from Supabase secrets at startup so we only manage them in one place.
-
-Update `automation.tsx` status panels and `/setup` readiness checks to recognize all of the above (extend `DecodoStatus` pattern to `CapsolverStatus`, `GmailOauthStatus`, `DeepseekStatus`, `OpenaiStatus`).
+Register each in `registry.py` `ADAPTERS`. Skip SuccessFactors/Pinpoint/Rippling for now — they're closed feeds requiring per-tenant credentials.
 
 ---
 
-## Technical details
+## Order of execution
 
-**Files created**
-- `worker/app/sources/ats_workday.py`, `ats_icims.py`, `ats_jobvite.py`, `ats_successfactors.py`, `ats_bamboohr.py`, `ats_breezyhr.py`, `ats_personio.py`, `ats_pinpoint.py`, `ats_rippling.py`
-- `worker/app/sources/dice.py`, `levelsfyi.py`, `ycombinator_jobs.py`, `cybersecjobs.py`, `cleared_jobs.py`
-- `worker/app/sources/curated_boards.py`
-- `worker/app/ai/resume_pipeline.py` (extend existing) + new `worker/app/ai/experience_scorer.py`
-- `supabase/migrations/<ts>_generated_resumes_and_matched_only.sql`
-- `src/components/TailoredResumeTab.tsx`
-- New status components: `CapsolverStatus`, `GmailOauthStatus`, `DeepseekStatus`, `OpenaiStatus`
+1. `queries/jobs.ts` cleanup
+2. `profile_map.py` + `cover_letter.py` tailored reads
+3. New ATS HTTP helper + salary parsing (existing 7 adapters)
+4. 5 new public sources + registry registration
+5. `automation.tsx` status panels + `readiness.functions.ts` extension
+6. `setup.tsx` readiness rows
+7. `bootstrap.sh` secret sync
 
-**Files edited**
-- `worker/app/sources/registry.py` — register all new adapters; parallel `asyncio.gather` with semaphore
-- `worker/app/sources/ats_greenhouse.py`, `ats_lever.py`, `ats_ashby.py`, `ats_workable.py`, `ats_smartrecruiters.py`, `ats_recruitee.py`, `ats_teamtailor.py` — add salary parsing, retry, proxy support
-- `worker/app/pipeline/normalize.py` — drop unmatched at source
-- `worker/app/apply/runner.py` + `worker/app/apply/profile_map.py` — read tailored content from `generated_resumes`
-- `src/routes/_authenticated/sources.tsx` — curated packs UI
-- `src/routes/_authenticated/automation.tsx` — add all secret status panels
-- `src/routes/_authenticated/setup.tsx` — readiness checks for new secrets
-- `src/routes/_authenticated/applications.$id.tsx` — Tailored resume tab
-- `src/lib/queries/jobs.ts` — drop matched filter
-- `src/lib/sources/curated-packs.ts` — pack definitions
-- `worker/bootstrap.sh` — pull secrets from Supabase at startup
+No new migrations or secrets needed — everything already exists in Lovable Cloud.
 
-**Migration sketch**
-```sql
--- 1. Drop unmatched
-DELETE FROM public.jobs WHERE matched = false;
-
--- 2. Generated resumes
-CREATE TABLE public.generated_resumes (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  job_id uuid NOT NULL,
-  tailored_summary text,
-  tailored_experiences jsonb NOT NULL DEFAULT '[]',
-  tailored_projects jsonb NOT NULL DEFAULT '[]',
-  tailored_skills text[] DEFAULT '{}',
-  pdf_storage_path text,
-  model text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (user_id, job_id)
-);
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.generated_resumes TO authenticated;
-GRANT ALL ON public.generated_resumes TO service_role;
-ALTER TABLE public.generated_resumes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "owner full access" ON public.generated_resumes
-  FOR ALL TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
-
-ALTER TABLE public.applications ADD COLUMN generated_resume_id uuid REFERENCES public.generated_resumes(id);
-```
-
-**Order of execution**
-1. Migration (DB)
-2. Secrets push (`add_secret` for ~15 keys)
-3. Worker: new adapters + parallel scraping + matched-only ingest
-4. Worker: resume_pipeline + runner integration
-5. Frontend: queries, curated packs UI, status panels, applications tab
-
-Approve and I'll start with the migration + secrets first.
+Approve and I'll execute top-to-bottom.
