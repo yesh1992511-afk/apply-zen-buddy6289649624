@@ -155,7 +155,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                   .select('id');
                 if (error) {
                   summary[sourceKey].errors++;
-                  summary[sourceKey].error_message = error.message.slice(0, 200);
+                  summary[sourceKey].error_message = `insert: ${error.message}`.slice(0, 200);
                   totalErr++;
                   continue;
                 }
