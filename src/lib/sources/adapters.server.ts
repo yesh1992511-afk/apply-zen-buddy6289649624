@@ -399,6 +399,311 @@ export async function fetchRecruitee(slug: string): Promise<NormalizedJob[]> {
 }
 
 // ============================================================
+// Teamtailor (public API, per-company slug)
+// ============================================================
+export async function fetchTeamtailor(slug: string): Promise<NormalizedJob[]> {
+  const data = await fetchJson<{ data?: Array<Record<string, unknown>> }>(
+    `https://${slug}.teamtailor.com/api/v1/jobs?include=department,location&page[size]=100`,
+    { headers: { 'X-Api-Version': '20210218' } },
+  );
+  if (!data?.data) return [];
+  return data.data.map((j) => {
+    const attrs = (j.attributes ?? {}) as Record<string, unknown>;
+    const url = String(((j.links ?? {}) as Record<string, unknown>)['careersite-job-url'] ?? '');
+    return {
+      source_key: `teamtailor:${slug}`,
+      source_job_id: String(j.id),
+      dedupe_hash: mkHash(`teamtailor:${slug}`, String(j.id), url),
+      title: String(attrs.title ?? ''),
+      company: slug,
+      location: null,
+      remote: attrs['remote-status'] === 'fully' ? 'remote' : null,
+      url,
+      description: typeof attrs.body === 'string' ? attrs.body.replace(/<[^>]+>/g, ' ').slice(0, 8000) : null,
+      description_html: typeof attrs.body === 'string' ? attrs.body : null,
+      salary_min: null, salary_max: null, salary_currency: null,
+      employment_type: (attrs['employment-type'] as string) || null,
+      seniority: (attrs['experience'] as string) || null,
+      posted_at: attrs['start-date'] ? new Date(String(attrs['start-date'])).toISOString() : null,
+      raw: j,
+    };
+  });
+}
+
+// ============================================================
+// Personio (public XML feed, per-company slug)
+// ============================================================
+export async function fetchPersonio(slug: string): Promise<NormalizedJob[]> {
+  const xml = await fetchText(`https://${slug}.jobs.personio.de/xml`);
+  if (!xml) return [];
+  const positions = xml.match(/<position>[\s\S]*?<\/position>/g) ?? [];
+  const get = (block: string, tag: string) => {
+    const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+    return m ? m[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
+  };
+  return positions.slice(0, 200).map((b) => {
+    const id = get(b, 'id');
+    const name = get(b, 'name');
+    const office = get(b, 'office');
+    const url = `https://${slug}.jobs.personio.de/job/${id}`;
+    return {
+      source_key: `personio:${slug}`,
+      source_job_id: id,
+      dedupe_hash: mkHash(`personio:${slug}`, id, url),
+      title: name,
+      company: slug,
+      location: office || null,
+      remote: /remote/i.test(office) ? 'remote' : null,
+      url,
+      description: get(b, 'jobDescriptions').replace(/<[^>]+>/g, ' ').slice(0, 8000) || null,
+      description_html: get(b, 'jobDescriptions') || null,
+      salary_min: null, salary_max: null, salary_currency: null,
+      employment_type: get(b, 'employmentType') || null,
+      seniority: get(b, 'seniority') || null,
+      posted_at: get(b, 'createdAt') ? new Date(get(b, 'createdAt')).toISOString() : null,
+      raw: { id, name, office },
+    };
+  });
+}
+
+// ============================================================
+// BambooHR (public JSON feed, per-company slug)
+// ============================================================
+export async function fetchBambooHR(slug: string): Promise<NormalizedJob[]> {
+  const data = await fetchJson<{ result?: Array<Record<string, unknown>> }>(
+    `https://${slug}.bamboohr.com/careers/list`,
+  );
+  if (!data?.result) return [];
+  return data.result.map((j) => {
+    const loc = (j.location ?? {}) as Record<string, string>;
+    const id = String(j.id);
+    const url = `https://${slug}.bamboohr.com/careers/${id}`;
+    return {
+      source_key: `bamboohr:${slug}`,
+      source_job_id: id,
+      dedupe_hash: mkHash(`bamboohr:${slug}`, id, url),
+      title: String(j.jobOpeningName ?? ''),
+      company: String(j.departmentLabel ?? slug),
+      location: [loc.city, loc.state, loc.country].filter(Boolean).join(', ') || null,
+      remote: j.isRemote ? 'remote' : null,
+      url,
+      description: null, description_html: null,
+      salary_min: null, salary_max: null, salary_currency: null,
+      employment_type: (j.employmentStatusLabel as string) || null,
+      seniority: null,
+      posted_at: j.datePosted ? new Date(String(j.datePosted)).toISOString() : null,
+      raw: j,
+    };
+  });
+}
+
+// ============================================================
+// USAJobs (federal API, requires API key + user-agent email)
+// ============================================================
+export async function fetchUSAJobs(keyword = 'software', location = ''): Promise<NormalizedJob[]> {
+  const apiKey = process.env.USAJOBS_API_KEY;
+  const userAgent = process.env.USAJOBS_USER_AGENT_EMAIL;
+  if (!apiKey || !userAgent) return [];
+  const params = new URLSearchParams({ Keyword: keyword, ResultsPerPage: '100' });
+  if (location) params.set('LocationName', location);
+  const data = await fetchJson<{ SearchResult?: { SearchResultItems?: Array<Record<string, unknown>> } }>(
+    `https://data.usajobs.gov/api/search?${params}`,
+    {
+      headers: {
+        'Host': 'data.usajobs.gov',
+        'User-Agent': userAgent,
+        'Authorization-Key': apiKey,
+      },
+    },
+  );
+  const items = data?.SearchResult?.SearchResultItems ?? [];
+  return items.map((it) => {
+    const d = ((it as Record<string, unknown>).MatchedObjectDescriptor ?? {}) as Record<string, unknown>;
+    const id = String(d.PositionID ?? '');
+    const url = String(d.PositionURI ?? '');
+    const locs = (d.PositionLocation as Array<Record<string, unknown>>) ?? [];
+    return {
+      source_key: 'usajobs',
+      source_job_id: id,
+      dedupe_hash: mkHash('usajobs', id, url),
+      title: String(d.PositionTitle ?? ''),
+      company: String((d.OrganizationName as string) ?? 'US Government'),
+      location: locs.map((l) => l.LocationName).filter(Boolean).join('; ') || null,
+      remote: /remote/i.test(String(d.PositionTitle ?? '')) ? 'remote' : null,
+      url,
+      description: typeof d.QualificationSummary === 'string' ? (d.QualificationSummary as string).slice(0, 8000) : null,
+      description_html: null,
+      salary_min: ((d.PositionRemuneration as Array<Record<string, unknown>>)?.[0]?.MinimumRange) ? Number((d.PositionRemuneration as Array<Record<string, unknown>>)[0].MinimumRange) : null,
+      salary_max: ((d.PositionRemuneration as Array<Record<string, unknown>>)?.[0]?.MaximumRange) ? Number((d.PositionRemuneration as Array<Record<string, unknown>>)[0].MaximumRange) : null,
+      salary_currency: 'USD',
+      employment_type: ((d.PositionSchedule as Array<Record<string, unknown>>)?.[0]?.Name as string) || null,
+      seniority: null,
+      posted_at: d.PublicationStartDate ? new Date(String(d.PublicationStartDate)).toISOString() : null,
+      raw: d,
+    };
+  });
+}
+
+// ============================================================
+// Apify — reads each actor's LAST SUCCEEDED RUN dataset
+// (zero compute cost, instant response, never starts a new run)
+// Users schedule actor runs separately via Apify dashboard.
+// ============================================================
+async function fetchApifyLastRun(actorId: string, sourceKey: string, mapper: (item: Record<string, unknown>) => NormalizedJob | null): Promise<NormalizedJob[]> {
+  const token = process.env.APIFY_TOKEN;
+  if (!token) return [];
+  const url = `https://api.apify.com/v2/acts/${actorId}/runs/last/dataset/items?token=${token}&status=SUCCEEDED&limit=200&clean=true`;
+  const items = await fetchJson<Array<Record<string, unknown>>>(url);
+  if (!Array.isArray(items)) return [];
+  return items.map(mapper).filter((j): j is NormalizedJob => j !== null);
+}
+
+export async function fetchApifyLinkedIn(): Promise<NormalizedJob[]> {
+  return fetchApifyLastRun('bebity~linkedin-jobs-scraper', 'apify:linkedin', (it) => {
+    const url = String(it.link ?? it.jobUrl ?? '');
+    if (!url) return null;
+    return {
+      source_key: 'apify:linkedin',
+      source_job_id: String(it.id ?? url),
+      dedupe_hash: mkHash('apify:linkedin', String(it.id ?? null), url),
+      title: String(it.title ?? it.position ?? ''),
+      company: String(it.companyName ?? it.company ?? ''),
+      location: (it.location as string) || null,
+      remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
+      url,
+      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+      description_html: null,
+      salary_min: null, salary_max: null, salary_currency: null,
+      employment_type: (it.employmentType as string) || null,
+      seniority: (it.seniorityLevel as string) || null,
+      posted_at: it.postedAt ? new Date(String(it.postedAt)).toISOString() : null,
+      raw: it,
+    };
+  });
+}
+
+export async function fetchApifyIndeed(): Promise<NormalizedJob[]> {
+  return fetchApifyLastRun('misceres~indeed-scraper', 'apify:indeed', (it) => {
+    const url = String(it.url ?? it.externalApplyLink ?? '');
+    if (!url) return null;
+    return {
+      source_key: 'apify:indeed',
+      source_job_id: String(it.id ?? it.jobkey ?? url),
+      dedupe_hash: mkHash('apify:indeed', String(it.id ?? it.jobkey ?? null), url),
+      title: String(it.positionName ?? it.title ?? ''),
+      company: String(it.company ?? ''),
+      location: (it.location as string) || null,
+      remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
+      url,
+      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+      description_html: null,
+      salary_min: null, salary_max: null,
+      salary_currency: (it.salary as { currency?: string } | undefined)?.currency ?? null,
+      employment_type: (it.jobType as string) || null,
+      seniority: null,
+      posted_at: it.postingDateParsed ? new Date(String(it.postingDateParsed)).toISOString() : null,
+      raw: it,
+    };
+  });
+}
+
+export async function fetchApifyGlassdoor(): Promise<NormalizedJob[]> {
+  return fetchApifyLastRun('bebity~glassdoor-jobs-scraper', 'apify:glassdoor', (it) => {
+    const url = String(it.url ?? it.jobUrl ?? '');
+    if (!url) return null;
+    return {
+      source_key: 'apify:glassdoor',
+      source_job_id: String(it.id ?? url),
+      dedupe_hash: mkHash('apify:glassdoor', String(it.id ?? null), url),
+      title: String(it.jobTitle ?? it.title ?? ''),
+      company: String(it.companyName ?? ''),
+      location: (it.location as string) || null,
+      remote: null,
+      url,
+      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+      description_html: null,
+      salary_min: null, salary_max: null, salary_currency: null,
+      employment_type: null, seniority: null,
+      posted_at: it.postedAt ? new Date(String(it.postedAt)).toISOString() : null,
+      raw: it,
+    };
+  });
+}
+
+export async function fetchApifyZipRecruiter(): Promise<NormalizedJob[]> {
+  return fetchApifyLastRun('bebity~ziprecruiter-scraper', 'apify:ziprecruiter', (it) => {
+    const url = String(it.url ?? '');
+    if (!url) return null;
+    return {
+      source_key: 'apify:ziprecruiter',
+      source_job_id: String(it.id ?? url),
+      dedupe_hash: mkHash('apify:ziprecruiter', String(it.id ?? null), url),
+      title: String(it.title ?? it.name ?? ''),
+      company: String(it.company ?? it.hiringCompany ?? ''),
+      location: (it.location as string) || null,
+      remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
+      url,
+      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+      description_html: null,
+      salary_min: null, salary_max: null, salary_currency: 'USD',
+      employment_type: (it.employmentType as string) || null,
+      seniority: null,
+      posted_at: it.postedTime ? new Date(String(it.postedTime)).toISOString() : null,
+      raw: it,
+    };
+  });
+}
+
+export async function fetchApifyWellfound(): Promise<NormalizedJob[]> {
+  return fetchApifyLastRun('epctex~wellfound-scraper', 'apify:wellfound', (it) => {
+    const url = String(it.url ?? it.jobUrl ?? '');
+    if (!url) return null;
+    return {
+      source_key: 'apify:wellfound',
+      source_job_id: String(it.id ?? url),
+      dedupe_hash: mkHash('apify:wellfound', String(it.id ?? null), url),
+      title: String(it.title ?? ''),
+      company: String(it.companyName ?? it.startupName ?? ''),
+      location: (it.location as string) || null,
+      remote: it.remote ? 'remote' : null,
+      url,
+      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+      description_html: null,
+      salary_min: (it.salaryMin as number) ?? null,
+      salary_max: (it.salaryMax as number) ?? null,
+      salary_currency: (it.salaryCurrency as string) || 'USD',
+      employment_type: (it.jobType as string) || null,
+      seniority: null,
+      posted_at: it.postedAt ? new Date(String(it.postedAt)).toISOString() : null,
+      raw: it,
+    };
+  });
+}
+
+export async function fetchApifyGoogleJobs(): Promise<NormalizedJob[]> {
+  return fetchApifyLastRun('dan.poltawski~google-jobs-scraper', 'apify:google_jobs', (it) => {
+    const url = String(it.shareLink ?? it.url ?? '');
+    if (!url) return null;
+    return {
+      source_key: 'apify:google_jobs',
+      source_job_id: String(it.jobId ?? url),
+      dedupe_hash: mkHash('apify:google_jobs', String(it.jobId ?? null), url),
+      title: String(it.title ?? ''),
+      company: String(it.companyName ?? ''),
+      location: (it.location as string) || null,
+      remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
+      url,
+      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+      description_html: null,
+      salary_min: null, salary_max: null, salary_currency: null,
+      employment_type: null, seniority: null,
+      posted_at: it.postedAt ? new Date(String(it.postedAt)).toISOString() : null,
+      raw: it,
+    };
+  });
+}
+
+// ============================================================
 // Dispatch
 // ============================================================
 
@@ -418,9 +723,33 @@ export async function runSource(spec: SourceSpec): Promise<NormalizedJob[]> {
     case 'workable': return spec.slug ? fetchWorkable(spec.slug) : [];
     case 'smartrecruiters': return spec.slug ? fetchSmartRecruiters(spec.slug) : [];
     case 'recruitee': return spec.slug ? fetchRecruitee(spec.slug) : [];
+    case 'teamtailor': return spec.slug ? fetchTeamtailor(spec.slug) : [];
+    case 'personio': return spec.slug ? fetchPersonio(spec.slug) : [];
+    case 'bamboohr': return spec.slug ? fetchBambooHR(spec.slug) : [];
+    case 'usajobs': return fetchUSAJobs(spec.slug || 'software');
+    case 'apify:linkedin': return fetchApifyLinkedIn();
+    case 'apify:indeed': return fetchApifyIndeed();
+    case 'apify:glassdoor': return fetchApifyGlassdoor();
+    case 'apify:ziprecruiter': return fetchApifyZipRecruiter();
+    case 'apify:wellfound': return fetchApifyWellfound();
+    case 'apify:google_jobs': return fetchApifyGoogleJobs();
     default: return [];
   }
 }
 
-// Tier A: aggregators that need no slug
+// Tier A: aggregators that need no slug (every 15min)
 export const AGGREGATOR_PROVIDERS = ['remoteok', 'remotive', 'arbeitnow', 'himalayas', 'jobicy', 'weworkremotely'];
+// Tier C: USAJobs keyword queries (every 60min)
+export const USAJOBS_QUERIES: Array<{ provider: string; slug: string }> = [
+  { provider: 'usajobs', slug: 'software' },
+  { provider: 'usajobs', slug: 'engineer' },
+  { provider: 'usajobs', slug: 'data' },
+  { provider: 'usajobs', slug: 'cyber' },
+  { provider: 'usajobs', slug: 'analyst' },
+  { provider: 'usajobs', slug: 'developer' },
+];
+// Tier D: Apify cached datasets (every 4h)
+export const APIFY_PROVIDERS = [
+  'apify:linkedin', 'apify:indeed', 'apify:glassdoor',
+  'apify:ziprecruiter', 'apify:wellfound', 'apify:google_jobs',
+];
