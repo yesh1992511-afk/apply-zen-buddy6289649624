@@ -51,8 +51,19 @@ type AppRow = {
     title: string; company: string; url: string; source_key: string;
     location: string | null; remote: string | null; posted_at: string | null;
     scraped_at: string;
+    description: string | null; description_html: string | null;
   } | null;
 };
+
+function sanitizeJdHtml(html: string): string {
+  // Strip script/iframe/style tags and inline event handlers before injecting.
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "");
+}
 
 type ResumeRow = { id: string; name: string; pdf_storage_path: string | null; kind: string };
 
