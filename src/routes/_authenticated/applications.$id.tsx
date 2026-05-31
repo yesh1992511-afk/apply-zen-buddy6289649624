@@ -270,6 +270,7 @@ function ApplicationDetailPage() {
           <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2">View</div>
           <nav className="rounded-xl border border-border/60 bg-card overflow-hidden">
             {[
+              { v: "jd", label: "Job description", icon: Briefcase },
               { v: "form", label: "Form", icon: ClipboardList },
               { v: "timeline", label: "Timeline", icon: History },
               { v: "resume", label: "Resume", icon: FileText },
