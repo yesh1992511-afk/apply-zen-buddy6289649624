@@ -558,162 +558,293 @@ export async function fetchUSAJobs(keyword = 'software', location = ''): Promise
 }
 
 // ============================================================
-// Apify — reads each actor's LAST SUCCEEDED RUN dataset
-// (zero compute cost, instant response, never starts a new run)
-// Users schedule actor runs separately via Apify dashboard.
+// Apify — triggers a fresh actor run with the user's keywords/locations
+// via run-sync-get-dataset-items. Costs Apify compute, but returns
+// fresh, targeted jobs instead of stale cached datasets.
 // ============================================================
-async function fetchApifyLastRun(actorId: string, sourceKey: string, mapper: (item: Record<string, unknown>) => NormalizedJob | null): Promise<NormalizedJob[]> {
+const APIFY_RUN_TIMEOUT_MS = 110_000; // a touch under the run-tier 120s cap
+
+async function runApifyActor(
+  actorId: string,
+  payload: Record<string, unknown>,
+): Promise<Array<Record<string, unknown>>> {
   const token = process.env.APIFY_TOKEN;
   if (!token) return [];
-  const url = `https://api.apify.com/v2/acts/${actorId}/runs/last/dataset/items?token=${token}&status=SUCCEEDED&limit=200&clean=true`;
-  const items = await fetchJson<Array<Record<string, unknown>>>(url);
-  if (!Array.isArray(items)) return [];
-  return items.map(mapper).filter((j): j is NormalizedJob => j !== null);
+  const url =
+    `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items` +
+    `?token=${token}&timeout=100&memory=1024&clean=true`;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), APIFY_RUN_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'LovableJobBot/1.0' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`apify ${actorId} ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
+  } finally {
+    clearTimeout(to);
+  }
 }
 
-export async function fetchApifyLinkedIn(): Promise<NormalizedJob[]> {
-  return fetchApifyLastRun('bebity~linkedin-jobs-scraper', 'apify:linkedin', (it) => {
-    const url = String(it.link ?? it.jobUrl ?? '');
-    if (!url) return null;
-    return {
-      source_key: 'apify:linkedin',
-      source_job_id: String(it.id ?? url),
-      dedupe_hash: mkHash('apify:linkedin', String(it.id ?? null), url),
-      title: String(it.title ?? it.position ?? ''),
-      company: String(it.companyName ?? it.company ?? ''),
-      location: (it.location as string) || null,
-      remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
-      url,
-      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-      description_html: null,
-      salary_min: null, salary_max: null, salary_currency: null,
-      employment_type: (it.employmentType as string) || null,
-      seniority: (it.seniorityLevel as string) || null,
-      posted_at: it.postedAt ? new Date(String(it.postedAt)).toISOString() : null,
-      raw: it,
-    };
+export type ApifyCtx = { queries: string[]; locations: string[] };
+
+const defaultCtx = (ctx?: ApifyCtx): ApifyCtx => ({
+  queries: ctx?.queries?.length ? ctx.queries : ['software engineer'],
+  locations: ctx?.locations?.length ? ctx.locations : ['United States'],
+});
+
+export async function fetchApifyLinkedIn(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
+  const c = defaultCtx(ctx);
+  const items = await runApifyActor('bebity~linkedin-jobs-scraper', {
+    queries: c.queries,
+    locations: c.locations,
+    rows: 80,
+    proxy: { useApifyProxy: true },
   });
+  return items
+    .map((it) => {
+      const url = String(it.link ?? it.jobUrl ?? '');
+      if (!url) return null;
+      return {
+        source_key: 'apify:linkedin',
+        source_job_id: String(it.id ?? url),
+        dedupe_hash: mkHash('apify:linkedin', String(it.id ?? null), url),
+        title: String(it.title ?? it.position ?? ''),
+        company: String(it.companyName ?? it.company ?? ''),
+        location: (it.location as string) || null,
+        remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
+        url,
+        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+        description_html: null,
+        salary_min: null, salary_max: null, salary_currency: null,
+        employment_type: (it.employmentType as string) || null,
+        seniority: (it.seniorityLevel as string) || null,
+        posted_at: safeIsoDate(it.postedAt ?? it.publishedAt),
+        raw: it,
+      } as NormalizedJob;
+    })
+    .filter((j): j is NormalizedJob => j !== null);
 }
 
-export async function fetchApifyIndeed(): Promise<NormalizedJob[]> {
-  return fetchApifyLastRun('misceres~indeed-scraper', 'apify:indeed', (it) => {
-    const url = String(it.url ?? it.externalApplyLink ?? '');
-    if (!url) return null;
-    return {
-      source_key: 'apify:indeed',
-      source_job_id: String(it.id ?? it.jobkey ?? url),
-      dedupe_hash: mkHash('apify:indeed', String(it.id ?? it.jobkey ?? null), url),
-      title: String(it.positionName ?? it.title ?? ''),
-      company: String(it.company ?? ''),
-      location: (it.location as string) || null,
-      remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
-      url,
-      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-      description_html: null,
-      salary_min: null, salary_max: null,
-      salary_currency: (it.salary as { currency?: string } | undefined)?.currency ?? null,
-      employment_type: (it.jobType as string) || null,
-      seniority: null,
-      posted_at: it.postingDateParsed ? new Date(String(it.postingDateParsed)).toISOString() : null,
-      raw: it,
-    };
+export async function fetchApifyIndeed(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
+  const c = defaultCtx(ctx);
+  const items = await runApifyActor('misceres~indeed-scraper', {
+    position: c.queries[0],
+    country: 'US',
+    location: c.locations[0],
+    maxItems: 80,
+    parseCompanyDetails: false,
+    saveOnlyUniqueItems: true,
   });
+  return items
+    .map((it) => {
+      const url = String(it.url ?? it.externalApplyLink ?? '');
+      if (!url) return null;
+      return {
+        source_key: 'apify:indeed',
+        source_job_id: String(it.id ?? it.jobkey ?? url),
+        dedupe_hash: mkHash('apify:indeed', String(it.id ?? it.jobkey ?? null), url),
+        title: String(it.positionName ?? it.title ?? ''),
+        company: String(it.company ?? ''),
+        location: (it.location as string) || null,
+        remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
+        url,
+        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+        description_html: null,
+        salary_min: null, salary_max: null,
+        salary_currency: (it.salary as { currency?: string } | undefined)?.currency ?? null,
+        employment_type: (it.jobType as string) || null,
+        seniority: null,
+        posted_at: safeIsoDate(it.postingDateParsed),
+        raw: it,
+      } as NormalizedJob;
+    })
+    .filter((j): j is NormalizedJob => j !== null);
 }
 
-export async function fetchApifyGlassdoor(): Promise<NormalizedJob[]> {
-  return fetchApifyLastRun('bebity~glassdoor-jobs-scraper', 'apify:glassdoor', (it) => {
-    const url = String(it.url ?? it.jobUrl ?? '');
-    if (!url) return null;
-    return {
-      source_key: 'apify:glassdoor',
-      source_job_id: String(it.id ?? url),
-      dedupe_hash: mkHash('apify:glassdoor', String(it.id ?? null), url),
-      title: String(it.jobTitle ?? it.title ?? ''),
-      company: String(it.companyName ?? ''),
-      location: (it.location as string) || null,
-      remote: null,
-      url,
-      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-      description_html: null,
-      salary_min: null, salary_max: null, salary_currency: null,
-      employment_type: null, seniority: null,
-      posted_at: it.postedAt ? new Date(String(it.postedAt)).toISOString() : null,
-      raw: it,
-    };
+export async function fetchApifyGlassdoor(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
+  const c = defaultCtx(ctx);
+  const items = await runApifyActor('bebity~glassdoor-jobs-scraper', {
+    queries: c.queries,
+    locations: c.locations,
+    rows: 80,
+    proxy: { useApifyProxy: true },
   });
+  return items
+    .map((it) => {
+      const url = String(it.url ?? it.jobUrl ?? '');
+      if (!url) return null;
+      return {
+        source_key: 'apify:glassdoor',
+        source_job_id: String(it.id ?? url),
+        dedupe_hash: mkHash('apify:glassdoor', String(it.id ?? null), url),
+        title: String(it.jobTitle ?? it.title ?? ''),
+        company: String(it.companyName ?? ''),
+        location: (it.location as string) || null,
+        remote: null,
+        url,
+        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+        description_html: null,
+        salary_min: null, salary_max: null, salary_currency: null,
+        employment_type: null, seniority: null,
+        posted_at: safeIsoDate(it.postedAt),
+        raw: it,
+      } as NormalizedJob;
+    })
+    .filter((j): j is NormalizedJob => j !== null);
 }
 
-export async function fetchApifyZipRecruiter(): Promise<NormalizedJob[]> {
-  return fetchApifyLastRun('bebity~ziprecruiter-scraper', 'apify:ziprecruiter', (it) => {
-    const url = String(it.url ?? '');
-    if (!url) return null;
-    return {
-      source_key: 'apify:ziprecruiter',
-      source_job_id: String(it.id ?? url),
-      dedupe_hash: mkHash('apify:ziprecruiter', String(it.id ?? null), url),
-      title: String(it.title ?? it.name ?? ''),
-      company: String(it.company ?? it.hiringCompany ?? ''),
-      location: (it.location as string) || null,
-      remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
-      url,
-      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-      description_html: null,
-      salary_min: null, salary_max: null, salary_currency: 'USD',
-      employment_type: (it.employmentType as string) || null,
-      seniority: null,
-      posted_at: it.postedTime ? new Date(String(it.postedTime)).toISOString() : null,
-      raw: it,
-    };
+export async function fetchApifyZipRecruiter(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
+  const c = defaultCtx(ctx);
+  const items = await runApifyActor('bebity~ziprecruiter-scraper', {
+    queries: c.queries,
+    locations: c.locations,
+    rows: 80,
+    proxy: { useApifyProxy: true },
   });
+  return items
+    .map((it) => {
+      const url = String(it.url ?? '');
+      if (!url) return null;
+      return {
+        source_key: 'apify:ziprecruiter',
+        source_job_id: String(it.id ?? url),
+        dedupe_hash: mkHash('apify:ziprecruiter', String(it.id ?? null), url),
+        title: String(it.title ?? it.name ?? ''),
+        company: String(it.company ?? it.hiringCompany ?? ''),
+        location: (it.location as string) || null,
+        remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
+        url,
+        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+        description_html: null,
+        salary_min: null, salary_max: null, salary_currency: 'USD',
+        employment_type: (it.employmentType as string) || null,
+        seniority: null,
+        posted_at: safeIsoDate(it.postedTime),
+        raw: it,
+      } as NormalizedJob;
+    })
+    .filter((j): j is NormalizedJob => j !== null);
 }
 
-export async function fetchApifyWellfound(): Promise<NormalizedJob[]> {
-  return fetchApifyLastRun('epctex~wellfound-scraper', 'apify:wellfound', (it) => {
-    const url = String(it.url ?? it.jobUrl ?? '');
-    if (!url) return null;
-    return {
-      source_key: 'apify:wellfound',
-      source_job_id: String(it.id ?? url),
-      dedupe_hash: mkHash('apify:wellfound', String(it.id ?? null), url),
-      title: String(it.title ?? ''),
-      company: String(it.companyName ?? it.startupName ?? ''),
-      location: (it.location as string) || null,
-      remote: it.remote ? 'remote' : null,
-      url,
-      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-      description_html: null,
-      salary_min: (it.salaryMin as number) ?? null,
-      salary_max: (it.salaryMax as number) ?? null,
-      salary_currency: (it.salaryCurrency as string) || 'USD',
-      employment_type: (it.jobType as string) || null,
-      seniority: null,
-      posted_at: it.postedAt ? new Date(String(it.postedAt)).toISOString() : null,
-      raw: it,
-    };
+export async function fetchApifyWellfound(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
+  const c = defaultCtx(ctx);
+  const items = await runApifyActor('epctex~wellfound-scraper', {
+    search: c.queries[0],
+    locations: c.locations,
+    maxItems: 80,
+    proxy: { useApifyProxy: true },
   });
+  return items
+    .map((it) => {
+      const url = String(it.url ?? it.jobUrl ?? '');
+      if (!url) return null;
+      return {
+        source_key: 'apify:wellfound',
+        source_job_id: String(it.id ?? url),
+        dedupe_hash: mkHash('apify:wellfound', String(it.id ?? null), url),
+        title: String(it.title ?? ''),
+        company: String(it.companyName ?? it.startupName ?? ''),
+        location: (it.location as string) || null,
+        remote: it.remote ? 'remote' : null,
+        url,
+        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+        description_html: null,
+        salary_min: (it.salaryMin as number) ?? null,
+        salary_max: (it.salaryMax as number) ?? null,
+        salary_currency: (it.salaryCurrency as string) || 'USD',
+        employment_type: (it.jobType as string) || null,
+        seniority: null,
+        posted_at: safeIsoDate(it.postedAt),
+        raw: it,
+      } as NormalizedJob;
+    })
+    .filter((j): j is NormalizedJob => j !== null);
 }
 
-export async function fetchApifyGoogleJobs(): Promise<NormalizedJob[]> {
-  return fetchApifyLastRun('dan.poltawski~google-jobs-scraper', 'apify:google_jobs', (it) => {
-    const url = String(it.shareLink ?? it.url ?? '');
-    if (!url) return null;
-    return {
-      source_key: 'apify:google_jobs',
-      source_job_id: String(it.jobId ?? url),
-      dedupe_hash: mkHash('apify:google_jobs', String(it.jobId ?? null), url),
-      title: String(it.title ?? ''),
-      company: String(it.companyName ?? ''),
-      location: (it.location as string) || null,
-      remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
-      url,
-      description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-      description_html: null,
-      salary_min: null, salary_max: null, salary_currency: null,
-      employment_type: null, seniority: null,
-      posted_at: it.postedAt ? new Date(String(it.postedAt)).toISOString() : null,
-      raw: it,
-    };
+export async function fetchApifyGoogleJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
+  const c = defaultCtx(ctx);
+  const items = await runApifyActor('dan.poltawski~google-jobs-scraper', {
+    queries: c.queries,
+    countryCode: 'us',
+    languageCode: 'en',
+    maxPagesPerQuery: 2,
   });
+  return items
+    .map((it) => {
+      const url = String(it.shareLink ?? it.url ?? it.applyLink ?? '');
+      if (!url) return null;
+      return {
+        source_key: 'apify:google_jobs',
+        source_job_id: String(it.jobId ?? url),
+        dedupe_hash: mkHash('apify:google_jobs', String(it.jobId ?? null), url),
+        title: String(it.title ?? ''),
+        company: String(it.companyName ?? ''),
+        location: (it.location as string) || null,
+        remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
+        url,
+        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
+        description_html: null,
+        salary_min: null, salary_max: null, salary_currency: null,
+        employment_type: null, seniority: null,
+        posted_at: safeIsoDate(it.postedAt),
+        raw: it,
+      } as NormalizedJob;
+    })
+    .filter((j): j is NormalizedJob => j !== null);
+}
+
+// ============================================================
+// InfoSec-Jobs — free public JSON feed for cybersecurity roles
+// ============================================================
+export async function fetchInfosecJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
+  const data = await fetchJson<unknown>('https://infosec-jobs.com/api/jobs?limit=150');
+  let items: Array<Record<string, unknown>> = [];
+  if (Array.isArray(data)) items = data as Array<Record<string, unknown>>;
+  else if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    items = (obj.jobs ?? obj.results ?? obj.data ?? []) as Array<Record<string, unknown>>;
+  }
+  const queries = (ctx?.queries ?? []).map((q) => q.toLowerCase());
+  return items
+    .map((it) => {
+      const title = String(it.title ?? it.position ?? '').trim();
+      const company = String(it.company ?? it.company_name ?? '').trim();
+      const slug = String(it.slug ?? it.id ?? '');
+      const url = String(it.url ?? it.link ?? (slug ? `https://infosec-jobs.com/job/${slug}` : ''));
+      if (!title || !company || !url) return null;
+      const loc = String(it.location ?? it.city ?? 'Remote').trim();
+      const desc = typeof it.description === 'string' ? it.description : (it.summary as string ?? '');
+      if (queries.length) {
+        const hay = `${title} ${desc}`.toLowerCase();
+        if (!queries.some((q) => hay.includes(q))) return null;
+      }
+      return {
+        source_key: 'infosec_jobs',
+        source_job_id: slug || url,
+        dedupe_hash: mkHash('infosec_jobs', slug || null, url),
+        title: title.slice(0, 500),
+        company: company.slice(0, 300),
+        location: loc.slice(0, 300),
+        remote: /remote/i.test(loc) ? 'remote' : null,
+        url,
+        description: desc ? desc.slice(0, 8000) : null,
+        description_html: null,
+        salary_min: null, salary_max: null, salary_currency: null,
+        employment_type: (it.employment_type as string) || null,
+        seniority: null,
+        posted_at: safeIsoDate(it.published_at ?? it.posted_at ?? it.date),
+        raw: it,
+      } as NormalizedJob;
+    })
+    .filter((j): j is NormalizedJob => j !== null);
 }
 
 // ============================================================
@@ -722,7 +853,7 @@ export async function fetchApifyGoogleJobs(): Promise<NormalizedJob[]> {
 
 export type SourceSpec = { provider: string; slug?: string };
 
-export async function runSource(spec: SourceSpec): Promise<NormalizedJob[]> {
+export async function runSource(spec: SourceSpec, ctx?: ApifyCtx): Promise<NormalizedJob[]> {
   switch (spec.provider) {
     case 'remoteok': return fetchRemoteOK();
     case 'remotive': return fetchRemotive();
@@ -730,6 +861,7 @@ export async function runSource(spec: SourceSpec): Promise<NormalizedJob[]> {
     case 'himalayas': return fetchHimalayas();
     case 'jobicy': return fetchJobicy();
     case 'weworkremotely': return fetchWeWorkRemotely();
+    case 'infosec_jobs': return fetchInfosecJobs(ctx);
     case 'greenhouse': return spec.slug ? fetchGreenhouse(spec.slug) : [];
     case 'lever': return spec.slug ? fetchLever(spec.slug) : [];
     case 'ashby': return spec.slug ? fetchAshby(spec.slug) : [];
@@ -740,28 +872,27 @@ export async function runSource(spec: SourceSpec): Promise<NormalizedJob[]> {
     case 'personio': return spec.slug ? fetchPersonio(spec.slug) : [];
     case 'bamboohr': return spec.slug ? fetchBambooHR(spec.slug) : [];
     case 'usajobs': return fetchUSAJobs(spec.slug || 'software');
-    case 'apify:linkedin': return fetchApifyLinkedIn();
-    case 'apify:indeed': return fetchApifyIndeed();
-    case 'apify:glassdoor': return fetchApifyGlassdoor();
-    case 'apify:ziprecruiter': return fetchApifyZipRecruiter();
-    case 'apify:wellfound': return fetchApifyWellfound();
-    case 'apify:google_jobs': return fetchApifyGoogleJobs();
+    case 'apify:linkedin': return fetchApifyLinkedIn(ctx);
+    case 'apify:indeed': return fetchApifyIndeed(ctx);
+    case 'apify:glassdoor': return fetchApifyGlassdoor(ctx);
+    case 'apify:ziprecruiter': return fetchApifyZipRecruiter(ctx);
+    case 'apify:wellfound': return fetchApifyWellfound(ctx);
+    case 'apify:google_jobs': return fetchApifyGoogleJobs(ctx);
     default: return [];
   }
 }
 
 // Tier A: aggregators that need no slug (every 15min)
-export const AGGREGATOR_PROVIDERS = ['remoteok', 'remotive', 'arbeitnow', 'himalayas', 'jobicy', 'weworkremotely'];
+export const AGGREGATOR_PROVIDERS = ['remoteok', 'remotive', 'arbeitnow', 'himalayas', 'jobicy', 'weworkremotely', 'infosec_jobs'];
 // Tier C: USAJobs keyword queries (every 60min)
 export const USAJOBS_QUERIES: Array<{ provider: string; slug: string }> = [
-  { provider: 'usajobs', slug: 'software' },
-  { provider: 'usajobs', slug: 'engineer' },
-  { provider: 'usajobs', slug: 'data' },
   { provider: 'usajobs', slug: 'cyber' },
-  { provider: 'usajobs', slug: 'analyst' },
-  { provider: 'usajobs', slug: 'developer' },
+  { provider: 'usajobs', slug: 'security' },
+  { provider: 'usajobs', slug: 'information assurance' },
+  { provider: 'usajobs', slug: 'penetration tester' },
+  { provider: 'usajobs', slug: 'incident response' },
 ];
-// Tier D: Apify cached datasets (every 4h)
+// Tier D: Apify (every 4h) — now triggers fresh runs with user keywords
 export const APIFY_PROVIDERS = [
   'apify:linkedin', 'apify:indeed', 'apify:glassdoor',
   'apify:ziprecruiter', 'apify:wellfound', 'apify:google_jobs',
