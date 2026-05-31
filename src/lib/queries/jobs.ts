@@ -47,6 +47,77 @@ export function useClearAllJobs() {
   });
 }
 
+/** Counts of scraped vs matched jobs for the signed-in user (lifetime). */
+export const jobCountsQueryOptions = () =>
+  queryOptions({
+    queryKey: ["jobs", "counts"] as const,
+    queryFn: async (): Promise<{ scraped: number; matched: number }> => {
+      const [scrapedRes, matchedRes] = await Promise.all([
+        supabase.from("jobs").select("id", { count: "exact", head: true }),
+        supabase.from("jobs").select("id", { count: "exact", head: true }).eq("matched", true),
+      ]);
+      if (scrapedRes.error) throw new Error(scrapedRes.error.message);
+      if (matchedRes.error) throw new Error(matchedRes.error.message);
+      return { scraped: scrapedRes.count ?? 0, matched: matchedRes.count ?? 0 };
+    },
+    staleTime: 30_000,
+  });
+
+/** Loosen the user's active/default filter (7-day window, min score 20). */
+export function useLoosenActiveFilter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("Not signed in");
+      // Prefer default filter, otherwise loosen all filters for the user.
+      const { data: def } = await supabase
+        .from("filters").select("id").eq("user_id", u.user.id).eq("is_default", true).maybeSingle();
+      const target = def?.id
+        ? supabase.from("filters").update({ posted_within_hours: 168, min_score: 20 } as never).eq("id", def.id)
+        : supabase.from("filters").update({ posted_within_hours: 168, min_score: 20 } as never).eq("user_id", u.user.id);
+      const { error } = await target;
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toastSaved("Filter loosened — 7 day window, min score 20");
+      queryClient.invalidateQueries({ queryKey: ["filters"] });
+    },
+    onError: (e) => toastError(e),
+  });
+}
+
+/** Source keys that don't pre-filter by keyword and tend to flood the feed. */
+export const NOISY_SOURCE_KEYS = [
+  "arbeitnow", "weworkremotely", "usajobs", "remoteok",
+  "himalayas", "jobicy", "remotive", "builtin",
+  "greenhouse:airbnb", "greenhouse:cloudflare", "greenhouse:reddit", "greenhouse:roblox",
+] as const;
+
+/** Disable all noisy sources for the signed-in user. */
+export function useDisableNoisySources() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<number> => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("Not signed in");
+      const { error, count } = await supabase
+        .from("sources")
+        .update({ enabled: false } as never, { count: "exact" })
+        .eq("user_id", u.user.id)
+        .in("key", NOISY_SOURCE_KEYS as unknown as string[])
+        .eq("enabled", true);
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+    onSuccess: (n) => {
+      toastSaved(`Disabled ${n} noisy source${n === 1 ? "" : "s"}`);
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+    },
+    onError: (e) => toastError(e),
+  });
+}
+
 
 export type Job = {
   id: string;
