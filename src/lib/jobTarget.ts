@@ -96,7 +96,7 @@ export function applyTargetToSourceConfig(
 ): Record<string, unknown> {
   const cfg: Record<string, unknown> = { ...current };
   const titles = target.titles;
-  void titles[0]; // (firstTitle no longer used)
+  
 
   // Unified worker schema covers everything except a few specials
   const standardKey = !["remoteok", "usajobs", "weworkremotely", "arbeitnow"].includes(sourceKey)
