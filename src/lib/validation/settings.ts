@@ -20,7 +20,7 @@ export const automationSchema = z.object({
   aggressiveness: z.number().int().min(1).max(5),
   exclude_companies: z.array(z.string().trim().min(1).max(120)).max(200).optional(),
   captcha_provider: z.string().trim().max(40).nullable().optional(),
-  proxy_provider: z.string().trim().max(40).nullable().optional(),
+  proxy_provider: z.enum(["decodo", "iproyal", "brightdata", "smartproxy", "oxylabs"]).nullable().optional(),
   ai_resume_model: z.string().trim().max(120).nullable().optional(),
   ai_reasoning_model: z.string().trim().max(120).nullable().optional(),
   active_filter_id: z.string().uuid().nullable().optional(),
