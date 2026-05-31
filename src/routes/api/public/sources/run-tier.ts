@@ -84,7 +84,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
         }
 
         // Per-tier hard timeout on each adapter (kept low so total invocation fits Worker CPU budget)
-        const adapterTimeoutMs = tier === 'apify' ? 30_000 : tier === 'usajobs' ? 10_000 : 7_000;
+        const adapterTimeoutMs = tier === 'apify' ? 120_000 : tier === 'usajobs' ? 10_000 : 7_000;
         const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
           Promise.race([
             p,
@@ -108,6 +108,19 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
           const runId = crypto.randomUUID();
           const startedAt = new Date().toISOString();
 
+          // Build per-user apify context from automation_settings (keywords + locations).
+          let apifyCtx: { queries: string[]; locations: string[] } | undefined;
+          if (tier === 'apify' || tier === 'hot') {
+            const { data: s } = await supabaseAdmin
+              .from('automation_settings')
+              .select('target_titles, target_locations')
+              .eq('user_id', userId)
+              .maybeSingle();
+            const queries = (s?.target_titles ?? []).filter((q: string) => q && q.trim().length > 0);
+            const locations = (s?.target_locations ?? []).filter((l: string) => l && l.trim().length > 0);
+            apifyCtx = { queries, locations };
+          }
+
           let totalIn = 0;
           let totalOut = 0;
           let totalErr = 0;
@@ -115,7 +128,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
           for (let i = 0; i < sourceSpecs.length; i += 8) {
             const batch = sourceSpecs.slice(i, i + 8);
             const results = await Promise.allSettled(
-              batch.map((s) => withTimeout(runSource(s), adapterTimeoutMs)),
+              batch.map((s) => withTimeout(runSource(s, apifyCtx), adapterTimeoutMs)),
             );
 
             for (let k = 0; k < results.length; k++) {
