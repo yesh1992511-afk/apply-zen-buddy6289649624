@@ -647,7 +647,7 @@ const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
 function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
   const { user } = useUser();
   const [items, setItems] = useState<Array<Record<string, unknown> & { id: string }>>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [, setLoaded] = useState(false);
   const seededRef = useRef<Record<string, boolean>>({});
   const schema = SCHEMAS[table];
 
