@@ -495,7 +495,7 @@ function ScreeningAnswers({ value, onChange }: { value: Record<string, string>; 
   );
 }
 
-type FieldDef = { key: string; label: string; type?: string; multi?: boolean; options?: string[]; dateField?: boolean };
+type FieldDef = { key: string; label: string; type?: string; multi?: boolean; options?: string[]; dateField?: boolean; bool?: boolean };
 const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
   experiences: {
     title: "Experience",
@@ -505,6 +505,7 @@ const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
       { key: "location", label: "Location" },
       { key: "start_date", label: "Start date", dateField: true },
       { key: "end_date", label: "End date (leave empty if current)", dateField: true },
+      { key: "is_current", label: "I currently work here", bool: true },
       { key: "bullets", label: "Bullets (one per line)", multi: true },
       { key: "tech", label: "Tech (comma-separated)", multi: true },
     ],
@@ -588,22 +589,31 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
 
   const add = async () => {
     if (!user) return;
+    // Insert a truly empty row — user fills in fields. No "New company" junk.
     const blank: Record<string, unknown> = { user_id: user.id };
-    schema.fields.forEach((f) => { blank[f.key] = f.multi ? [] : ""; });
-    if (table === "experiences") { blank.company = "New company"; blank.title = "New title"; }
-    if (table === "projects") blank.name = "New project";
-    if (table === "skills") blank.name = "New skill";
-    if (table === "educations") blank.school = "New school";
-    if (table === "languages") blank.name = "English";
-    if (table === "certifications") blank.name = "New certification";
-    if (table === "references_list") blank.name = "New reference";
+    schema.fields.forEach((f) => {
+      if (f.multi) blank[f.key] = [];
+      else if (f.bool) blank[f.key] = false;
+    });
+    // For NOT NULL columns, seed with empty string so the insert succeeds.
+    if (table === "experiences") { blank.company = ""; blank.title = ""; }
+    if (table === "projects") blank.name = "";
+    if (table === "skills") blank.name = "";
+    if (table === "educations") blank.school = "";
+    if (table === "languages") blank.name = "";
+    if (table === "certifications") blank.name = "";
+    if (table === "references_list") blank.name = "";
     const { error } = await db.from(table).insert(blank);
     if (error) toast.error(error.message); else load();
   };
 
+  const [savingId, setSavingId] = useState<string | null>(null);
   const update = async (id: string, patch: Record<string, unknown>) => {
+    setSavingId(id);
     const { error } = await db.from(table).update(patch).eq("id", id);
+    setSavingId(null);
     if (error) toast.error(error.message);
+    else setItems((cur) => cur.map((x) => x.id === id ? { ...x, ...patch } : x));
   };
 
   const remove = async (id: string) => {
@@ -621,6 +631,18 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
           <CardContent className="grid gap-3 pt-6 md:grid-cols-2">
             {schema.fields.map((f) => {
               const val = it[f.key];
+              if (f.bool) {
+                return (
+                  <div key={f.key} className="md:col-span-2 flex items-center justify-between rounded-md border border-border/50 bg-surface-2/40 px-3 py-2">
+                    <Label htmlFor={`${it.id}-${f.key}`} className="text-sm">{f.label}</Label>
+                    <Switch
+                      id={`${it.id}-${f.key}`}
+                      checked={Boolean(val)}
+                      onCheckedChange={(v) => update(it.id, { [f.key]: v, ...(f.key === "is_current" && v ? { end_date: null } : {}) })}
+                    />
+                  </div>
+                );
+              }
               if (f.multi) {
                 const str = Array.isArray(val) ? (f.key === "tech" ? val.join(", ") : val.join("\n")) : "";
                 return (
@@ -664,7 +686,10 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
               );
             })}
 
-            <div className="md:col-span-2 flex justify-end">
+            <div className="md:col-span-2 flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">
+                {savingId === it.id ? "Saving…" : "Saved automatically"}
+              </span>
               <Button size="sm" variant="ghost" onClick={() => remove(it.id)}><Trash2 className="h-4 w-4" /></Button>
             </div>
           </CardContent>
