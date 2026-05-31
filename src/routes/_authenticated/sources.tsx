@@ -598,6 +598,11 @@ function SourcesPage() {
                     <Button size="sm" variant="outline" onClick={() => triggerScrape(s.key)} className="gap-1.5">
                       <Play className="h-3 w-3" /> Run now
                     </Button>
+                    {s.kind === "board" && configFieldFor(s.key) && (
+                      <Button size="sm" variant="outline" onClick={() => loadPack(s)} className="gap-1.5" title="Merge curated cybersecurity company pack into this source">
+                        <PackagePlus className="h-3 w-3" /> Load pack
+                      </Button>
+                    )}
                     <div className="flex items-center gap-2 rounded-full bg-surface-2 px-2.5 py-1">
                       <span className={`text-[10px] font-semibold uppercase tracking-wider ${s.enabled ? "text-success" : "text-muted-foreground"}`}>
                         {s.enabled ? "ON" : "OFF"}
