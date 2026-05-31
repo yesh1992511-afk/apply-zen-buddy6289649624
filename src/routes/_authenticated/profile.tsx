@@ -398,11 +398,11 @@ function ProfilePage() {
 }
 
 
-function Field({ label, value, onChange, type, className }: { label: string; value: string; onChange: (v: string) => void; type?: string; className?: string }) {
+function Field({ label, value, onChange, type, className, min }: { label: string; value: string; onChange: (v: string) => void; type?: string; className?: string; min?: number }) {
   return (
     <div className={className}>
       <Label>{label}</Label>
-      <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input type={type} min={min} value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
