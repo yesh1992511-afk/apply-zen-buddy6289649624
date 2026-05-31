@@ -631,6 +631,18 @@ const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
       { key: "url", label: "URL" },
     ],
   },
+  publications: {
+    title: "Publication",
+    fields: [
+      { key: "title", label: "Title" },
+      { key: "authors", label: "Authors (comma-separated)" },
+      { key: "venue", label: "Venue (journal / conference / publisher)" },
+      { key: "publication_date", label: "Publication date", dateField: true },
+      { key: "url", label: "URL" },
+      { key: "doi", label: "DOI" },
+      { key: "description", label: "Description" },
+    ],
+  },
   references_list: {
     title: "Reference",
     fields: [
