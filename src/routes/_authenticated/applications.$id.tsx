@@ -351,3 +351,98 @@ function PdfViewer({ url, title, isGenerating }: { url: string | null; title: st
     </div>
   );
 }
+
+type TailoredExperience = { company?: string; title?: string; start_date?: string | null; end_date?: string | null; bullets?: string[] };
+type TailoredProject = { name?: string; description?: string; bullets?: string[]; tech?: string[] };
+type GeneratedResume = {
+  id: string;
+  tailored_summary: string | null;
+  tailored_experiences: TailoredExperience[] | null;
+  tailored_projects: TailoredProject[] | null;
+  tailored_skills: string[] | null;
+  model: string | null;
+  created_at: string;
+};
+
+function TailoredResumePanel({ jobId }: { jobId: string }) {
+  const q = useQuery({
+    queryKey: ["generated_resume", jobId],
+    queryFn: async (): Promise<GeneratedResume | null> => {
+      const { data, error } = await supabase
+        .from("generated_resumes")
+        .select("id,tailored_summary,tailored_experiences,tailored_projects,tailored_skills,model,created_at")
+        .eq("job_id", jobId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data as GeneratedResume | null;
+    },
+    staleTime: 30_000,
+  });
+
+  if (q.isLoading) return <div className="shimmer h-24 rounded-xl" />;
+  if (!q.data) return null;
+  const gr = q.data;
+  const exps = (gr.tailored_experiences ?? []) as TailoredExperience[];
+  const projs = (gr.tailored_projects ?? []) as TailoredProject[];
+  const skills = gr.tailored_skills ?? [];
+
+  return (
+    <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 via-card to-card overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-border/40 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-medium">AI-tailored content for this job</h3>
+        </div>
+        {gr.model && <span className="text-[10px] text-muted-foreground font-mono">{gr.model}</span>}
+      </div>
+      <div className="p-4 space-y-4 text-sm">
+        {gr.tailored_summary && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Summary</div>
+            <p className="leading-relaxed">{gr.tailored_summary}</p>
+          </div>
+        )}
+        {exps.length > 0 && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Experience picked ({exps.length})</div>
+            <ul className="space-y-2">
+              {exps.map((e, i) => (
+                <li key={i} className="rounded-md border border-border/40 bg-surface-1/40 p-2">
+                  <div className="font-medium text-xs">{e.title} · {e.company}</div>
+                  {e.bullets && e.bullets.length > 0 && (
+                    <ul className="mt-1 ml-4 list-disc text-xs text-muted-foreground space-y-0.5">
+                      {e.bullets.slice(0, 3).map((b, j) => <li key={j}>{b}</li>)}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {projs.length > 0 && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Projects picked ({projs.length})</div>
+            <ul className="space-y-1">
+              {projs.map((p, i) => (
+                <li key={i} className="text-xs">
+                  <span className="font-medium">{p.name}</span>
+                  {p.tech && p.tech.length > 0 && <span className="text-muted-foreground"> — {p.tech.slice(0, 4).join(", ")}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {skills.length > 0 && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Skills emphasized</div>
+            <div className="flex flex-wrap gap-1">
+              {skills.map((s) => (
+                <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">{s}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
