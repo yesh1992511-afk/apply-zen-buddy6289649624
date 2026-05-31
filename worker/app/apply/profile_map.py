@@ -225,7 +225,20 @@ def answer_for(question_text: str, profile: dict, lists: dict | None = None) -> 
     against the rule set. Returns the best answer or None.
 
     `lists` is an optional dict of related rows: {"experiences": [...], "educations": [...], "languages": [...]}.
+
+    If the profile carries a `_tailored_lists` key (set by apply/runner.py
+    after a per-job tailored resume is generated), prefer those tailored
+    experiences/projects/skills + tailored summary over the master pool —
+    summary/experience/project fields should always reflect the JD-specific
+    rewrite. All other fields keep reading from the base profile.
     """
+    tailored = (profile or {}).get("_tailored_lists") if isinstance(profile, dict) else None
+    if tailored:
+        merged = dict(lists or {})
+        for k in ("experiences", "projects", "skills"):
+            if tailored.get(k):
+                merged[k] = tailored[k]
+        lists = merged
     lists = lists or {}
     q = _norm(question_text)
     if not q:

@@ -34,6 +34,11 @@ from .usajobs import USAJobs
 from .infosec_jobs import InfosecJobs
 from .hn_jobs import HNJobs
 from .hn_who_is_hiring import HNWhoIsHiring
+from .ycombinator_jobs import YCombinatorJobs
+from .dice import Dice
+from .cybersecjobs import CyberSecJobs
+from .cleared_jobs import ClearedJobs
+from .levelsfyi import LevelsFYI
 from ..db import db, user_id
 from ..logger import db_log, log
 from ..pipeline.normalize import normalize
@@ -60,6 +65,8 @@ ADAPTERS: dict[str, Source] = {a.key: a for a in [
     BuiltIn(), USAJobs(),
     # Cybersecurity-focused free sources
     InfosecJobs(), HNJobs(), HNWhoIsHiring(),
+    # New free public boards
+    YCombinatorJobs(), Dice(), CyberSecJobs(), ClearedJobs(), LevelsFYI(),
 ]}
 
 
