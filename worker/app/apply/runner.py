@@ -98,14 +98,41 @@ async def process_one(app: dict[str, Any]) -> None:
 
     try:
         jd = (job.get("description") or "")[:8000]
-        pdf, tex = build_resume_pdf(jd)
+        # Tailored resume: AI picks/rewrites Summary + relevant Experiences + Projects
+        # + Skills for THIS specific job. Profile basics (name, contact, etc.) still
+        # come from the profile table.
+        pdf, tex, tailored = build_tailored_resume(job["id"], jd)
+        # Link tailored resume to this application
+        try:
+            gr = db().table("generated_resumes").select("id").eq(
+                "user_id", user_id()
+            ).eq("job_id", job["id"]).single().execute().data
+            if gr:
+                db().table("applications").update(
+                    {"generated_resume_id": gr["id"]}
+                ).eq("id", app["id"]).execute()
+        except Exception:
+            pass
+
         profile_payload = load_profile_payload()
-        profile = profile_payload["profile"]
+        profile = dict(profile_payload["profile"])
+        # Override summary with the tailored one so cover-letter prompts and any
+        # field that maps to "summary" reflect the per-job rewrite.
+        if tailored.get("summary"):
+            profile["summary"] = tailored["summary"]
+        # Build a tailored "lists" dict so profile_map.answer_for() reads the
+        # job-specific experiences/projects/skills, not the master pool.
+        tailored_lists = {
+            **profile_payload,
+            "experiences": tailored.get("experiences") or profile_payload.get("experiences"),
+            "projects": tailored.get("projects") or profile_payload.get("projects"),
+            "skills": [{"name": s} for s in (tailored.get("skills") or [])] or profile_payload.get("skills"),
+        }
         tone = profile.get("cover_letter_tone") or "professional"
         cl = ""
         try:
             from ..ai.reasoner import reason
-            analysis = reason(jd, profile_payload)
+            analysis = reason(jd, tailored_lists)
             cl = generate_cover_letter(profile, jd, analysis, tone)
         except Exception as e:
             log.warning("cover_letter_failed", error=str(e))
@@ -120,6 +147,9 @@ async def process_one(app: dict[str, Any]) -> None:
 
         async with new_browser(portal_key=portal.key) as (page, _ctx):
             await pause(1, 3)
+            # Pass tailored payload via profile dict so portal adapters that
+            # call answer_for() get the per-job content.
+            profile["_tailored_lists"] = tailored_lists
             result = await portal.apply(
                 page=page, job=job, profile=profile,
                 resume_pdf=pdf, cover_letter_text=cl,
