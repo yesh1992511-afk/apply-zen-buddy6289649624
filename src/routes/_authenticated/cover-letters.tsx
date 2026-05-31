@@ -171,7 +171,7 @@ function CoverLettersPage() {
               Loading…
             </div>
           ) : letters.length === 0 ? (
-            <EmptyState icon={FileText} title="No cover letters yet" description="Start with the default template on the right." />
+            <EmptyState title="No cover letters yet" description="Start with the default template on the right." />
           ) : (
             <div className="rounded-xl border border-border/60 bg-card divide-y divide-border/40 overflow-hidden">
               {letters.map((l) => (
