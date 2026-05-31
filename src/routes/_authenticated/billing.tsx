@@ -22,7 +22,16 @@ function BillingPage() {
   const [data, setData] = useState<any>(null);
   useEffect(() => { fetchOverview().then(setData); }, []);
 
-  if (!data) return <div className="text-sm text-muted-foreground">Loading…</div>;
+  if (!data) return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-48" />
+      <div className="grid gap-3 md:grid-cols-3">
+        <Skeleton className="h-40" />
+        <Skeleton className="h-40" />
+        <Skeleton className="h-40" />
+      </div>
+    </div>
+  );
 
   const currentKey = data.subscription?.plan_key ?? "free";
   const currentPlan = data.plans.find((p: any) => p.key === currentKey);
