@@ -534,3 +534,29 @@ function TestModeCard() {
   );
 }
 
+function ProfileWarning() {
+  const pct = useProfileCompleteness();
+  if (pct === null || pct >= 70) return null;
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+      <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+      <div className="flex-1">
+        <div className="font-heading text-sm font-semibold text-amber-700 dark:text-amber-300">
+          Profile only {pct}% complete
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Auto-apply will fall back to AI for missing fields and may skip strict forms.
+          Fill the missing profile fields to maximise success rate.
+        </p>
+      </div>
+      <Link
+        to="/profile"
+        className="text-xs font-medium text-primary hover:underline shrink-0 self-center"
+      >
+        Complete profile →
+      </Link>
+    </div>
+  );
+}
+
+
