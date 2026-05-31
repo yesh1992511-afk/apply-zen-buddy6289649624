@@ -465,7 +465,59 @@ function SourcesPage() {
         </div>
       </div>
 
-      {sources.length === 0 ? (
+      {(() => {
+        const enabledApify = sources.filter((s) => s.enabled && s.kind === "apify");
+        const enabledUsajobs = sources.find((s) => s.enabled && s.key === "usajobs");
+        const missing: Array<{ key: string; label: string; unlocks: string; href: string }> = [];
+        if (enabledApify.length > 0 && !secretNames.has("APIFY_TOKEN")) {
+          missing.push({
+            key: "APIFY_TOKEN",
+            label: "APIFY_TOKEN",
+            unlocks: `${enabledApify.length} Apify source${enabledApify.length === 1 ? "" : "s"} (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google Jobs, Wellfound)`,
+            href: "https://console.apify.com/account/integrations",
+          });
+        }
+        if (enabledUsajobs && (!secretNames.has("USAJOBS_API_KEY") || !secretNames.has("USAJOBS_USER_AGENT_EMAIL"))) {
+          missing.push({
+            key: "USAJOBS",
+            label: "USAJOBS_API_KEY + USAJOBS_USER_AGENT_EMAIL",
+            unlocks: "USAJobs (federal cybersecurity roles, free)",
+            href: "https://developer.usajobs.gov/apirequest/Index",
+          });
+        }
+        if (missing.length === 0) return null;
+        return (
+          <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+            <div className="flex items-start gap-3">
+              <KeyRound className="mt-0.5 h-5 w-5 text-warning shrink-0" />
+              <div className="min-w-0 flex-1">
+                <h4 className="font-heading font-semibold text-sm">Missing scraper keys — some portals are dark</h4>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  These sources are enabled but can't run until you add the required keys in Setup → Secrets.
+                </p>
+                <ul className="mt-3 space-y-2 text-xs">
+                  {missing.map((m) => (
+                    <li key={m.key} className="rounded-md border border-border/60 bg-card p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <code className="font-mono text-[11px] font-semibold text-foreground">{m.label}</code>
+                        <a
+                          href={m.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] font-medium text-primary hover:underline"
+                        >Where to get it →</a>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Unlocks: {m.unlocks}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+
         <EmptyState
           icon={Database}
           title="No sources yet"
