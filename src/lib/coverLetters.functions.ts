@@ -29,7 +29,7 @@ export const listCoverLetters = createServerFn({ method: "GET" })
       .eq("user_id", userId)
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return (data ?? []) as CoverLetterRow[];
   });
 
@@ -60,7 +60,7 @@ export const upsertCoverLetter = createServerFn({ method: "POST" })
         })
         .eq("id", data.id)
         .eq("user_id", userId);
-      if (error) throw new Error(error.message);
+      if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
       return { id: data.id };
     }
     const { data: row, error } = await supabase
@@ -75,7 +75,7 @@ export const upsertCoverLetter = createServerFn({ method: "POST" })
       })
       .select("id")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { id: row.id };
   });
 
@@ -89,7 +89,7 @@ export const deleteCoverLetter = createServerFn({ method: "POST" })
       .delete()
       .eq("id", data.id)
       .eq("user_id", userId);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 
@@ -104,7 +104,7 @@ export const setDefaultCoverLetter = createServerFn({ method: "POST" })
       .update({ is_default: true })
       .eq("id", data.id)
       .eq("user_id", userId);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 
@@ -178,7 +178,7 @@ export const generateCoverLetterForJob = createServerFn({ method: "POST" })
         })
         .select("id")
         .single();
-      if (error) throw new Error(error.message);
+      if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
       savedId = row.id;
     }
 

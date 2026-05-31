@@ -41,7 +41,7 @@ export const requestAccountDeletion = createServerFn({ method: "POST" })
       cancelled_at: null,
       reason: data.reason ?? null,
     });
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     await supabase.from("audit_log").insert({
       user_id: userId,
       action: "gdpr.delete_requested",
@@ -59,7 +59,7 @@ export const cancelAccountDeletion = createServerFn({ method: "POST" })
       .from("account_deletion_requests")
       .update({ cancelled_at: new Date().toISOString() })
       .eq("user_id", userId);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 

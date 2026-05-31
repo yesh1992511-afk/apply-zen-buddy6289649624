@@ -106,7 +106,7 @@ export const compileResumeToPdf = createServerFn({ method: "POST" })
       .eq("id", data.resume_id)
       .eq("user_id", userId)
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     if (!row || !row.tex_content) throw new Error("Resume .tex not found");
 
     // latexonline.cc compiles .tex → PDF. Free, no key required.

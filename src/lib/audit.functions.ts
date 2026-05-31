@@ -26,7 +26,7 @@ export const recordAudit = createServerFn({ method: "POST" })
       after: (data.after ?? null) as any,
       metadata: (data.metadata ?? {}) as any,
     });
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 
@@ -39,6 +39,6 @@ export const listAudit = createServerFn({ method: "GET" })
       .select("id, ts, action, entity_type, entity_id, metadata")
       .order("ts", { ascending: false })
       .limit(500);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return data;
   });

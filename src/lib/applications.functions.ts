@@ -25,7 +25,7 @@ export const retryApplication = createServerFn({ method: "POST" })
       })
       .eq("id", data.id)
       .eq("user_id", userId);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 
@@ -45,7 +45,7 @@ export const discardApplication = createServerFn({ method: "POST" })
       })
       .eq("id", data.id)
       .eq("user_id", userId);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 
@@ -57,6 +57,6 @@ export const rescoreAllJobs = createServerFn({ method: "POST" })
     // restricted to service_role. The function itself authorises the call
     // by checking the supplied _user_id against auth.uid()/role internally.
     const { data, error } = await supabaseAdmin.rpc("rescore_all_jobs_for_user", { _user_id: userId });
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { rescored: (data as number) ?? 0 };
   });

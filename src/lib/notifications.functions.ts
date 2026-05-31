@@ -52,7 +52,7 @@ export const saveNotificationSettings = createServerFn({ method: "POST" })
     const { error } = await supabase
       .from("notification_settings")
       .upsert({ user_id: userId, ...data }, { onConflict: "user_id" });
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 
@@ -84,7 +84,7 @@ export const saveGmailCredentials = createServerFn({ method: "POST" })
         },
         { onConflict: "user_id" }
       );
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 
@@ -96,7 +96,7 @@ export const deleteGmailCredentials = createServerFn({ method: "POST" })
       .from("gmail_credentials")
       .delete()
       .eq("user_id", userId);
-    if (error) throw new Error(error.message);
+    if (error) { console.error("[server-fn] supabase error", error); throw new Error("Request failed"); }
     return { ok: true };
   });
 
