@@ -403,12 +403,11 @@ function SourcesPage() {
   };
 
   const enabledCount = sources.filter((s) => s.enabled).length;
-  const healthyCount = sources.filter((s) => {
-    const ok = s.last_run_status === "ok" || s.last_run_status === "success" || s.last_run_status === "succeeded";
-    return s.enabled && ok;
-  }).length;
-  const failingCount = sources.filter((s) => s.enabled && s.last_run_status && s.last_run_status !== "ok" && s.last_run_status !== "success" && s.last_run_status !== "succeeded").length;
-  const idleCount = sources.filter((s) => s.enabled && !s.last_run_at).length;
+  const isOkStatus = (st: string | null) => st === "ok" || st === "success" || st === "succeeded";
+  const isFailStatus = (st: string | null) => !!st && !isOkStatus(st) && st !== "partial" && st !== "running" && st !== "idle";
+  const healthyCount = sources.filter((s) => s.enabled && isOkStatus(s.last_run_status)).length;
+  const failingCount = sources.filter((s) => s.enabled && isFailStatus(s.last_run_status)).length;
+  const idleCount = sources.filter((s) => s.enabled && (!s.last_run_at || !s.last_run_status)).length;
   const disableNoisy = useDisableNoisySources();
 
   return (
