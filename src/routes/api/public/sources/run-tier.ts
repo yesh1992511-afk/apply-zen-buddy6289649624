@@ -173,7 +173,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                   enabled: true,
                   cadence_minutes: tier === 'hot' ? 15 : tier === 'apify' ? 240 : 60,
                   last_run_at: runAt,
-                  last_run_status: 'ok',
+                  last_run_status: 'succeeded',
                   last_run_count: insertedForSource,
                   last_error: null,
                 },
