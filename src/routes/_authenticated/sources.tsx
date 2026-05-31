@@ -81,6 +81,13 @@ const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_s
   { key: "workable_boards", display_name: "Workable boards", kind: "board", cadence_minutes: 180, config: { subdomains: [] } },
   { key: "recruitee_boards", display_name: "Recruitee boards", kind: "board", cadence_minutes: 240, config: { companies: [] } },
   { key: "teamtailor_boards", display_name: "Teamtailor boards", kind: "board", cadence_minutes: 240, config: { companies: [], api_keys: {} } },
+  // Enterprise ATS adapters (new)
+  { key: "workday_boards", display_name: "Workday CXS boards", kind: "board", cadence_minutes: 240, config: { sites: [] } },
+  { key: "bamboohr_boards", display_name: "BambooHR boards", kind: "board", cadence_minutes: 240, config: { subdomains: [] } },
+  { key: "personio_boards", display_name: "Personio boards", kind: "board", cadence_minutes: 240, config: { subdomains: [] } },
+  { key: "breezyhr_boards", display_name: "Breezy HR boards", kind: "board", cadence_minutes: 240, config: { companies: [] } },
+  { key: "jobvite_boards", display_name: "Jobvite boards", kind: "board", cadence_minutes: 240, config: { companies: [] } },
+  { key: "icims_boards", display_name: "iCIMS career portals", kind: "board", cadence_minutes: 240, config: { portals: [] } },
 ];
 
 
