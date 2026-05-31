@@ -54,11 +54,26 @@ export async function triggerTestSource(source_key: string) {
   return id;
 }
 
-/** Get a 5-minute signed URL for a PDF in the `resumes` bucket. */
+/**
+ * Get a same-origin blob: URL for a PDF in the `resumes` bucket.
+ *
+ * We proxy the bytes through our own server (via a TanStack server function)
+ * instead of returning a Supabase Storage signed URL — ad blockers (Opera,
+ * uBlock, AdBlock) often block the `*.supabase.co` subdomain and the PDF
+ * preview fails with ERR_BLOCKED_BY_CLIENT. A blob: URL is same-origin and
+ * cannot be blocked.
+ */
 export async function getResumePdfUrl(storage_path: string): Promise<string | null> {
-  const { data, error } = await supabase.storage.from("resumes").createSignedUrl(storage_path, 300);
-  if (error) return null;
-  return data.signedUrl;
+  try {
+    const { fetchResumePdfBase64 } = await import("@/lib/resumePdf.functions");
+    const { base64 } = await fetchResumePdfBase64({ data: { storage_path } });
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    return URL.createObjectURL(blob);
+  } catch (e) {
+    console.error("getResumePdfUrl failed", e);
+    return null;
+  }
 }
 
 /** Polls a command row until done/failed. On timeout, returns the last seen row (with status like "pending"/"running") so callers can distinguish worker-offline from compile-failed. */

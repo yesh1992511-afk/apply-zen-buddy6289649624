@@ -124,8 +124,8 @@ function ApplicationDetailPage() {
           .maybeSingle();
         setResume((r as ResumeRow | null) ?? null);
         if (r?.pdf_storage_path) {
-          const { data: s } = await supabase.storage.from("resumes").createSignedUrl(r.pdf_storage_path, 3600);
-          setResumeUrl(s?.signedUrl ?? null);
+          const { getResumePdfUrl } = await import("@/lib/commands");
+          setResumeUrl(await getResumePdfUrl(r.pdf_storage_path));
         }
       } else {
         setResume(null);

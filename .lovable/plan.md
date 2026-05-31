@@ -1,46 +1,40 @@
-# Why the captcha row stays red
+# Make compiled resume PDFs visible (bypass ad blockers)
 
-The Worker setup checklist does **not** read your VPS `.env` file. It reads a database table (`secrets_meta`) that tracks *which secret names are configured*. Right now nothing writes to that table, so even though `CAPTCHA_API_KEY` and `PROXY_HOST` are sitting in the worker's `.env` on Hostinger, the UI has no way to know.
+## Problem
+Opera/uBlock blocks the Supabase Storage subdomain (`iarfebnnnoswymgfvnel.supabase.co`), so the compiled resume PDF fails to load in the preview iframe with `ERR_BLOCKED_BY_CLIENT`.
 
-Clicking the red row in the frontend opens `/setup`, but `/setup` currently only shows the readiness list — it has no form to "mark configured" either. That's why nothing happens when you click.
-
-# Fix: let the worker tell the database what it has
-
-The worker already pings the database every 30s (`worker/app/heartbeat.py`). We extend that same heartbeat to also upsert one row per configured secret into `secrets_meta`. As soon as you redeploy the worker, the UI flips Captcha → green and Proxy → green automatically.
-
-This is the right architecture because:
-- The worker is the only thing that actually knows whether the env var is set.
-- No new secrets, no frontend form, no manual sync step.
-- Same pattern as the existing heartbeat (one extra upsert per 30s tick).
+## Fix
+Stream the PDF through our own app domain so the browser only sees a same-origin URL.
 
 ## Changes
 
-**1. `worker/app/heartbeat.py`** — extend `beat()` to also upsert `secrets_meta` rows based on which env vars are non-empty:
+### 1. New server route — `src/routes/api/pdf.$id.ts`
+- Path: `/api/pdf/$id` where `$id` is the resume row id
+- `GET` handler:
+  - Require auth via `requireSupabaseAuth` middleware (or check session cookie) so users can only fetch their own resume
+  - Look up `resumes` row by id, confirm `user_id = auth.uid()`, read its `storage_path`
+  - Use `supabaseAdmin.storage.from('resumes').download(storage_path)` to get the bytes
+  - Return `new Response(blob, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="resume.pdf"', 'Cache-Control': 'private, max-age=60' } })`
+  - 404 if missing, 403 if not owner, 401 if unauthenticated
 
-| Env var present | secrets_meta row written |
-|---|---|
-| `CAPTCHA_API_KEY` | `name=CAPTCHA_API_KEY, category=captcha, status=set` |
-| `PROXY_HOST` + `PROXY_USER` | `name=PROXY_HOST, category=proxy, status=set` |
-| `APIFY_TOKEN` | `name=APIFY_TOKEN, category=apify, status=set` |
-| `OPENAI_API_KEY` | `name=OPENAI_API_KEY, category=ai, status=set` |
-| `GMAIL_OAUTH_REFRESH_TOKEN` | `name=GMAIL_OAUTH_REFRESH_TOKEN, category=gmail, status=set` |
+Note: Server routes can't use `requireSupabaseAuth` middleware (that's for serverFns). We'll read the `Authorization: Bearer` header or the Supabase auth cookie, validate it with `supabaseAdmin.auth.getUser(token)`, then check ownership.
 
-Upsert on `(user_id, name)` (the table already has that unique constraint). Use `status='set'` when the value is non-empty, `status='unset'` otherwise so removing a key also reflects in the UI.
+### 2. Update PDF viewer call sites
+- Replace `getResumePdfUrl()` (signed Supabase URL) with `/api/pdf/${resumeId}` in components that embed the compiled resume preview (e.g. resume preview dialog, profile, applications detail).
+- Keep `getResumePdfUrl` for explicit "download" links if desired, but switch the iframe/embed `src` to the proxy route.
 
-**2. `worker/app/config.py`** — expose the captcha/proxy/gmail fields as settings if they aren't already (read with defaults so missing keys don't crash).
+### 3. Pass auth to the proxy
+Since `<iframe src>` can't set headers, the route must accept either:
+- the Supabase auth cookie (works because same-origin), OR
+- a short-lived signed token in the URL (`?token=...`)
 
-**3. `worker/VERSION`** — bump to `0.1.1` so the UI's "Worker heartbeat" row shows the new version, confirming the new build is live.
+Simplest: rely on the Supabase auth cookie that's already on the app's domain. Validate via `supabaseAdmin.auth.getUser(accessTokenFromCookie)`.
 
-**4. Frontend** — no changes needed. `ReadinessChecklist` already re-queries every 30s.
-
-## Rollout for you
-
-1. I push the worker changes.
-2. On Hostinger: `cd /opt/jobpilot-worker && git pull && docker compose up -d --build` (or your existing deploy script — `worker/deploy.sh` already exists).
-3. Within ~30s the Worker setup page flips Captcha → green and Proxy → green.
+## Files touched
+- `src/routes/api/pdf.$id.ts` (new)
+- 1–2 components that render the compiled PDF preview (search for `getResumePdfUrl` and iframe/embed of resume URL)
 
 ## Out of scope
-
-- No changes to scraping, source adapters, or cron jobs (Phase A stays as-is).
-- No new secrets requested — the values you already put in `.env` on the VPS are all that's needed.
-- No "manual mark configured" UI — we don't need it once the worker self-reports.
+- No DB schema changes
+- No worker changes
+- No styling changes
