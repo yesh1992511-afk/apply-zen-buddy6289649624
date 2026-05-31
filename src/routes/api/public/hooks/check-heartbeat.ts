@@ -4,7 +4,7 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { hasValidApiKey } from "@/lib/api-auth.server";
+import { hasCronSecret } from "@/lib/api-auth.server";
 import { appError, withErrorBoundary } from "@/lib/errors";
 
 export const Route = createFileRoute("/api/public/hooks/check-heartbeat")({
@@ -12,7 +12,7 @@ export const Route = createFileRoute("/api/public/hooks/check-heartbeat")({
     handlers: {
       POST: withErrorBoundary(async ({ request }) => {
         const t0 = Date.now();
-        if (!hasValidApiKey(request)) throw appError("UNAUTHORIZED", "Invalid apikey");
+        if (!hasCronSecret(request)) throw appError("UNAUTHORIZED", "Invalid or missing internal secret");
 
         const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
         const debounceCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
