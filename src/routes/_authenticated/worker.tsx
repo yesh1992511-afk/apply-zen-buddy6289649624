@@ -57,24 +57,38 @@ const QUICK_COMMANDS: Array<{ kind: string; label: string; description: string }
 function WorkerPage() {
   const [hb, setHb] = useState<HB | null>(null);
   const [cmds, setCmds] = useState<Cmd[]>([]);
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [srcHealth, setSrcHealth] = useState<SourceHealth[]>([]);
   const [sending, setSending] = useState<string | null>(null);
 
   const load = async () => {
-    const [{ data: h }, { data: c }] = await Promise.all([
+    const [{ data: h }, { data: c }, { data: r }, { data: s }] = await Promise.all([
       supabase.from("worker_heartbeat").select("last_seen, version").maybeSingle(),
       supabase
         .from("worker_commands")
         .select("id, kind, status, created_at, started_at, finished_at, last_error, payload")
         .order("created_at", { ascending: false })
         .limit(50),
+      supabase
+        .from("automation_runs")
+        .select("id, kind, source_key, status, items_in, items_out, errors, started_at, finished_at")
+        .order("started_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("sources")
+        .select("key, display_name, enabled, cadence_minutes, last_run_at, last_run_status, last_run_count, last_error")
+        .order("display_name"),
     ]);
     setHb(h as HB);
     setCmds((c ?? []) as Cmd[]);
+    setRuns((r ?? []) as Run[]);
+    setSrcHealth((s ?? []) as SourceHealth[]);
   };
 
   useEffect(() => { load(); }, []);
   useRealtimeInvalidate({ table: "worker_heartbeat", onChange: load });
   useRealtimeInvalidate({ table: "worker_commands", onChange: load });
+  useRealtimeInvalidate({ table: "automation_runs", onChange: load });
 
   const send = async (kind: string) => {
     setSending(kind);
