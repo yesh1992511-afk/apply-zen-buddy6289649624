@@ -162,14 +162,18 @@ function SourcesPage() {
         } as never);
       }
       if ((srcCount ?? 0) === 0) {
+        // Disable by default sources that don't pre-filter at the API (they
+        // flood the feed). User can flip them on individually.
+        const NOISY = new Set(["arbeitnow", "weworkremotely", "builtin", "remoteok"]);
         const rows = PRESETS.map((p) => ({
           ...p,
           config: applyTargetToSourceConfig(p.key, p.config, target),
           user_id: user.id,
-          enabled: true,
+          enabled: !NOISY.has(p.key),
         }));
         await supabase.from("sources").insert(rows as never);
-        toast.success(`Seeded ${rows.length} sources — enabled by default`);
+        const onCount = rows.filter((r) => r.enabled).length;
+        toast.success(`Seeded ${rows.length} sources (${onCount} enabled, ${rows.length - onCount} off by default)`);
         load();
       }
     })();
