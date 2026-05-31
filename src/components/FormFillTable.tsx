@@ -3,7 +3,15 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
 import { FileText } from "lucide-react";
 
-export type FillRow = { id: number | string; field: string; value: string; ts: string };
+export type FillSource = "profile" | "tailored" | "screening_cache" | "ai_generated";
+export type FillRow = { id: number | string; field: string; value: string; ts: string; source?: FillSource };
+
+const SOURCE_LABEL: Record<FillSource, { label: string; tone: string }> = {
+  profile: { label: "Profile", tone: "bg-muted text-muted-foreground" },
+  tailored: { label: "Tailored", tone: "bg-primary/15 text-primary" },
+  screening_cache: { label: "Cached", tone: "bg-success/15 text-success" },
+  ai_generated: { label: "AI", tone: "bg-accent/20 text-accent-foreground" },
+};
 
 export function FormFillTable({ rows, isActive }: { rows: FillRow[]; isActive: boolean }) {
   if (rows.length === 0) {
