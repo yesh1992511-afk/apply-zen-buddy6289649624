@@ -687,32 +687,35 @@ function SourcesPage() {
             </div>
           )}
           {sources.map((s) => {
-            const statusOk = s.last_run_status === "ok" || s.last_run_status === "success" || s.last_run_status === "succeeded";
+            const statusOk = isOkStatus(s.last_run_status);
             const statusPartial = s.last_run_status === "partial";
+            const statusFail = isFailStatus(s.last_run_status);
             // Cadence-aware staleness: even an OK source is "Stale" if it hasn't run in 2× its cadence.
             const ageMs = s.last_run_at ? Date.now() - new Date(s.last_run_at).getTime() : 0;
             const isStale = statusOk && s.enabled && s.last_run_at != null
               && ageMs > Math.max(s.cadence_minutes, 1) * 60_000 * 2;
             const healthLabel = !s.enabled
               ? "Paused"
-              : !s.last_run_at
+              : (!s.last_run_at || !s.last_run_status)
                 ? "Idle"
                 : isStale
                   ? "Stale"
                   : statusOk
                     ? "Healthy"
-                    : statusPartial ? "Degraded" : "Failing";
+                    : statusPartial ? "Degraded" : statusFail ? "Failing" : "Idle";
             const healthClass = !s.enabled
               ? "bg-surface-3 text-muted-foreground"
-              : isStale
-                ? "bg-warning/15 text-warning ring-1 ring-warning/30"
-                : statusOk
-                  ? "bg-success/15 text-success ring-1 ring-success/30"
-                  : statusPartial
-                    ? "bg-warning/15 text-warning ring-1 ring-warning/30"
-                    : !s.last_run_at
-                      ? "bg-surface-3 text-muted-foreground"
-                      : "bg-destructive/15 text-destructive ring-1 ring-destructive/30";
+              : (!s.last_run_at || !s.last_run_status)
+                ? "bg-surface-3 text-muted-foreground"
+                : isStale
+                  ? "bg-warning/15 text-warning ring-1 ring-warning/30"
+                  : statusOk
+                    ? "bg-success/15 text-success ring-1 ring-success/30"
+                    : statusPartial
+                      ? "bg-warning/15 text-warning ring-1 ring-warning/30"
+                      : statusFail
+                        ? "bg-destructive/15 text-destructive ring-1 ring-destructive/30"
+                        : "bg-surface-3 text-muted-foreground";
 
             return (
               <BusyOverlay key={s.id} busy={!!testing[s.id]} label="Testing…" className="rounded-xl">
