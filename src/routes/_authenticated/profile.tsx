@@ -294,19 +294,27 @@ function ProfilePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <SelectFieldKV
-                label="Notice period (category)"
-                value={getStr("notice_period_category")}
-                onChange={(v) => set("notice_period_category", v || null)}
-                options={[
-                  { value: "immediate", label: "Immediate / available now" },
-                  { value: "2w", label: "2 weeks" },
-                  { value: "1m", label: "1 month" },
-                  { value: "2m", label: "2 months" },
-                  { value: "3m", label: "3 months" },
-                  { value: "other", label: "Other (see weeks field)" },
-                ]}
-              />
+              <div>
+                <SelectFieldKV
+                  label="Notice period (category)"
+                  value={getStr("notice_period_category")}
+                  onChange={(v) => set("notice_period_category", v || null)}
+                  options={[
+                    { value: "immediate", label: "Immediate / available now" },
+                    { value: "2w", label: "2 weeks" },
+                    { value: "1m", label: "1 month" },
+                    { value: "2m", label: "2 months" },
+                    { value: "3m", label: "3 months" },
+                    { value: "other", label: "Other (see weeks field)" },
+                  ]}
+                />
+                <div className="mt-1 flex items-center justify-between">
+                  <p className="text-[11px] text-muted-foreground">Linked to Comp tab's notice-period (weeks).</p>
+                  {getStr("notice_period_category") && (
+                    <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => set("notice_period_category", null)}>Clear</button>
+                  )}
+                </div>
+              </div>
               <SelectFieldKV
                 label="Travel willingness (%)"
                 value={getStr("travel_willingness_pct")}
