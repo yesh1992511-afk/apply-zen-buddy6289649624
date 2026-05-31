@@ -308,11 +308,19 @@ function ApplicationDetailPage() {
           <LiveActivityPanel logs={logs} active={isActive} />
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="hidden">
+              <TabsTrigger value="jd">Job description</TabsTrigger>
               <TabsTrigger value="form">Form</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="resume">Resume</TabsTrigger>
               <TabsTrigger value="cover">Cover</TabsTrigger>
             </TabsList>
+            <TabsContent value="jd" className="mt-0">
+              <JobDescriptionPanel
+                html={app.job?.description_html ?? null}
+                text={app.job?.description ?? null}
+                url={app.job?.url ?? null}
+              />
+            </TabsContent>
             <TabsContent value="form" className="mt-0">
               <FormFillTable rows={fillRows} isActive={isActive} />
             </TabsContent>
