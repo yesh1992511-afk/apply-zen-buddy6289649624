@@ -153,10 +153,19 @@ function ApplicationDetailPage() {
   const isDone = app?.status === "applied" || app?.status === "submitted";
 
   const fillRows: FillRow[] = useMemo(() => {
+    const persisted = app?.field_fills;
+    if (Array.isArray(persisted) && persisted.length > 0) {
+      return persisted.map((f, i) => ({
+        id: `ff-${i}`,
+        field: f.label || "field",
+        value: f.value || "",
+        ts: app?.finished_at || app?.started_at || "",
+        source: (f.source as FillRow["source"]) || "profile",
+      }));
+    }
     return logs
       .filter((l) => (l.scope ?? "").startsWith("form.fill"))
       .map((l) => {
-        // Try to parse "field => value" or use message
         const m = /^(.*?)\s*(?:=>|:|→)\s*(.+)$/.exec(l.message ?? "");
         return {
           id: l.id,
@@ -165,7 +174,7 @@ function ApplicationDetailPage() {
           ts: l.ts,
         };
       });
-  }, [logs]);
+  }, [logs, app?.field_fills, app?.finished_at, app?.started_at]);
 
   if (loading) {
     return (
