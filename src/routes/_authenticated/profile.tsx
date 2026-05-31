@@ -269,7 +269,10 @@ function ProfilePage() {
             <SelectField label="Currency" value={getStr("salary_currency") || "USD"} onChange={(v) => set("salary_currency", v)} options={CURRENCIES} />
             <Field label="Salary min (filter)" type="number" value={getStr("salary_min")} onChange={(v) => set("salary_min", v ? Number(v) : null)} />
             <Field label="Salary max (filter)" type="number" value={getStr("salary_max")} onChange={(v) => set("salary_max", v ? Number(v) : null)} />
-            <SelectFieldKV label="Notice period" value={getStr("notice_period_weeks")} onChange={(v) => set("notice_period_weeks", v ? Number(v) : null)} options={NOTICE_PERIOD_WEEKS.map((o) => ({ value: String(o.value), label: o.label }))} />
+            <div>
+              <SelectFieldKV label="Notice period (weeks)" value={getStr("notice_period_weeks")} onChange={(v) => set("notice_period_weeks", v ? Number(v) : null)} options={NOTICE_PERIOD_WEEKS.map((o) => ({ value: String(o.value), label: o.label }))} />
+              <p className="mt-1 text-[11px] text-muted-foreground">Linked to the Compliance tab's notice-period category.</p>
+            </div>
             <DatePickerField label="Earliest start date" value={getStr("earliest_start_date")} onChange={(v) => set("earliest_start_date", v)} startMonth={new Date()} />
             <Field label="Available hours / week" type="number" value={getStr("available_hours_per_week")} onChange={(v) => set("available_hours_per_week", v ? Number(v) : null)} />
             <SelectFieldKV label="Cover letter tone" value={getStr("cover_letter_tone") || "professional"} onChange={(v) => set("cover_letter_tone", v)} options={COVER_LETTER_TONE} />
