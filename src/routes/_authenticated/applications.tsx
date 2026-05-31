@@ -172,9 +172,27 @@ function ApplicationsPage() {
                         </span>
                       )}
                     </div>
-                    {a.last_error && (
+                    {(a.last_error || a.dlq_reason) && (
                       <div className="mt-1.5 line-clamp-2 rounded border border-destructive/20 bg-destructive/5 p-1.5 text-[10px] text-destructive">
-                        {a.last_error}
+                        {a.dlq_reason || a.last_error}
+                      </div>
+                    )}
+                    {(phase === "failed" || phase === "dead_letter" || phase === "needs_review") && (
+                      <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.preventDefault()}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); retryMut.mutate(a.id); }}
+                          disabled={retryMut.isPending}
+                          className="inline-flex items-center gap-1 rounded border border-border/60 bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium hover:bg-surface-3 disabled:opacity-50"
+                        >
+                          <RotateCcw className="h-3 w-3" /> Retry
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); if (confirm("Discard this application?")) discardMut.mutate(a.id); }}
+                          disabled={discardMut.isPending}
+                          className="inline-flex items-center gap-1 rounded border border-border/60 bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3 w-3" /> Discard
+                        </button>
                       </div>
                     )}
                   </Link>
