@@ -845,3 +845,35 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
     </div>
   );
 }
+
+function SyncResumeButton({ completeness, flush }: { completeness: number; flush: () => void | Promise<void> }) {
+  const navigate = useNavigate();
+  const sync = useServerFn(syncResumeFromProfile);
+  const [busy, setBusy] = useState(false);
+  const disabled = completeness < 80 || busy;
+  const title = completeness < 80
+    ? `Profile must be at least 80% complete (currently ${completeness}%)`
+    : "Render LaTeX from your profile and save to Resumes";
+
+  const onClick = async () => {
+    setBusy(true);
+    try {
+      await flush();
+      const res = await sync();
+      toast.success(`Saved as ${res.name}.tex`, {
+        action: { label: "Open Resumes", onClick: () => navigate({ to: "/resume" }) },
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Button size="sm" onClick={onClick} disabled={disabled} title={title}>
+      <FileText className="mr-1.5 h-4 w-4" />
+      {busy ? "Syncing…" : "Sync to Resume"}
+    </Button>
+  );
+}
