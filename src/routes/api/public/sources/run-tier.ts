@@ -172,7 +172,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                 }
               }
 
-              // Per-source health: ok (auto-register if missing)
+              // Per-source health: ok — upsert base row then update status fields
               await supabaseAdmin.from('sources').upsert(
                 {
                   user_id: userId,
@@ -181,13 +181,15 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                   kind: sourceKindFor(spec.provider),
                   enabled: true,
                   cadence_minutes: tier === 'hot' ? 15 : tier === 'apify' ? 240 : 60,
-                  last_run_at: runAt,
-                  last_run_status: 'succeeded',
-                  last_run_count: insertedForSource,
-                  last_error: null,
                 },
                 { onConflict: 'user_id,key' },
               );
+              await supabaseAdmin.from('sources').update({
+                last_run_at: runAt,
+                last_run_status: 'succeeded',
+                last_run_count: insertedForSource,
+                last_error: null,
+              }).eq('user_id', userId).eq('key', sourceKey);
             }
           }
 
