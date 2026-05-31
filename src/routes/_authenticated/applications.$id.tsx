@@ -384,6 +384,34 @@ function PdfViewer({ url, title, isGenerating }: { url: string | null; title: st
   );
 }
 
+function JobDescriptionPanel({ html, text, url }: { html: string | null; text: string | null; url: string | null }) {
+  const hasContent = !!(html && html.trim()) || !!(text && text.trim());
+  return (
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-border/40 flex items-center justify-between">
+        <h3 className="text-sm font-medium">Job description</h3>
+        {url && (
+          <a href={url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+            View original <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </div>
+      {!hasContent ? (
+        <div className="p-8 text-center text-sm text-muted-foreground italic">
+          No description was captured for this job.
+        </div>
+      ) : html && html.trim() ? (
+        <div
+          className="prose prose-sm dark:prose-invert max-w-none p-5 leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: sanitizeJdHtml(html) }}
+        />
+      ) : (
+        <pre className="whitespace-pre-wrap p-5 text-sm leading-relaxed font-sans">{text}</pre>
+      )}
+    </div>
+  );
+}
+
 type TailoredExperience = { company?: string; title?: string; start_date?: string | null; end_date?: string | null; bullets?: string[] };
 type TailoredProject = { name?: string; description?: string; bullets?: string[]; tech?: string[] };
 type GeneratedResume = {
