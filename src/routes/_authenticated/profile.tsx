@@ -309,9 +309,10 @@ function ProfilePage() {
         <TabsContent value="references_list"><ListSection table="references_list" /></TabsContent>
 
         <TabsContent value="screening"><ScreeningAnswers value={(p.screening_answers as Record<string, string>) ?? {}} onChange={(v) => set("screening_answers", v)} /></TabsContent>
-
-        <TabsContent value="resume"><ResumeUploader /></TabsContent>
       </Tabs>
+    </div>
+  );
+}
     </div>
   );
 }
