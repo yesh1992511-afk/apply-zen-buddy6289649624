@@ -12,7 +12,7 @@ import { supabaseAdmin } from '@/integrations/supabase/client.server';
 import { writeLog } from '@/lib/apply/log.server';
 import { generateTailoredResume, generateCoverLetter, type ProfileSnapshot, type JobSnapshot } from '@/lib/apply/ai.server';
 import { detectPortal } from '@/lib/apply/portal.server';
-import { hasValidApiKey, claimIdempotency } from '@/lib/api-auth.server';
+import { requireUserOrCron, claimIdempotency } from '@/lib/api-auth.server';
 import { appError, withErrorBoundary } from '@/lib/errors';
 
 const MAX_PER_RUN = 3; // process up to N queued apps per cron tick
@@ -28,7 +28,7 @@ export const Route = createFileRoute('/api/public/hooks/apply-worker')({
 
 async function handle(request: Request): Promise<Response> {
   const t0 = Date.now();
-  if (!hasValidApiKey(request)) throw appError('UNAUTHORIZED', 'Invalid or missing apikey header');
+  const auth = await requireUserOrCron(request);
 
   const url = new URL(request.url);
   const onlyAppId = url.searchParams.get('application_id');
@@ -40,6 +40,8 @@ async function handle(request: Request): Promise<Response> {
     .order('queued_at', { ascending: true })
     .limit(onlyAppId ? 1 : MAX_PER_RUN);
   if (onlyAppId) q.eq('id', onlyAppId);
+  // When called by a user (not cron), restrict to that user's applications.
+  if (!auth.isCron) q.eq('user_id', auth.userId);
 
   const { data: apps, error } = await q;
   if (error) throw appError('INTERNAL', error.message);
