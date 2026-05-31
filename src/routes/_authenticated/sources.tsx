@@ -403,13 +403,19 @@ function SourcesPage() {
   };
 
   const enabledCount = sources.filter((s) => s.enabled).length;
+  const healthyCount = sources.filter((s) => {
+    const ok = s.last_run_status === "ok" || s.last_run_status === "success" || s.last_run_status === "succeeded";
+    return s.enabled && ok;
+  }).length;
+  const failingCount = sources.filter((s) => s.enabled && s.last_run_status && s.last_run_status !== "ok" && s.last_run_status !== "success" && s.last_run_status !== "succeeded").length;
+  const idleCount = sources.filter((s) => s.enabled && !s.last_run_at).length;
   const disableNoisy = useDisableNoisySources();
 
   return (
     <div className="space-y-6 max-w-6xl">
       <PageHeader
         title="Sources"
-        description={`${enabledCount} of ${sources.length} active · Where jobs are scraped from`}
+        description={`${enabledCount} of ${sources.length} active · ${healthyCount} healthy · ${failingCount} failing · ${idleCount} idle`}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -420,14 +426,24 @@ function SourcesPage() {
               title="Turn off sources that don't pre-filter by keyword (arbeitnow, weworkremotely, remoteok, generic USAJobs, etc.)"
             >
               <EyeOff className="h-4 w-4" />
-              {disableNoisy.isPending ? "Disabling…" : "Disable noisy sources"}
+              {disableNoisy.isPending ? "Disabling…" : "Disable noisy"}
             </Button>
             <Button onClick={seed} variant="outline" className="gap-1.5">
               <Plus className="h-4 w-4" /> Add presets
             </Button>
+            <Button
+              onClick={seedEverything}
+              disabled={seedingAll}
+              className="bg-gradient-emerald gap-1.5"
+              title="Seed every preset, enable all sources, and apply the Top Tech curated company pack"
+            >
+              {seedingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-4 w-4" />}
+              {seedingAll ? "Wiring…" : "Wire everything"}
+            </Button>
           </div>
         }
       />
+
 
       {/* Curated company packs — one-click load 30–100+ company boards across all ATS sources */}
       <div className="rounded-xl border border-border/60 bg-card p-5">
