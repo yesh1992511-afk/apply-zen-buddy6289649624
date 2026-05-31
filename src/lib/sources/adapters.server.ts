@@ -164,7 +164,7 @@ export async function fetchHimalayas(): Promise<NormalizedJob[]> {
     salary_currency: (j.currency as string) || 'USD',
     employment_type: (j.employmentType as string) || null,
     seniority: (j.seniority as string) || null,
-    posted_at: j.pubDate ? new Date(String(j.pubDate)).toISOString() : null,
+    posted_at: safeIsoDate(j.pubDate),
     raw: j,
   }));
 }
