@@ -25,6 +25,27 @@ type Cmd = {
   last_error: string | null;
   payload: Record<string, unknown> | null;
 };
+type Run = {
+  id: string;
+  kind: string;
+  source_key: string | null;
+  status: string;
+  items_in: number | null;
+  items_out: number | null;
+  errors: number | null;
+  started_at: string;
+  finished_at: string | null;
+};
+type SourceHealth = {
+  key: string;
+  display_name: string;
+  enabled: boolean;
+  cadence_minutes: number;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  last_run_count: number | null;
+  last_error: string | null;
+};
 
 const QUICK_COMMANDS: Array<{ kind: string; label: string; description: string }> = [
   { kind: "refresh_sources", label: "Refresh sources", description: "Wake the worker and re-read enabled sources" },
