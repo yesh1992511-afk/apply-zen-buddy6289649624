@@ -143,7 +143,6 @@ function CoverLettersPage() {
   return (
     <div className="space-y-6 max-w-[1400px]">
       <PageHeader
-        icon={Mail}
         title="Cover letters"
         description="Templates and AI-generated letters per job. The default template is sent when a portal asks for a cover letter and no per-job letter has been generated."
       />
