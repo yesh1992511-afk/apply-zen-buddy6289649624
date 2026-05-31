@@ -34,8 +34,11 @@ def load_lists(user_id: str | None) -> dict:
 async def safe_autofill(page, profile: dict, job: dict | None = None,
                         application_id: str | None = None) -> dict[str, int] | None:
     """Convenience wrapper: load lists + run autofill, swallow all exceptions.
-    Pass job + application_id to enable AI screening fallback and field-fill logging."""
+    Falls back to profile['_apply_job'] / profile['_apply_app_id'] (set by runner.py)
+    so existing portal calls automatically get AI fallback + fill logging."""
     try:
+        job = job or (profile.get("_apply_job") if isinstance(profile, dict) else None)
+        application_id = application_id or (profile.get("_apply_app_id") if isinstance(profile, dict) else None)
         if application_id and ff._ledger.get() is None:
             ff.start(application_id)
         lists = load_lists(profile.get("user_id"))
