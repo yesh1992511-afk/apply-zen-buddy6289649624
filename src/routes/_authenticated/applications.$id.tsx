@@ -80,7 +80,7 @@ function ApplicationDetailPage() {
   const [resumeUrl, setResumeUrl] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [coverBody, setCoverBody] = useState<string | null>(null);
-  const [tab, setTab] = useState("form");
+  const [tab, setTab] = useState("jd");
   const [loading, setLoading] = useState(true);
 
   const eventsQuery = useQuery(applicationEventsQueryOptions(id));
