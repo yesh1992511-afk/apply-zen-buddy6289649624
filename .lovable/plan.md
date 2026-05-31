@@ -1,74 +1,80 @@
-## Outstanding issues to fix
+# Why you got 2000 jobs but 0 matches
 
-### 1. Cron calling `/api/public/hooks/apply-worker` fails with UNAUTHORIZED every minute
+I dug into the database and the scrapers. The system is **not** broken at random — there are two specific, fixable bugs:
 
-**Root cause:** The route's `requireUserOrCron` accepts only:
-- `x-internal-secret: <WORKER_CRON_SECRET>`, or
-- `Authorization: Bearer <user JWT>`
+## Diagnosis
 
-The current `pg_cron` job sends the Supabase anon key (likely as `apikey` / `Authorization`), which is neither. Result: 401 every minute, application queue never drains.
+**1. All 6 Apify sources return 0 jobs (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Wellfound, Google Jobs).**
+Your APIFY_TOKEN works. The bug is in the adapter: it calls
+`/v2/acts/{actor}/runs/last/dataset/items` — that endpoint only returns the dataset of an actor's **last completed run**. It never starts a new run. So unless you've manually scheduled those actors on apify.com (you haven't), the dataset is empty and the adapter happily returns `[]` and reports "succeeded, 0 items".
 
-**Fix:** Reschedule the pg_cron job to send the correct `x-internal-secret` header, sourced from Vault (so the secret is not stored in the cron command in plaintext).
+The Python worker has the correct behavior (POSTs `run-sync-get-dataset-items` with your keywords) — but the cron path uses the TanStack route, which doesn't.
 
-```sql
--- Unschedule old (broken) job(s)
-SELECT cron.unschedule(jobid)
-FROM cron.job
-WHERE command ILIKE '%apply-worker%';
+**2. The 2088 jobs we DO have are almost all not cybersecurity, and the country filter drops the rest.**
 
--- Store the worker secret in Vault (one-time)
-SELECT vault.create_secret(
-  '<WORKER_CRON_SECRET value>',
-  'worker_cron_secret',
-  'Shared secret for /api/public/hooks/* cron callers'
-);
+The active filter is `Cybersecurity — USA`, keywords like `security engineer`, `SOC analyst`, `penetration tester`, locations `[United States]`.
 
--- Reschedule every minute with the internal secret header
-SELECT cron.schedule(
-  'apply-worker-every-minute',
-  '* * * * *',
-  $$
-  SELECT net.http_post(
-    url     := 'https://project--ba5780a8-641e-4ee8-9c24-6e1c185cef2f.lovable.app/api/public/hooks/apply-worker',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-internal-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'worker_cron_secret')
-    ),
-    body    := '{}'::jsonb
-  );
-  $$
-);
+But the boards being scraped are generic engineering:
 ```
-
-I'll run this via the Supabase insert tool (not a migration — it contains a secret value and is environment-specific). After running, I'll verify by tailing server logs for the next minute and confirming `evt: apply-worker` with HTTP 200 instead of 401.
-
-Also audit any other `/api/public/hooks/*` cron jobs (sources poller, etc.) and apply the same header fix if they share the same auth helper.
-
-### 2. `_authenticated` layout skips its auth check during SSR
-
-**File:** `src/routes/_authenticated.tsx`
-
-```ts
-beforeLoad: async () => {
-  if (typeof window === "undefined") return; // <-- footgun
-  const { data } = await supabase.auth.getUser();
-  ...
-}
+greenhouse:mongodb       429 jobs
+usajobs                  411
+greenhouse:roblox        260
+greenhouse:airbnb        236
+lever:mistral            165
+jobicy / arbeitnow       100 each
+remoteok                 100
 ```
+None of these are cyber-focused, so almost nothing hits the cyber keywords. The few that might match get killed by the country gate in `match_job_to_filters`: it requires the job's `location` string to contain `"united states"`, `" usa"`, `", us"`, `"remote"`, `"anywhere"`, or a US state name — jobs with a blank location or `"New York, US"` (no comma-space) fall through and are marked country_ok=false.
 
-Today no protected child has a loader, so nothing is broken. But the moment someone adds `loader: () => getUserPosts()` under `_authenticated/`, SSR will run the loader against `requireSupabaseAuth` with no session and fail the prerender (the documented `build:dev` Unauthorized trap).
+Cybersecurity-specialist boards (**InfoSec-Jobs, CyberSecJobs, ClearedJobs, HN cybersec**) exist in the Python worker but are **not** wired into the TanStack adapter set the cron actually runs.
 
-**Fix:** Replace the window short-circuit with a serverFn-backed check that works in both SSR and the browser. Add a tiny server function `getAuthUser` (uses `requireSupabaseAuth` middleware) and call it via `useServerFn`-style call inside `beforeLoad`. When it throws Unauthorized, redirect to `/login` with the redirect-back search param. Keep the `onAuthStateChange` listener in the component for client-side session-loss handling, but drop the duplicate `supabase.auth.getUser()` poll in the `useEffect`.
+## Fix plan
 
-Effect: any future loader under `_authenticated/*` is safe by construction; behavior in the browser is unchanged for the user.
+### 1. Make Apify actually scrape (TanStack adapter)
+File: `src/lib/sources/adapters.server.ts`
 
-### 3. Verification
+Replace `fetchApifyLastRun` with `runApifyActor` that POSTs to
+`https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token=…&timeout=120`
+with a per-actor payload built from `automation_settings.target_titles` + `target_locations`:
 
-- After the cron fix: `stack_modern--server-function-logs` filtered on `apply-worker` should show 200s, no more `UNAUTHORIZED`.
-- After the layout fix: load `/dashboard` in preview, confirm no flash, no double redirect, no console errors.
-- Re-run security scan + Supabase linter; confirm the previously accepted items (`pg_cron`/`pg_net` in `public`, RLS-on-no-policy on `jd_analysis_cache`) are the only remaining items.
+- `bebity~linkedin-jobs-scraper`: `{ queries:[…], locations:[…], rows:100, proxy:{useApifyProxy:true} }`
+- `misceres~indeed-scraper`: `{ position, country:"US", location, maxItems:100 }`
+- `bebity~glassdoor-jobs-scraper` / `bebity~ziprecruiter-scraper`: same shape as LinkedIn
+- `dan.poltawski~google-jobs-scraper`: `{ queries, countryCode:"us", maxPagesPerQuery:2 }`
+- `epctex~wellfound-scraper`: `{ search:queries[0], maxItems:100 }`
 
-### Out of scope
-- No business-logic changes.
-- No DB schema changes.
-- No UI changes.
+Cap each actor at ~120s, errors → mark source `failed` with the upstream message (right now they all silently say "succeeded, 0").
+
+### 2. Add cybersecurity-specific sources
+File: `src/lib/sources/adapters.server.ts`
+
+Port these adapters from the Python worker (`worker/app/sources/`) into the TanStack module:
+- `infosec-jobs.com` (JSON feed)
+- `cybersecjobs.com` RSS
+- `clearedjobs.net` RSS
+- `hn:who-is-hiring` (filter latest thread for cyber keywords)
+
+Register them in `AGGREGATOR_PROVIDERS` so the hot tier picks them up every 15 min.
+
+### 3. Loosen `match_job_to_filters` country gate
+Migration:
+
+- Treat **blank/empty location** as `country_ok = true` (don't drop — many ATS feeds omit location).
+- Extend the US regex to also match `"\m(us|usa)\M"` as a standalone word at the end of the string, so `"New York, US"` and `"Remote — US"` pass.
+- Leave the explicit non-US case alone (jobs in "Bangalore, India" still drop).
+
+### 4. Trim the generic ATS seed list
+File: `src/lib/sources/seed-slugs.ts` — keep slugs that actually post security roles (CrowdStrike, Cloudflare, Palo Alto, Datadog, HashiCorp, Snyk, Wiz, Okta, 1Password, Tailscale, Cisco-Talos via greenhouse where available; drop pure consumer/non-cyber boards like mongodb/roblox/airbnb/mistral that flood your queue).
+
+### 5. Re-run and rescore
+After deploy:
+- Run `DELETE FROM jobs WHERE matched = false AND scraped_at < now()` to clear the noise.
+- Trigger `/api/public/sources/run-tier?tier=hot`, `…?tier=apify`, `…?tier=warm&shard=0` manually so you see fresh, scored, cyber-targeted jobs in minutes.
+
+## Expected outcome
+- Apify sources return real LinkedIn/Indeed/Glassdoor postings filtered by `cybersecurity` + `United States` (no manual Apify scheduling needed).
+- New cyber-specialist boards feed dozens of relevant matches per run.
+- The relaxed country gate stops silently killing US jobs with sloppy location strings.
+- Your Jobs page should fill with scored, matched roles within one hot+apify cycle.
+
+Approve and I'll implement.
