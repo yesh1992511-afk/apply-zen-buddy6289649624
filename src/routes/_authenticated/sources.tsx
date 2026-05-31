@@ -312,6 +312,7 @@ function SourcesPage() {
   };
 
   const enabledCount = sources.filter((s) => s.enabled).length;
+  const disableNoisy = useDisableNoisySources();
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -319,9 +320,21 @@ function SourcesPage() {
         title="Sources"
         description={`${enabledCount} of ${sources.length} active · Where jobs are scraped from`}
         actions={
-          <Button onClick={seed} variant="outline" className="gap-1.5">
-            <Plus className="h-4 w-4" /> Add presets
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => disableNoisy.mutate(undefined, { onSuccess: () => load() })}
+              variant="outline"
+              className="gap-1.5"
+              disabled={disableNoisy.isPending}
+              title="Turn off sources that don't pre-filter by keyword (arbeitnow, weworkremotely, remoteok, generic USAJobs, etc.)"
+            >
+              <EyeOff className="h-4 w-4" />
+              {disableNoisy.isPending ? "Disabling…" : "Disable noisy sources"}
+            </Button>
+            <Button onClick={seed} variant="outline" className="gap-1.5">
+              <Plus className="h-4 w-4" /> Add presets
+            </Button>
+          </div>
         }
       />
 
