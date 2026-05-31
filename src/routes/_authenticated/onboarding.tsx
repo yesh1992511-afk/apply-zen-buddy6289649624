@@ -39,7 +39,7 @@ function OnboardingPage() {
         supabase.from("applications").select("id").limit(1),
       ]);
       setStatus({
-        profile: Boolean(p?.full_name && p?.location && p?.work_authorization),
+        profile: Boolean(p?.full_name && p?.location && (p?.work_authorization || p?.work_auth_country || ((p as { authorized_countries?: string[] | null })?.authorized_countries?.length ?? 0) > 0)),
         extension: (ext ?? []).length > 0,
         gmail: (gmail ?? []).length > 0,
         worker: Boolean(hb?.last_seen && Date.now() - new Date(hb.last_seen).getTime() < 24 * 3600_000),
