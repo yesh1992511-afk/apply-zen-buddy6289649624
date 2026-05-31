@@ -495,7 +495,7 @@ function ScreeningAnswers({ value, onChange }: { value: Record<string, string>; 
   );
 }
 
-type FieldDef = { key: string; label: string; type?: string; multi?: boolean; options?: string[]; dateField?: boolean };
+type FieldDef = { key: string; label: string; type?: string; multi?: boolean; options?: string[]; dateField?: boolean; bool?: boolean };
 const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
   experiences: {
     title: "Experience",
@@ -505,6 +505,7 @@ const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
       { key: "location", label: "Location" },
       { key: "start_date", label: "Start date", dateField: true },
       { key: "end_date", label: "End date (leave empty if current)", dateField: true },
+      { key: "is_current", label: "I currently work here", bool: true },
       { key: "bullets", label: "Bullets (one per line)", multi: true },
       { key: "tech", label: "Tech (comma-separated)", multi: true },
     ],
