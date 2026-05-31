@@ -55,7 +55,14 @@ function OnboardingPage() {
     return () => clearInterval(t);
   }, []);
 
-  if (!status) return <div className="text-sm text-muted-foreground">Loading…</div>;
+  if (!status) return (
+    <div className="space-y-3">
+      <div className="shimmer h-6 w-48 rounded-md" />
+      <div className="shimmer h-20 rounded-xl" />
+      <div className="shimmer h-20 rounded-xl" />
+      <div className="shimmer h-20 rounded-xl" />
+    </div>
+  );
 
   const steps = [
     { key: "profile", label: "Complete your profile", desc: "Name, location, work authorization", to: "/profile", icon: User, done: status.profile },

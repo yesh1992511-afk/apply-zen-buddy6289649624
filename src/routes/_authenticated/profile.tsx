@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { NotFoundRoute } from "@/components/NotFoundRoute";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfileEditor } from "@/lib/queries/profile";
 import { SavedIndicator } from "@/components/SavedIndicator";
@@ -647,27 +647,19 @@ const SCHEMAS: Record<string, { fields: FieldDef[]; title: string }> = {
 function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
   const { user } = useUser();
   const [items, setItems] = useState<Array<Record<string, unknown> & { id: string }>>([]);
+  const [, setLoaded] = useState(false);
+  const seededRef = useRef<Record<string, boolean>>({});
   const schema = SCHEMAS[table];
 
   const db = supabase as unknown as { from: (t: string) => any };
-  const load = () => {
-    const q = db.from(table).select("*");
-    const ordered = (table === "languages" || table === "certifications" || table === "references_list")
-      ? q.order("created_at", { ascending: true })
-      : q.order("sort_order", { ascending: true });
-    ordered.then(({ data }: { data: Array<Record<string, unknown> & { id: string }> | null }) => setItems(data ?? []));
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [table]);
 
-  const add = async () => {
-    if (!user) return;
-    // Insert a truly empty row — user fills in fields. No "New company" junk.
+  const buildBlank = (): Record<string, unknown> => {
+    if (!user) return {};
     const blank: Record<string, unknown> = { user_id: user.id };
     schema.fields.forEach((f) => {
       if (f.multi) blank[f.key] = [];
       else if (f.bool) blank[f.key] = false;
     });
-    // For NOT NULL columns, seed with empty string so the insert succeeds.
     if (table === "experiences") { blank.company = ""; blank.title = ""; }
     if (table === "projects") blank.name = "";
     if (table === "skills") blank.name = "";
@@ -675,9 +667,40 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
     if (table === "languages") blank.name = "";
     if (table === "certifications") blank.name = "";
     if (table === "references_list") blank.name = "";
-    const { error } = await db.from(table).insert(blank);
+    return blank;
+  };
+
+  const load = () => {
+    const q = db.from(table).select("*");
+    const ordered = (table === "languages" || table === "certifications" || table === "references_list")
+      ? q.order("created_at", { ascending: true })
+      : q.order("sort_order", { ascending: true });
+    ordered.then(async ({ data }: { data: Array<Record<string, unknown> & { id: string }> | null }) => {
+      const rows = data ?? [];
+      // Auto-seed a single blank row the first time a tab loads empty,
+      // so users see the input boxes immediately instead of just an "Add" button.
+      if (rows.length === 0 && user && !seededRef.current[table]) {
+        seededRef.current[table] = true;
+        const blank = buildBlank();
+        const { data: inserted, error } = await db.from(table).insert(blank).select().single();
+        if (!error && inserted) {
+          setItems([inserted as Record<string, unknown> & { id: string }]);
+          setLoaded(true);
+          return;
+        }
+      }
+      setItems(rows);
+      setLoaded(true);
+    });
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [table, user?.id]);
+
+  const add = async () => {
+    if (!user) return;
+    const { error } = await db.from(table).insert(buildBlank());
     if (error) toast.error(error.message); else load();
   };
+
 
   const [savingId, setSavingId] = useState<string | null>(null);
   const update = async (id: string, patch: Record<string, unknown>) => {

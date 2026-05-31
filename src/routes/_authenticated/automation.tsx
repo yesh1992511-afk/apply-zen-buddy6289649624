@@ -77,7 +77,14 @@ function AutomationPage() {
     return <QueryErrorState error={settings.error as Error} onRetry={() => settings.refetch()} />;
   }
   if (!s) {
-    return <div className="text-muted-foreground">Loading…</div>;
+    return (
+      <div className="max-w-4xl space-y-4">
+        <div className="shimmer h-9 w-64 rounded-md" />
+        <div className="shimmer h-32 rounded-xl" />
+        <div className="shimmer h-32 rounded-xl" />
+        <div className="shimmer h-48 rounded-xl" />
+      </div>
+    );
   }
 
   return (

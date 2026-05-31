@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
-import { jobsQueryOptions, jobCountsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies, useClearAllJobs, useRescoreAllJobs, useLoosenActiveFilter, useDisableNoisySources } from "@/lib/queries/jobs";
+import { jobsQueryOptions, jobCountsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies, useClearAllJobs, useRescoreAllJobs, useLoosenActiveFilter, useDisableNoisySources, useDailyApplyBudget } from "@/lib/queries/jobs";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
@@ -63,6 +63,9 @@ function JobsPage() {
   const rescore = useRescoreAllJobs();
   const loosen = useLoosenActiveFilter();
   const disableNoisy = useDisableNoisySources();
+  const budgetQuery = useDailyApplyBudget();
+  const atCap = budgetQuery.data?.atCap ?? false;
+  const capLabel = budgetQuery.data ? `${budgetQuery.data.used}/${budgetQuery.data.cap} today` : "";
 
   const jobs = jobsQuery.data ?? [];
   const savedFilters = filtersQuery.data ?? [];
@@ -137,13 +140,19 @@ function JobsPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            <Button onClick={queueApply} disabled={selected.size === 0} className="bg-gradient-emerald gap-1.5 shadow-glow disabled:shadow-none">
+            <Button
+              onClick={queueApply}
+              disabled={selected.size === 0 || atCap}
+              title={atCap ? `Daily apply cap reached (${capLabel})` : undefined}
+              className="bg-gradient-emerald gap-1.5 shadow-glow disabled:shadow-none"
+            >
               <Send className="h-4 w-4" />
-              Queue {selected.size > 0 ? selected.size : ""} apply
+              {atCap ? "Daily cap reached" : `Queue ${selected.size > 0 ? selected.size : ""} apply`}
             </Button>
           </div>
         }
       />
+
 
       <div className="sticky top-14 z-10 -mx-4 px-4 py-3 md:-mx-6 md:px-6 surface-frost rounded-none border-x-0 border-y border-border/40 space-y-2">
         <div className="flex flex-wrap items-center gap-3">
@@ -293,9 +302,16 @@ function JobsPage() {
                     <Button size="sm" variant="outline" onClick={() => setDialogJob(j as JobDialogJob)} className="h-8 gap-1.5 text-xs">
                       <FileText className="h-3.5 w-3.5" />Description
                     </Button>
-                    <Button size="sm" onClick={() => applyOne(j)} disabled={applyingId === j.id} className="h-8 gap-1.5 text-xs bg-gradient-emerald shadow-glow">
-                      <Send className="h-3.5 w-3.5" />{applyingId === j.id ? "…" : "Apply"}
+                    <Button
+                      size="sm"
+                      onClick={() => applyOne(j)}
+                      disabled={applyingId === j.id || atCap}
+                      title={atCap ? `Daily apply cap reached (${capLabel})` : undefined}
+                      className="h-8 gap-1.5 text-xs bg-gradient-emerald shadow-glow"
+                    >
+                      <Send className="h-3.5 w-3.5" />{applyingId === j.id ? "…" : atCap ? "Cap" : "Apply"}
                     </Button>
+
                     <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0">
                       <a href={j.url} target="_blank" rel="noreferrer" title="Open job">
                         <ExternalLink className="h-3.5 w-3.5" />
