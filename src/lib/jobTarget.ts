@@ -109,13 +109,19 @@ export function applyTargetToSourceConfig(
   }
 
   if (sourceKey === "remoteok") {
-    // RemoteOK matches on tags — use short, single-word tags
-    cfg.tags = titles
-      .flatMap((t) => t.toLowerCase().split(/[\s/]+/))
-      .filter((t) => t.length >= 3 && t.length <= 24);
+    // RemoteOK matches on tags. Keep meaningful 3-24 char single words,
+    // dedupe, and cap to 12 so the URL doesn't explode.
+    const tags = Array.from(new Set(
+      titles
+        .flatMap((t) => t.toLowerCase().split(/[\s/]+/))
+        .filter((t) => t.length >= 3 && t.length <= 24),
+    )).slice(0, 12);
+    cfg.tags = tags;
   }
   if (sourceKey === "usajobs") {
-    cfg.keyword = firstTitle;
+    // USAJobs Search API: `Keyword` accepts space-separated terms (OR-ish).
+    // Send up to 5 titles so we don't lose niches like "SOC analyst".
+    cfg.keyword = titles.slice(0, 5).join(" ");
     cfg.location = target.locations[0] ?? "";
   }
   // weworkremotely, arbeitnow, *_boards: leave alone (no keyword param)
