@@ -175,7 +175,7 @@ function ProfilePage() {
           <TabsTrigger value="certifications" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Certs</TabsTrigger>
           <TabsTrigger value="references_list" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">References</TabsTrigger>
           <TabsTrigger value="screening" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Screening</TabsTrigger>
-          <TabsTrigger value="resume" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Resume</TabsTrigger>
+          
         </TabsList>
 
         {/* BASIC */}
