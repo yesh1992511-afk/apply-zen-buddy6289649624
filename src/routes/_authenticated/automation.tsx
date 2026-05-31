@@ -287,17 +287,22 @@ function AutomationPage() {
           </div>
           <div>
             <Label>Proxy provider</Label>
-            <Select value={s.proxy_provider ?? ""} onValueChange={(v) => set("proxy_provider", v)}>
+            <Select
+              value={s.proxy_provider ?? "decodo"}
+              onValueChange={(v) => set("proxy_provider", v as AutomationValues["proxy_provider"])}
+            >
               <SelectTrigger>
-                <SelectValue placeholder="None" />
+                <SelectValue placeholder="Decodo (recommended)" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="decodo">Decodo (recommended)</SelectItem>
                 <SelectItem value="iproyal">IPRoyal</SelectItem>
                 <SelectItem value="brightdata">BrightData</SelectItem>
                 <SelectItem value="smartproxy">Smartproxy</SelectItem>
                 <SelectItem value="oxylabs">Oxylabs</SelectItem>
               </SelectContent>
             </Select>
+            {(s.proxy_provider ?? "decodo") === "decodo" && <DecodoStatus />}
           </div>
           <div>
             <Label>AI resume model</Label>
