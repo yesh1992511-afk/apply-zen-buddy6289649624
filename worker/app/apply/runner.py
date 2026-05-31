@@ -19,9 +19,12 @@ from .ratelimit import acquire as rl_acquire, record_challenge
 
 
 async def _next_queued(limit: int) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc).isoformat()
     rows = db().table("applications").select("*").eq(
         "user_id", user_id()
-    ).eq("status", "queued").order("queued_at").limit(limit).execute().data or []
+    ).eq("status", "queued").or_(
+        f"next_retry_at.is.null,next_retry_at.lte.{now}"
+    ).order("queued_at").limit(limit).execute().data or []
     return rows
 
 
@@ -35,13 +38,26 @@ async def _claim(app_id: str) -> bool:
 
 
 async def _fail(app_id: str, err: str, shots: list[str]) -> None:
-    db().table("applications").update({
-        "status": "failed",
+    attempts = _bump_attempts(app_id)
+    # Exponential backoff: 1m → 5m → 30m, then mark dead_letter via status='failed'.
+    backoff_minutes = {1: 1, 2: 5, 3: 30}
+    update: dict[str, Any] = {
         "last_error": err[:2000],
         "screenshots": shots,
         "finished_at": datetime.now(timezone.utc).isoformat(),
-        "attempts": _bump_attempts(app_id),
-    }).eq("id", app_id).execute()
+        "attempts": attempts,
+        "retry_count": attempts - 1,
+    }
+    if attempts <= 3:
+        # Re-queue for retry
+        from datetime import timedelta
+        next_at = datetime.now(timezone.utc) + timedelta(minutes=backoff_minutes.get(attempts, 30))
+        update["status"] = "queued"
+        update["next_retry_at"] = next_at.isoformat()
+    else:
+        update["status"] = "failed"
+        update["dlq_reason"] = err[:500]
+    db().table("applications").update(update).eq("id", app_id).execute()
 
 
 def _bump_attempts(app_id: str) -> int:

@@ -113,15 +113,31 @@ _rule(r"current (salary|compensation|pay)", lambda p, l: p.get("current_salary")
 _rule(r"salary (currency|in)", lambda p, l: p.get("salary_currency"))
 
 # --- Availability ---
-_rule(r"notice period|how (much )?notice|how soon can you (start|join)|earliest (start|join)", lambda p, l: p.get("notice_period_weeks") and f"{p['notice_period_weeks']} weeks" or p.get("earliest_start_date"))
+_NOTICE_CAT = {"immediate": "Immediately", "2w": "2 weeks", "1m": "1 month", "2m": "2 months", "3m": "3 months"}
+def _notice(p: dict, _l: dict):
+    cat = p.get("notice_period_category")
+    if cat and cat in _NOTICE_CAT:
+        return _NOTICE_CAT[cat]
+    w = p.get("notice_period_weeks")
+    if w:
+        return f"{w} weeks"
+    return p.get("earliest_start_date")
+_rule(r"notice period|how (much )?notice|how soon can you (start|join)|earliest (start|join)", _notice)
 _rule(r"start date|available from", lambda p, l: p.get("earliest_start_date"))
 _rule(r"hours per week|weekly hours", lambda p, l: p.get("available_hours_per_week"))
 
 # --- Work prefs ---
+_rule(r"relocation (assist|help|support|package)|need.*relocation", lambda p, l: _yesno(p.get("relocation_assistance_needed")))
 _rule(r"willing to relocat|relocation", lambda p, l: _yesno(p.get("willing_to_relocate")))
 _rule(r"remote|work from home|on[\s-]?site|hybrid preference", lambda p, l: p.get("remote_preference"))
-_rule(r"willing to travel|travel (percent|%)|travel requir", lambda p, l: p.get("travel_willingness"))
+def _travel(p: dict, _l: dict):
+    pct = p.get("travel_willingness_pct")
+    if pct is not None:
+        return f"Up to {pct}%" if pct > 0 else "No travel"
+    return p.get("travel_willingness")
+_rule(r"willing to travel|travel (percent|%)|travel requir", _travel)
 _rule(r"shift (preference|availability)", lambda p, l: p.get("shift_preference"))
+
 _rule(r"driver'?s? license|driving licence", lambda p, l: _yesno(p.get("drivers_license")))
 _rule(r"own (transport|vehicle|car)", lambda p, l: _yesno(p.get("has_own_transport")))
 _rule(r"(full[\s-]?time)", lambda p, l: _yesno(p.get("open_to_fulltime")))
@@ -159,10 +175,22 @@ _rule(r"veteran", _eeoc("veteran_status"))
 _rule(r"disab(le|ility)", _eeoc("disability_status"))
 _rule(r"lgbt", _eeoc("lgbtq_status"))
 
-# --- Background checks ---
-_rule(r"pass (a )?background check|background screen", lambda p, l: (p.get("screening_answers") or {}).get("able_to_pass_background_check") or _YES)
-_rule(r"pass (a )?drug (test|screen)", lambda p, l: (p.get("screening_answers") or {}).get("able_to_pass_drug_test") or _YES)
-_rule(r"criminal (record|history|conviction)", lambda p, l: (p.get("screening_answers") or {}).get("criminal_record") or _NO)
+# --- Background checks / compliance ---
+_rule(r"pass (a )?background check|background screen|consent.*background",
+      lambda p, l: _yesno(p.get("consent_background_check")) if p.get("consent_background_check") is not None
+      else ((p.get("screening_answers") or {}).get("able_to_pass_background_check") or _YES))
+_rule(r"pass (a )?drug (test|screen)|consent.*drug",
+      lambda p, l: _yesno(p.get("consent_drug_test")) if p.get("consent_drug_test") is not None
+      else ((p.get("screening_answers") or {}).get("able_to_pass_drug_test") or _YES))
+def _criminal(p: dict, _l: dict):
+    v = p.get("criminal_record_disclosure")
+    if v == "none": return _NO
+    if v == "disclosed": return _YES
+    if v == "decline": return "Decline to answer"
+    return (p.get("screening_answers") or {}).get("criminal_record") or _NO
+_rule(r"criminal (record|history|conviction)|felony", _criminal)
+_rule(r"references? (available|on request|contact)", lambda p, l: _yesno(p.get("references_available_on_request")))
+
 
 # --- Cover-letter type prompts ---
 _rule(r"why (do you want|are you interested)", lambda p, l: (p.get("screening_answers") or {}).get("why_company") or p.get("summary"))

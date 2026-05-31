@@ -179,6 +179,18 @@ export const savedFiltersQueryOptions = () =>
     staleTime: 60_000,
   });
 
+/** Friendly toast for Postgres quota violations from enforce_apply_quota trigger. */
+function toastApplyError(e: unknown) {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/Daily apply limit reached/i.test(msg) || /check_violation/i.test(msg)) {
+    toastError(new Error("Daily apply cap reached — upgrade your plan or wait until tomorrow."));
+  } else if (/Source limit reached/i.test(msg)) {
+    toastError(new Error("Source limit reached — upgrade your plan to add more."));
+  } else {
+    toastError(e);
+  }
+}
+
 /** Queue a single job for the worker; returns the application id. */
 export function useApplyToJob() {
   const queryClient = useQueryClient();
@@ -210,8 +222,9 @@ export function useApplyToJob() {
       if (res.existed) toastSaved("Already queued — opening application");
       else toastSaved("Application queued — worker starting");
       queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
-    onError: (e) => toastError(e),
+    onError: toastApplyError,
   });
 }
 
@@ -235,7 +248,9 @@ export function useBulkQueueApplies() {
     onSuccess: (n) => {
       if (n > 0) toastQueued(n);
       queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
-    onError: (e) => toastError(e),
+    onError: toastApplyError,
   });
 }
+

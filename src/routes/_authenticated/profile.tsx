@@ -165,6 +165,7 @@ function ProfilePage() {
           <TabsTrigger value="address" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Address</TabsTrigger>
           <TabsTrigger value="workauth" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Work auth</TabsTrigger>
           <TabsTrigger value="comp" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Comp</TabsTrigger>
+          <TabsTrigger value="compliance" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Compliance</TabsTrigger>
           <TabsTrigger value="prefs" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Preferences</TabsTrigger>
           <TabsTrigger value="links" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Links</TabsTrigger>
           <TabsTrigger value="experiences" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Experience</TabsTrigger>
@@ -268,6 +269,77 @@ function ProfilePage() {
             <SwitchRow label="Open to internship" checked={getBool("open_to_internship")} onChange={(v) => set("open_to_internship", v)} />
           </CardContent></Card>
         </TabsContent>
+
+        {/* COMPLIANCE & AVAILABILITY (MNC-grade) */}
+        <TabsContent value="compliance" className="space-y-4 pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Compliance & availability</CardTitle>
+              <CardDescription>
+                Standard fields large employers (MNCs, government contractors, regulated industries) ask during screening.
+                All optional — leaving "Decline to answer" is legally acceptable.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <SelectFieldKV
+                label="Notice period (category)"
+                value={getStr("notice_period_category")}
+                onChange={(v) => set("notice_period_category", v || null)}
+                options={[
+                  { value: "immediate", label: "Immediate / available now" },
+                  { value: "2w", label: "2 weeks" },
+                  { value: "1m", label: "1 month" },
+                  { value: "2m", label: "2 months" },
+                  { value: "3m", label: "3 months" },
+                  { value: "other", label: "Other (see weeks field)" },
+                ]}
+              />
+              <SelectFieldKV
+                label="Travel willingness (%)"
+                value={getStr("travel_willingness_pct")}
+                onChange={(v) => set("travel_willingness_pct", v ? Number(v) : null)}
+                options={[
+                  { value: "0", label: "0% — no travel" },
+                  { value: "25", label: "Up to 25%" },
+                  { value: "50", label: "Up to 50%" },
+                  { value: "75", label: "Up to 75%" },
+                  { value: "100", label: "100% — fully mobile" },
+                ]}
+              />
+              <SelectFieldKV
+                label="Criminal record disclosure"
+                value={getStr("criminal_record_disclosure")}
+                onChange={(v) => set("criminal_record_disclosure", v || null)}
+                options={[
+                  { value: "none", label: "No record to disclose" },
+                  { value: "disclosed", label: "Yes — willing to disclose in interview" },
+                  { value: "decline", label: "Decline to answer" },
+                ]}
+              />
+              <SwitchRow
+                label="Consent to background check"
+                checked={getBool("consent_background_check")}
+                onChange={(v) => set("consent_background_check", v)}
+              />
+              <SwitchRow
+                label="Consent to drug test (if required)"
+                checked={getBool("consent_drug_test")}
+                onChange={(v) => set("consent_drug_test", v)}
+              />
+              <SwitchRow
+                label="Need relocation assistance"
+                checked={getBool("relocation_assistance_needed")}
+                onChange={(v) => set("relocation_assistance_needed", v)}
+              />
+              <SwitchRow
+                label="References available on request"
+                checked={getBool("references_available_on_request")}
+                onChange={(v) => set("references_available_on_request", v)}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
 
         {/* PREFERENCES */}
         <TabsContent value="prefs" className="space-y-4 pt-4">
