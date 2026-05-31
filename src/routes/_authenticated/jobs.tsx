@@ -302,9 +302,16 @@ function JobsPage() {
                     <Button size="sm" variant="outline" onClick={() => setDialogJob(j as JobDialogJob)} className="h-8 gap-1.5 text-xs">
                       <FileText className="h-3.5 w-3.5" />Description
                     </Button>
-                    <Button size="sm" onClick={() => applyOne(j)} disabled={applyingId === j.id} className="h-8 gap-1.5 text-xs bg-gradient-emerald shadow-glow">
-                      <Send className="h-3.5 w-3.5" />{applyingId === j.id ? "…" : "Apply"}
+                    <Button
+                      size="sm"
+                      onClick={() => applyOne(j)}
+                      disabled={applyingId === j.id || atCap}
+                      title={atCap ? `Daily apply cap reached (${capLabel})` : undefined}
+                      className="h-8 gap-1.5 text-xs bg-gradient-emerald shadow-glow"
+                    >
+                      <Send className="h-3.5 w-3.5" />{applyingId === j.id ? "…" : atCap ? "Cap" : "Apply"}
                     </Button>
+
                     <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0">
                       <a href={j.url} target="_blank" rel="noreferrer" title="Open job">
                         <ExternalLink className="h-3.5 w-3.5" />
