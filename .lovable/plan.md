@@ -1,44 +1,39 @@
-## Why the SQL editor failed
 
-The Cloud SQL editor connects as a restricted role that doesn't have write access to `vault.secrets` (Supabase protects that table). That's why you saw `ERROR 42501: permission denied for table secrets`. I have an admin path that can write there.
+## Platform health check — findings
+
+I ran the security scanner, the database linter, and pulled the last hour of server-function logs. Here's what came back and what I propose to fix.
+
+### 1. CRITICAL — Auth bypass in server-function middleware
+`src/integrations/supabase/auth-middleware.ts` validates bearer tokens with `supabase.auth.getClaims(token)` using the **publishable (anon) key**. That call only base64-decodes the JWT payload — it does **not** verify the signature. An attacker can forge a JWT with any `sub` claim and the middleware will accept it, granting full access to every `createServerFn` (billing, privacy, applications, admin, worker dispatch, automation settings, …). Because this is a single-user app, the entire data store is exposed.
+
+**Fix:** switch the middleware to validate via `supabaseAdmin.auth.getUser(token)` — a server-side call that verifies the signature against GoTrue. This is the same pattern already used correctly in `src/lib/api-auth.server.ts`.
+
+> ⚠️ `auth-middleware.ts` is in the "preconfigured files do not edit" list. I'll need your OK to patch it directly, since the scanner flagged the auto-generated version as vulnerable. Alternative: I introduce a new `requireSupabaseAuthVerified` wrapper and migrate every server fn to it.
+
+### 2. WARN — `jd_analysis_cache` readable by any authenticated user
+The table has a `SELECT ... USING (true)` policy. Cached job-description analyses (proprietary content + AI output) are visible to any signed-in user. In a single-user app this is low-impact today, but it's a latent leak.
+
+**Fix:** drop the public SELECT policy; restrict reads to `service_role` only (server fns use `supabaseAdmin`).
+
+### 3. WARN — SECURITY DEFINER function executable by signed-in users
+One of the `SECURITY DEFINER` functions has `EXECUTE` granted to `authenticated`. Likely `rescore_all_jobs_for_user` (it has an internal `auth.uid()` guard, so behavior is safe, but the linter still flags it).
+
+**Fix:** `REVOKE EXECUTE … FROM authenticated, anon, public; GRANT EXECUTE … TO service_role` and call it only from server-fn code via `supabaseAdmin`.
+
+### 4. WARN — Extension installed in `public` schema
+Pre-existing, low risk. Moving extensions between schemas can break dependent objects. **Recommendation: leave as-is** and acknowledge in security memory unless you want me to attempt the move.
+
+### 5. Cron 401s in worker logs — already fixed
+Logs from 20:35–20:41 UTC show `apply-worker` / `check-heartbeat` returning 401 (`Invalid apikey`). The SQL editor screenshot at 20:42 shows the next runs `succeeded`. These are stale errors from before the Vault sync — no action needed; will fall off the 1-hour window naturally.
+
+---
 
 ## Plan
 
-### Step 1 — Sync the current secret into the Vault (I do this)
+1. **Patch `auth-middleware.ts`** to call `supabaseAdmin.auth.getUser(token)` (signature-verified). Keep the same exported `requireSupabaseAuth` API so no call sites change.
+2. **Migration**: drop the open `SELECT` policy on `jd_analysis_cache`; add a service-role-only policy.
+3. **Migration**: `REVOKE EXECUTE` on `public.rescore_all_jobs_for_user(uuid)` from `authenticated, anon, public`; keep `service_role`. If any UI calls it directly via `supabase.rpc(...)`, wrap it in a `createServerFn` that uses `supabaseAdmin`.
+4. **Verify**: re-run security scan + linter; mark findings 2 & 3 fixed; ignore #4 (extension) with explanation in security memory.
+5. **Skip**: cron 401 noise — already resolved.
 
-Update the Vault entry `worker_cron_secret` to the value you already set as the `WORKER_CRON_SECRET` project secret:
-
-```
-0894ea1b2d117f9b1c383c608a7a8133b7e21979af69c1002bcb2b4c170e0e32
-```
-
-After this, the pg_cron heartbeat + daily-summary jobs will start successfully authenticating against `/api/public/hooks/*`.
-
-### Step 2 — Verify it works
-
-Check the most recent cron run history in the Cloud SQL editor (this query is read-only, no permission issue):
-
-```sql
-SELECT jobname, status, return_message, start_time
-FROM cron.job_run_details
-ORDER BY start_time DESC
-LIMIT 5;
-```
-
-We expect `succeeded` rows for `jobpilot-heartbeat-check` and `jobpilot-daily-summary-tick`.
-
-### Step 3 (recommended) — Rotate, because the secret leaked in the screenshot
-
-Since the value is now visible in our chat, generate a fresh one and rotate **both places** so they match:
-
-1. Generate a new random string (e.g. `openssl rand -hex 32`).
-2. You update the project secret `WORKER_CRON_SECRET` to the new value (Cloud → Secrets → edit).
-3. I update the Vault entry `worker_cron_secret` to the same new value via the admin path.
-
-If you'd rather skip rotation right now, that's fine — Step 1 alone unblocks cron. Just don't share the screenshot publicly.
-
-## Technical details
-
-- The Vault entry was seeded with a placeholder `CHANGE_ME_REPLACE_WITH_REAL_SECRET` by the earlier migration. pg_cron reads it from `vault.decrypted_secrets` and sends it as `x-internal-secret`.
-- The server route handlers compare incoming `x-internal-secret` (constant-time) against `process.env.WORKER_CRON_SECRET`. They must be byte-identical.
-- The admin path uses elevated access to write `vault.secrets` directly. The Cloud SQL editor cannot, by design.
+Approve and I'll execute.
