@@ -679,6 +679,7 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
     if (table === "languages") blank.name = "";
     if (table === "certifications") blank.name = "";
     if (table === "references_list") blank.name = "";
+    if (table === "publications") blank.title = "";
     return blank;
   };
 
