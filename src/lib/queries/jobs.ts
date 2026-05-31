@@ -52,15 +52,13 @@ export const jobCountsQueryOptions = () =>
   queryOptions({
     queryKey: ["jobs", "counts"] as const,
     queryFn: async (): Promise<{ scraped: number; matched: number }> => {
-      // Ingest drops unmatched jobs at the source, so every row in `jobs`
-      // is already matched. Both counts intentionally return the same value
-      // for back-compat with existing UI.
-      const { count, error } = await supabase
-        .from("jobs")
-        .select("id", { count: "exact", head: true });
-      if (error) throw new Error(error.message);
-      const n = count ?? 0;
-      return { scraped: n, matched: n };
+      const [{ count: scraped, error: e1 }, { count: matched, error: e2 }] = await Promise.all([
+        supabase.from("jobs").select("id", { count: "exact", head: true }),
+        supabase.from("jobs").select("id", { count: "exact", head: true }).eq("matched", true),
+      ]);
+      if (e1) throw new Error(e1.message);
+      if (e2) throw new Error(e2.message);
+      return { scraped: scraped ?? 0, matched: matched ?? 0 };
     },
     staleTime: 30_000,
   });
@@ -154,6 +152,7 @@ export const jobsQueryOptions = (params: { hours: number }) =>
       let q = supabase
         .from("jobs")
         .select("*, applications(id, status, queued_at)")
+        .eq("matched", true)
         .order("score", { ascending: false })
         .order("posted_at", { ascending: false, nullsFirst: false })
         .limit(200);
