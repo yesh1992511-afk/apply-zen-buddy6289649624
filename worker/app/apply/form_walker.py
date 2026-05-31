@@ -12,18 +12,17 @@ text is almost always present somewhere near the input.
 from __future__ import annotations
 from typing import Any
 from .profile_map import answer_for
+from . import field_fills as ff
 
 
 def load_lists(user_id: str | None) -> dict:
-    """Fetch related rows (experiences/educations/languages/...) the mapper may need.
-
-    Shared by all portal adapters so they can call autofill_form uniformly.
-    """
+    """Fetch related rows (experiences/educations/languages/...) the mapper may need."""
     if not user_id:
         return {}
     from ..db import db
     out: dict = {}
-    for tbl in ("experiences", "educations", "languages", "certifications", "skills", "projects"):
+    for tbl in ("experiences", "educations", "languages", "certifications", "skills",
+                "projects", "publications", "references_list"):
         try:
             res = db().table(tbl).select("*").eq("user_id", user_id).execute()
             out[tbl] = res.data or []
@@ -32,12 +31,18 @@ def load_lists(user_id: str | None) -> dict:
     return out
 
 
-async def safe_autofill(page, profile: dict) -> dict[str, int] | None:
+async def safe_autofill(page, profile: dict, job: dict | None = None,
+                        application_id: str | None = None) -> dict[str, int] | None:
     """Convenience wrapper: load lists + run autofill, swallow all exceptions.
-    Call this right before the final Submit click in any portal adapter."""
+    Falls back to profile['_apply_job'] / profile['_apply_app_id'] (set by runner.py)
+    so existing portal calls automatically get AI fallback + fill logging."""
     try:
+        job = job or (profile.get("_apply_job") if isinstance(profile, dict) else None)
+        application_id = application_id or (profile.get("_apply_app_id") if isinstance(profile, dict) else None)
+        if application_id and ff._ledger.get() is None:
+            ff.start(application_id)
         lists = load_lists(profile.get("user_id"))
-        return await autofill_form(page, profile, lists)
+        return await autofill_form(page, profile, lists, job=job)
     except Exception:
         return None
 
@@ -76,8 +81,9 @@ async def _label_for(page, handle) -> str:
         return ""
 
 
-async def fill_text_inputs(page, profile: dict, lists: dict | None = None) -> int:
-    """Fill <input type=text|email|tel|number|url|date> and <textarea>. Returns number filled."""
+async def fill_text_inputs(page, profile: dict, lists: dict | None = None,
+                           job: dict | None = None) -> int:
+    """Fill text-ish inputs and textareas. Falls back to AI for unanswered textareas."""
     filled = 0
     selectors = "input:not([type='hidden']):not([type='file']):not([type='submit']):not([type='button']):not([type='checkbox']):not([type='radio']), textarea"
     handles = await page.locator(selectors).element_handles()
@@ -87,12 +93,30 @@ async def fill_text_inputs(page, profile: dict, lists: dict | None = None) -> in
                 continue
             current = await h.evaluate("e => e.value")
             if current:
-                continue  # don't overwrite existing values
+                continue
             label = await _label_for(page, h)
             ans = answer_for(label, profile, lists)
+            source = "profile"
             if ans is None or ans == "":
-                continue
+                # AI fallback only for textareas (free-form questions). Skip small inputs.
+                tag = (await h.evaluate("e => e.tagName") or "").lower()
+                if tag == "textarea" and label:
+                    try:
+                        from ..ai.screening import answer_with_ai
+                        ai_ans, src = answer_with_ai(label, profile, job, long_form=True)
+                        if ai_ans:
+                            ans = ai_ans
+                            source = "screening_cache" if src == "cache" else "ai_generated"
+                    except Exception:
+                        pass
+                if ans is None or ans == "":
+                    continue
+            else:
+                # Decide tailored vs profile vs cache
+                if ff.is_tailored_field(label, profile):
+                    source = "tailored"
             await h.fill(str(ans))
+            ff.record(label, ans, source)
             filled += 1
         except Exception:
             continue
@@ -100,7 +124,6 @@ async def fill_text_inputs(page, profile: dict, lists: dict | None = None) -> in
 
 
 async def select_dropdowns(page, profile: dict, lists: dict | None = None) -> int:
-    """Pick best matching option in each <select>. Returns number set."""
     filled = 0
     handles = await page.locator("select").element_handles()
     for h in handles:
@@ -125,6 +148,7 @@ async def select_dropdowns(page, profile: dict, lists: dict | None = None) -> in
                         chosen = o["value"]; break
             if chosen is not None:
                 await h.select_option(value=chosen)
+                ff.record(label, ans, "profile")
                 filled += 1
         except Exception:
             continue
@@ -132,7 +156,6 @@ async def select_dropdowns(page, profile: dict, lists: dict | None = None) -> in
 
 
 async def click_radios(page, profile: dict, lists: dict | None = None) -> int:
-    """For each radio group, click the option whose label matches the computed answer."""
     filled = 0
     try:
         groups = await page.evaluate(
@@ -163,6 +186,7 @@ async def click_radios(page, profile: dict, lists: dict | None = None) -> int:
                     rlabel = await _label_for(page, r)
                     if target in (rlabel or "").lower():
                         await r.click()
+                        ff.record(label, ans, "profile")
                         filled += 1
                         break
                 except Exception:
@@ -172,9 +196,10 @@ async def click_radios(page, profile: dict, lists: dict | None = None) -> int:
     return filled
 
 
-async def autofill_form(page, profile: dict, lists: dict | None = None) -> dict[str, int]:
+async def autofill_form(page, profile: dict, lists: dict | None = None,
+                        job: dict | None = None) -> dict[str, int]:
     """Walk the whole form and fill what we can. Returns counts for logging."""
-    text = await fill_text_inputs(page, profile, lists)
+    text = await fill_text_inputs(page, profile, lists, job=job)
     sel = await select_dropdowns(page, profile, lists)
     rad = await click_radios(page, profile, lists)
     return {"text": text, "select": sel, "radio": rad}

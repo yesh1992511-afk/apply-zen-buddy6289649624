@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ErrorBoundaryRoute } from "@/components/ErrorBoundaryRoute";
 import { NotFoundRoute } from "@/components/NotFoundRoute";
 import { useEffect, useRef, useState } from "react";
@@ -117,6 +117,9 @@ function ProfilePage() {
         </div>
         <div className="flex items-center gap-3">
           <SavedIndicator state={saveState} error={saveError} />
+          <Button asChild variant="outline" size="sm">
+            <Link to="/profile/screening">Screening answers</Link>
+          </Button>
           <Button
             variant="outline"
             size="sm"

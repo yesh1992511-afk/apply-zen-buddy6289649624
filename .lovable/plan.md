@@ -1,67 +1,131 @@
-# Finish remaining work
+# Plan: Max-Coverage Auto-Apply
 
-Audited the codebase against the approved plan. Migration, matched-only ingest, parallel scraping, 6 new ATS adapters, curated packs UI, tailored-resume generation in `runner.py`, and the `TailoredResumePanel` are already in place. The items below are still missing or partial.
+Goal: every field on every supported ATS gets auto-filled, with tailored content for experience/projects/summary and profile content for everything else. Zero manual touch unless the form asks something we genuinely don't know.
 
-## 1. Jobs query — drop matched filter (#1)
+## 1. Unified field map (`worker/app/apply/profile_map.py`)
 
-`src/lib/queries/jobs.ts` still has `.eq("matched", true)` and a `matchedRes` count. Since ingest now drops unmatched at the source, every row in `jobs` is matched.
-- Remove the `.eq("matched", true)` on line 153.
-- Collapse `useJobCounts` to return a single `count` (rename UI usages accordingly, or keep `{scraped, matched}` both pointing at the same count for back-compat).
+Expand `build_field_map(profile)` to expose a flat, ATS-agnostic dict with every field most ATSes ask for. Each key has multiple aliases so adapters can match by label OR id OR name.
 
-## 2. profile_map.py & cover letter use tailored content (#5)
+**Identity (from `profile`)**
+- first_name, last_name, full_name, preferred_name, pronouns, date_of_birth
+- email, phone (E.164 + national), phone_country_code
 
-`runner.py` already passes `profile["_tailored_lists"]`, but `profile_map.py` and `ai/cover_letter.py` don't read it yet.
-- `worker/app/apply/profile_map.py`: when resolving fields that map to `summary`, `experiences`, `projects`, `skills`, prefer `profile["_tailored_lists"]` over the base tables. All other fields keep reading from `profile`.
-- `worker/app/ai/cover_letter.py`: accept the tailored summary + top experiences/projects and feed them into the prompt so cover letter and resume stay consistent.
+**Address (from `profile`)**
+- street_address, address_line_2, city, state_region, postal_code, country
+- timezone, nationality
 
-## 3. Automation status panels (#7)
+**Links (from `profile`)**
+- linkedin_url, linkedin_username, github_url, portfolio_url, personal_website
+- twitter_url, stackoverflow_url, dribbble_url, behance_url, medium_url
 
-`src/routes/_authenticated/automation.tsx` only has `DecodoStatus`. Add sibling components following the same pattern (server-fn check + green/red badge):
-- `CapsolverStatus` — `CAPSOLVER_API_KEY`
-- `OpenaiStatus` — `OPENAI_API_KEY`, `OPENAI_MODEL`
-- `DeepseekStatus` — `DEEPSEEK_API_KEY`, `DEEPSEEK_REASONER_MODEL`, `DEEPSEEK_CHAT_MODEL`
-- `GmailOauthStatus` — `GMAIL_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN`, `GMAIL_EMAIL`
-- `ApplyIdentityStatus` — `APPLY_EMAIL`, `APPLY_PASSWORD`, `APPLY_DEFAULT_PHONE`
+**Work authorization (from `profile`)**
+- work_authorization, work_auth_country, visa_status, visa_expiry
+- needs_visa_now, needs_visa_future, requires_sponsorship, authorized_countries
+- security_clearance, has_passport, passport_country, drivers_license, has_own_transport
 
-Group them under a "Worker secrets" card. Extend the existing `readiness.functions.ts` server fn so it returns presence flags for all of the above (presence only, never values).
+**Compensation & availability (from `profile`)**
+- desired_salary, salary_period, current_salary, salary_currency
+- notice_period_weeks, notice_period_category, earliest_start_date
+- available_hours_per_week, willing_to_relocate, relocation_assistance_needed
+- remote_preference, preferred_locations, travel_willingness_pct, shift_preference
+- open_to_fulltime, open_to_parttime, open_to_contract, open_to_internship
 
-## 4. Setup readiness (#7)
+**Demographics / EEO (from `profile`, only if `share_demographics=true`)**
+- gender, ethnicity, veteran_status, disability_status, lgbtq_status
+- consent_background_check, consent_drug_test, criminal_record_disclosure
 
-`src/routes/_authenticated/setup.tsx` has no checks for the new secrets. Add a "Worker integrations" checklist row per group above, using the same readiness server fn. Each row links to Connectors when missing.
+**Tailored content (from `_tailored_lists`)**
+- summary, headline
+- experiences[] → {company, title, location, start_date, end_date, is_current, bullets, tech}
+- projects[] → {name, description, url, bullets, tech}
+- skills[]
 
-## 5. bootstrap.sh syncs secrets from Lovable Cloud (#7)
+**Master lists (from their tables)**
+- educations[] → {school, degree, field, start_date, end_date, gpa}
+- certifications[] → {name, issuer, issued_date, expiry_date, credential_id, url}
+- languages[] → {name, proficiency}
+- publications[] → {title, venue, publication_date, url, doi}
+- references[] → {name, relationship, company, email, phone}
 
-`worker/bootstrap.sh` currently doesn't pull secrets. On VPS startup, fetch all worker secrets from Supabase Vault (or a new internal `/api/public/worker/env` endpoint guarded by `WORKER_SHARED_TOKEN`) and write them to `worker/.env`. This way we only manage secrets in Lovable Cloud.
+**Screening answers (from `profile.screening_answers` jsonb)**
+- Pre-baked answers for the most common ATS screening questions (years of X, are you authorized, willing to relocate, etc.) keyed by normalized question text.
 
-## 6. ATS hardening (#3/#6)
+## 2. Smart label matcher (`worker/app/apply/label_matcher.py` — new)
 
-Touch `ats_greenhouse.py`, `ats_lever.py`, `ats_ashby.py`, `ats_workable.py`, `ats_smartrecruiters.py`, `ats_recruitee.py`, `ats_teamtailor.py`:
-- Wrap HTTP calls in a shared `worker/app/sources/_http.py` helper with: exponential backoff (3 tries), rotating User-Agent pool, optional Decodo proxy when `DECODO_*` env is set.
-- Parse salary fields: Greenhouse `pay_input_ranges`, Lever `salaryRange`, Ashby `compensation.compensationTierSummary`. Write into `salary_min` / `salary_max` / `salary_currency`.
+A single fuzzy matcher every adapter calls when a hardcoded selector misses:
 
-## 7. Extra free sources (#2/#6)
+1. Read the field's `<label>`, `aria-label`, placeholder, name, id.
+2. Normalize (lowercase, strip punctuation, collapse spaces).
+3. Match against an alias dictionary (e.g. "first name" / "given name" / "legal first name" → first_name).
+4. For yes/no questions, pattern-match keywords ("sponsorship", "authorized to work", "relocate") and pull from the profile boolean.
+5. For free-text screening questions, look up `profile.screening_answers` by normalized question; if missing, fall back to a JD-aware AI completion using the tailored resume context.
 
-Add the public boards that were promised but not yet shipped:
-- `worker/app/sources/dice.py` (Dice RSS / JSON feed — tech)
-- `worker/app/sources/ycombinator_jobs.py` (YC Jobs JSON)
-- `worker/app/sources/cybersecjobs.py` (cybersecjobs.com RSS)
-- `worker/app/sources/cleared_jobs.py` (clearedjobs.net RSS — US security-cleared roles)
-- `worker/app/sources/levelsfyi.py` (levels.fyi public job board)
+This makes every adapter resilient to label drift.
 
-Register each in `registry.py` `ADAPTERS`. Skip SuccessFactors/Pinpoint/Rippling for now — they're closed feeds requiring per-tenant credentials.
+## 3. Per-adapter coverage pass
+
+For each ATS adapter under `worker/app/apply/`:
+- `ats_greenhouse.py`, `ats_lever.py`, `ats_ashby.py`, `ats_workday.py`, `ats_bamboohr.py`, `ats_personio.py`, `ats_breezyhr.py`, `ats_jobvite.py`, `ats_icims.py`, `ats_smartrecruiters.py` (if present), `ats_taleo.py` (if present)
+
+For each:
+1. **Identity + address + links** — direct map.
+2. **Resume + cover letter upload** — already wired; verify both PDF paths used.
+3. **Repeating Experience block** — loop `experiences[]`, click "Add another" between entries, fill company/title/dates/location/bullets/tech.
+4. **Repeating Projects block** (where supported) — same loop.
+5. **Repeating Education block** — loop `educations[]`.
+6. **Certifications / Languages / Publications / References** — fill where ATS exposes them.
+7. **Work auth + demographics** — dropdowns/radio mapped from profile enums.
+8. **Custom screening questions** — route through `label_matcher` → `screening_answers` → AI fallback.
+9. **Final review + submit** — already wired.
+
+## 4. AI fallback for unknown questions (`worker/app/ai/screening.py` — new)
+
+When `label_matcher` finds a question with no profile answer:
+1. Build prompt: question + JD summary + tailored resume bullets + profile basics.
+2. Call DeepSeek reasoner (cheap) for the short answer.
+3. Cache result in `profile.screening_answers` (jsonb) under the normalized question key so the next application is instant + free.
+4. Log to `application_events` so the user sees what was auto-answered.
+
+## 5. UI: per-application field coverage panel
+
+Add a "Filled fields" panel on `/applications/$id` showing every field the worker filled, its value, and the source (`profile` / `tailored` / `screening_cache` / `ai_generated`). Lets the user audit and correct.
+
+## 6. UI: screening answers editor
+
+Add a `/profile/screening` section listing every cached screening question + answer with edit/delete. New cached answers from AI fallback show up here automatically.
+
+## 7. Profile completeness score
+
+On `/profile` and `/setup`, show a completeness bar: % of the flat field map that has a value. Highlight missing high-impact fields (phone, work auth, address, demographics-if-shared) so the user knows what to fill to reduce AI fallbacks.
 
 ---
 
-## Order of execution
+## Files touched
 
-1. `queries/jobs.ts` cleanup
-2. `profile_map.py` + `cover_letter.py` tailored reads
-3. New ATS HTTP helper + salary parsing (existing 7 adapters)
-4. 5 new public sources + registry registration
-5. `automation.tsx` status panels + `readiness.functions.ts` extension
-6. `setup.tsx` readiness rows
-7. `bootstrap.sh` secret sync
+**Worker (new):**
+- `worker/app/apply/label_matcher.py`
+- `worker/app/ai/screening.py`
 
-No new migrations or secrets needed — everything already exists in Lovable Cloud.
+**Worker (edited):**
+- `worker/app/apply/profile_map.py` — expand to full flat map
+- `worker/app/apply/runner.py` — wire label_matcher + screening cache writes
+- every `worker/app/apply/ats_*.py` adapter — coverage pass
 
-Approve and I'll execute top-to-bottom.
+**Frontend (new):**
+- `src/components/applications/FilledFieldsPanel.tsx`
+- `src/routes/_authenticated/profile.screening.tsx`
+- `src/components/profile/CompletenessBar.tsx`
+
+**Frontend (edited):**
+- `src/routes/_authenticated/applications.$id.tsx` — add FilledFieldsPanel
+- `src/routes/_authenticated/profile.tsx` — add CompletenessBar + link to screening
+- `src/routes/_authenticated/setup.tsx` — add completeness row
+
+**Migration:**
+- `application_events` already exists; add a `field_fills` jsonb column to `applications` to persist the per-application fill map for the panel (or store as an event with `phase='fill'`).
+
+No new secrets required — uses existing OpenAI/DeepSeek keys.
+
+## Open question
+
+For unknown screening questions, do you want **always-AI** (auto-answer everything, fastest) or **AI-with-flag** (auto-answer but mark the application as "needs review" so you can verify before it counts as submitted)? Default I'll use: always-AI for short factual questions (years of experience, yes/no), flag for long-form ("Why do you want to work here?") so you can tweak.

@@ -46,6 +46,7 @@ type AppRow = {
   applied_at: string | null;
   finished_at: string | null;
   screenshots: string[] | null;
+  field_fills: Array<{ label: string; value: string; source: string }> | null;
   job: {
     title: string; company: string; url: string; source_key: string;
     location: string | null; remote: string | null; posted_at: string | null;
@@ -82,7 +83,7 @@ function ApplicationDetailPage() {
     (async () => {
       const { data, error } = await supabase
         .from("applications")
-        .select("id, status, job_id, resume_id, cover_letter_id, attempts, retry_count, last_error, dlq_reason, queued_at, started_at, applied_at, finished_at, screenshots, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at)")
+        .select("id, status, job_id, resume_id, cover_letter_id, attempts, retry_count, last_error, dlq_reason, queued_at, started_at, applied_at, finished_at, screenshots, field_fills, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at)")
         .eq("id", id)
         .maybeSingle();
       if (cancelled) return;
@@ -152,10 +153,19 @@ function ApplicationDetailPage() {
   const isDone = app?.status === "applied" || app?.status === "submitted";
 
   const fillRows: FillRow[] = useMemo(() => {
+    const persisted = app?.field_fills;
+    if (Array.isArray(persisted) && persisted.length > 0) {
+      return persisted.map((f, i) => ({
+        id: `ff-${i}`,
+        field: f.label || "field",
+        value: f.value || "",
+        ts: app?.finished_at || app?.started_at || "",
+        source: (f.source as FillRow["source"]) || "profile",
+      }));
+    }
     return logs
       .filter((l) => (l.scope ?? "").startsWith("form.fill"))
       .map((l) => {
-        // Try to parse "field => value" or use message
         const m = /^(.*?)\s*(?:=>|:|→)\s*(.+)$/.exec(l.message ?? "");
         return {
           id: l.id,
@@ -164,7 +174,7 @@ function ApplicationDetailPage() {
           ts: l.ts,
         };
       });
-  }, [logs]);
+  }, [logs, app?.field_fills, app?.finished_at, app?.started_at]);
 
   if (loading) {
     return (

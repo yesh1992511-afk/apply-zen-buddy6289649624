@@ -3,7 +3,15 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
 import { FileText } from "lucide-react";
 
-export type FillRow = { id: number | string; field: string; value: string; ts: string };
+export type FillSource = "profile" | "tailored" | "screening_cache" | "ai_generated";
+export type FillRow = { id: number | string; field: string; value: string; ts: string; source?: FillSource };
+
+const SOURCE_LABEL: Record<FillSource, { label: string; tone: string }> = {
+  profile: { label: "Profile", tone: "bg-muted text-muted-foreground" },
+  tailored: { label: "Tailored", tone: "bg-primary/15 text-primary" },
+  screening_cache: { label: "Cached", tone: "bg-success/15 text-success" },
+  ai_generated: { label: "AI", tone: "bg-accent/20 text-accent-foreground" },
+};
 
 export function FormFillTable({ rows, isActive }: { rows: FillRow[]; isActive: boolean }) {
   if (rows.length === 0) {
@@ -40,11 +48,18 @@ export function FormFillTable({ rows, isActive }: { rows: FillRow[]; isActive: b
                   : <Check className="h-3.5 w-3.5 text-success" />}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{r.field}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{r.field}</div>
+                  {r.source && (
+                    <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wide", SOURCE_LABEL[r.source].tone)}>
+                      {SOURCE_LABEL[r.source].label}
+                    </span>
+                  )}
+                </div>
                 <div className="text-sm text-foreground break-words">{r.value || <span className="italic text-muted-foreground">(empty)</span>}</div>
               </div>
               <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">
-                {new Date(r.ts).toLocaleTimeString([], { hour12: false })}
+                {r.ts ? new Date(r.ts).toLocaleTimeString([], { hour12: false }) : ""}
               </span>
             </div>
           );

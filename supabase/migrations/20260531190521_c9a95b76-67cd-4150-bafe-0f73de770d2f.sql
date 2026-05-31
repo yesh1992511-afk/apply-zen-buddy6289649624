@@ -1,0 +1,1 @@
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS field_fills jsonb NOT NULL DEFAULT '[]'::jsonb;

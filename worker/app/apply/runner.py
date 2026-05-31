@@ -147,13 +147,21 @@ async def process_one(app: dict[str, Any]) -> None:
 
         async with new_browser(portal_key=portal.key) as (page, _ctx):
             await pause(1, 3)
-            # Pass tailored payload via profile dict so portal adapters that
-            # call answer_for() get the per-job content.
             profile["_tailored_lists"] = tailored_lists
-            result = await portal.apply(
-                page=page, job=job, profile=profile,
-                resume_pdf=pdf, cover_letter_text=cl,
-            )
+            # Start the field-fills ledger so portal + form_walker can log what they fill
+            from . import field_fills as ff
+            ff.start(app["id"])
+            # Stash job + app_id on the profile dict so portals that call
+            # safe_autofill without explicit kwargs still get AI fallback context.
+            profile["_apply_job"] = job
+            profile["_apply_app_id"] = app["id"]
+            try:
+                result = await portal.apply(
+                    page=page, job=job, profile=profile,
+                    resume_pdf=pdf, cover_letter_text=cl,
+                )
+            finally:
+                ff.flush()
             if not result.ok and result.error and any(
                 k in result.error.lower() for k in ("captcha", "challenge", "verify", "blocked", "robot")
             ):

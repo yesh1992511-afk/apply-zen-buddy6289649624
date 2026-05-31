@@ -38,6 +38,7 @@ import { Route as AuthenticatedCoverLettersRouteImport } from './routes/_authent
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
+import { Route as AuthenticatedProfileScreeningRouteImport } from './routes/_authenticated/profile.screening'
 import { Route as AuthenticatedApplicationsIdRouteImport } from './routes/_authenticated/applications.$id'
 import { Route as ApiPublicWorkerEnvRouteImport } from './routes/api/public/worker.env'
 import { Route as ApiPublicSourcesWorkerStatusRouteImport } from './routes/api/public/sources/worker-status'
@@ -197,6 +198,12 @@ const AuthenticatedApplicationsRoute =
     path: '/applications',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedProfileScreeningRoute =
+  AuthenticatedProfileScreeningRouteImport.update({
+    id: '/screening',
+    path: '/screening',
+    getParentRoute: () => AuthenticatedProfileRoute,
+  } as any)
 const AuthenticatedApplicationsIdRoute =
   AuthenticatedApplicationsIdRouteImport.update({
     id: '/$id',
@@ -280,7 +287,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/privacy': typeof AuthenticatedPrivacyRoute
-  '/profile': typeof AuthenticatedProfileRoute
+  '/profile': typeof AuthenticatedProfileRouteWithChildren
   '/resume': typeof AuthenticatedResumeRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
@@ -292,6 +299,7 @@ export interface FileRoutesByFullPath {
   '/admin/system': typeof AdminSystemRoute
   '/admin/': typeof AdminIndexRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
+  '/profile/screening': typeof AuthenticatedProfileScreeningRoute
   '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
@@ -320,7 +328,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/privacy': typeof AuthenticatedPrivacyRoute
-  '/profile': typeof AuthenticatedProfileRoute
+  '/profile': typeof AuthenticatedProfileRouteWithChildren
   '/resume': typeof AuthenticatedResumeRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/sources': typeof AuthenticatedSourcesRoute
@@ -332,6 +340,7 @@ export interface FileRoutesByTo {
   '/admin/system': typeof AdminSystemRoute
   '/admin': typeof AdminIndexRoute
   '/applications/$id': typeof AuthenticatedApplicationsIdRoute
+  '/profile/screening': typeof AuthenticatedProfileScreeningRoute
   '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
@@ -363,7 +372,7 @@ export interface FileRoutesById {
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/privacy': typeof AuthenticatedPrivacyRoute
-  '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRouteWithChildren
   '/_authenticated/resume': typeof AuthenticatedResumeRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/sources': typeof AuthenticatedSourcesRoute
@@ -375,6 +384,7 @@ export interface FileRoutesById {
   '/admin/system': typeof AdminSystemRoute
   '/admin/': typeof AdminIndexRoute
   '/_authenticated/applications/$id': typeof AuthenticatedApplicationsIdRoute
+  '/_authenticated/profile/screening': typeof AuthenticatedProfileScreeningRoute
   '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
@@ -418,6 +428,7 @@ export interface FileRouteTypes {
     | '/admin/system'
     | '/admin/'
     | '/applications/$id'
+    | '/profile/screening'
     | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
@@ -458,6 +469,7 @@ export interface FileRouteTypes {
     | '/admin/system'
     | '/admin'
     | '/applications/$id'
+    | '/profile/screening'
     | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
@@ -500,6 +512,7 @@ export interface FileRouteTypes {
     | '/admin/system'
     | '/admin/'
     | '/_authenticated/applications/$id'
+    | '/_authenticated/profile/screening'
     | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
     | '/api/public/hooks/check-heartbeat'
@@ -736,6 +749,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApplicationsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/profile/screening': {
+      id: '/_authenticated/profile/screening'
+      path: '/screening'
+      fullPath: '/profile/screening'
+      preLoaderRoute: typeof AuthenticatedProfileScreeningRouteImport
+      parentRoute: typeof AuthenticatedProfileRoute
+    }
     '/_authenticated/applications/$id': {
       id: '/_authenticated/applications/$id'
       path: '/$id'
@@ -830,6 +850,17 @@ const AuthenticatedApplicationsRouteWithChildren =
     AuthenticatedApplicationsRouteChildren,
   )
 
+interface AuthenticatedProfileRouteChildren {
+  AuthenticatedProfileScreeningRoute: typeof AuthenticatedProfileScreeningRoute
+}
+
+const AuthenticatedProfileRouteChildren: AuthenticatedProfileRouteChildren = {
+  AuthenticatedProfileScreeningRoute: AuthenticatedProfileScreeningRoute,
+}
+
+const AuthenticatedProfileRouteWithChildren =
+  AuthenticatedProfileRoute._addFileChildren(AuthenticatedProfileRouteChildren)
+
 interface AuthenticatedRouteChildren {
   AuthenticatedApplicationsRoute: typeof AuthenticatedApplicationsRouteWithChildren
   AuthenticatedAutomationRoute: typeof AuthenticatedAutomationRoute
@@ -843,7 +874,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedPrivacyRoute: typeof AuthenticatedPrivacyRoute
-  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRouteWithChildren
   AuthenticatedResumeRoute: typeof AuthenticatedResumeRoute
   AuthenticatedSetupRoute: typeof AuthenticatedSetupRoute
   AuthenticatedSourcesRoute: typeof AuthenticatedSourcesRoute
@@ -863,7 +894,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedPrivacyRoute: AuthenticatedPrivacyRoute,
-  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRouteWithChildren,
   AuthenticatedResumeRoute: AuthenticatedResumeRoute,
   AuthenticatedSetupRoute: AuthenticatedSetupRoute,
   AuthenticatedSourcesRoute: AuthenticatedSourcesRoute,
