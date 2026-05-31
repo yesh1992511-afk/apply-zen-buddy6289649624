@@ -46,7 +46,7 @@ type AppRow = {
   applied_at: string | null;
   finished_at: string | null;
   screenshots: string[] | null;
-  field_fills: Array<{ label: string; value: string; source: string }> | null;
+  field_fills: Array<{ label: string; value: string; source: string; needs_review?: boolean }> | null;
   job: {
     title: string; company: string; url: string; source_key: string;
     location: string | null; remote: string | null; posted_at: string | null;
@@ -161,7 +161,9 @@ function ApplicationDetailPage() {
         value: f.value || "",
         ts: app?.finished_at || app?.started_at || "",
         source: (f.source as FillRow["source"]) || "profile",
+        needs_review: !!f.needs_review,
       }));
+
     }
     return logs
       .filter((l) => (l.scope ?? "").startsWith("form.fill"))
