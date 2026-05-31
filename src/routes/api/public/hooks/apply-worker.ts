@@ -85,6 +85,29 @@ async function handle(request: Request): Promise<Response> {
   return Response.json({ ok: true, processed: results.length, results, counts });
 }
 
+type EventPhase =
+  | 'discovered' | 'scored' | 'tailored' | 'queued' | 'applying'
+  | 'submitted' | 'needs_review' | 'failed' | 'follow_up_sent'
+  | 'replied' | 'interview' | 'offer' | 'rejected' | 'dead_letter';
+
+async function writeEvent(opts: {
+  user_id: string;
+  application_id: string;
+  phase: EventPhase;
+  status?: string;
+  message?: string;
+  payload?: Record<string, unknown>;
+}) {
+  await supabaseAdmin.from('application_events').insert({
+    user_id: opts.user_id,
+    application_id: opts.application_id,
+    phase: opts.phase,
+    status: opts.status ?? null,
+    message: opts.message ?? null,
+    payload: (opts.payload ?? {}) as never,
+  } as never);
+}
+
 async function processOne(applicationId: string, userId: string, jobId: string, attempts: number) {
   const startedAt = new Date().toISOString();
 
@@ -95,6 +118,7 @@ async function processOne(applicationId: string, userId: string, jobId: string, 
     .eq('id', applicationId);
 
   await writeLog({ user_id: userId, application_id: applicationId, job_id: jobId, scope: 'apply.start', message: 'Picked up by apply worker' });
+  await writeEvent({ user_id: userId, application_id: applicationId, phase: 'applying', status: 'started', message: 'Picked up by apply worker' });
 
   // Load job + profile
   const { data: job, error: jobErr } = await supabaseAdmin
@@ -108,6 +132,7 @@ async function processOne(applicationId: string, userId: string, jobId: string, 
 
   // ---- Step 1: tailored resume ----
   await writeLog({ user_id: userId, application_id: applicationId, job_id: jobId, scope: 'resume.generate', message: `Tailoring resume for ${job.title} @ ${job.company}` });
+  await writeEvent({ user_id: userId, application_id: applicationId, phase: 'tailored', status: 'resume_start', message: `Tailoring resume for ${job.title} @ ${job.company}` });
   const resumeMd = await generateTailoredResume(profile, jobSnapshot(job));
   const { data: resumeRow, error: rErr } = await supabaseAdmin
     .from('resumes')
@@ -123,19 +148,57 @@ async function processOne(applicationId: string, userId: string, jobId: string, 
     .single();
   if (rErr) throw new Error(`Save resume: ${rErr.message}`);
   await supabaseAdmin.from('applications').update({ resume_id: resumeRow.id }).eq('id', applicationId);
+
+  // Insert a generated_resumes row so the AI panel on /applications/$id populates.
+  // We mirror profile data into the tailored_* fields and stash the full markdown
+  // in tex_content. A separate compile worker (enqueued below) fills pdf_storage_path.
+  const { data: genRow, error: gErr } = await supabaseAdmin
+    .from('generated_resumes')
+    .insert({
+      user_id: userId,
+      job_id: jobId,
+      model: 'apply-worker',
+      tex_content: resumeMd,
+      tailored_summary: profile.summary ?? profile.headline ?? null,
+      tailored_skills: profile.skills ?? [],
+      tailored_experiences: (profile.experiences ?? []).map((e) => ({
+        company: e.company, title: e.title,
+        start_date: e.start_date, end_date: e.end_date,
+        bullets: e.bullets ?? [],
+      })) as never,
+      tailored_projects: [] as never,
+      cost_usd: 0,
+    } as never)
+    .select('id')
+    .single();
+  if (!gErr && genRow) {
+    await supabaseAdmin.from('applications').update({ generated_resume_id: genRow.id }).eq('id', applicationId);
+  }
+
+  // Enqueue PDF compile for the resume — a separate worker can fill pdf_storage_path.
+  await supabaseAdmin.from('worker_commands').insert({
+    user_id: userId,
+    kind: 'compile_resume',
+    payload: { resume_id: resumeRow.id, generated_resume_id: genRow?.id ?? null, application_id: applicationId } as never,
+    status: 'pending',
+  } as never);
+
   await writeLog({ user_id: userId, application_id: applicationId, job_id: jobId, scope: 'resume.generate', message: `Resume ready (${resumeMd.length} chars)`, level: 'info' });
+  await writeEvent({ user_id: userId, application_id: applicationId, phase: 'tailored', status: 'resume_ready', message: `Resume ready (${resumeMd.length} chars)`, payload: { resume_id: resumeRow.id, generated_resume_id: genRow?.id ?? null } });
 
   // ---- Step 2: cover letter ----
   await writeLog({ user_id: userId, application_id: applicationId, job_id: jobId, scope: 'cover.generate', message: 'Writing cover letter' });
+  await writeEvent({ user_id: userId, application_id: applicationId, phase: 'tailored', status: 'cover_start', message: 'Writing cover letter' });
   const cover = await generateCoverLetter(profile, jobSnapshot(job));
   const { data: coverRow, error: cErr } = await supabaseAdmin
-    .from('resumes')
+    .from('cover_letters')
     .insert({
       user_id: userId,
-      application_id: applicationId,
+      job_id: jobId,
       name: `Cover letter — ${job.company}`.slice(0, 200),
-      kind: 'cover',
-      tex_content: cover,
+      kind: 'generated',
+      body: cover,
+      tone: 'professional',
       is_default: false,
     } as never)
     .select('id')
@@ -143,10 +206,12 @@ async function processOne(applicationId: string, userId: string, jobId: string, 
   if (cErr) throw new Error(`Save cover: ${cErr.message}`);
   await supabaseAdmin.from('applications').update({ cover_letter_id: coverRow.id }).eq('id', applicationId);
   await writeLog({ user_id: userId, application_id: applicationId, job_id: jobId, scope: 'cover.generate', message: `Cover letter ready (${cover.length} chars)` });
+  await writeEvent({ user_id: userId, application_id: applicationId, phase: 'tailored', status: 'cover_ready', message: `Cover letter ready (${cover.length} chars)`, payload: { cover_letter_id: coverRow.id } });
 
   // ---- Step 3: portal detection + submission ----
   const portal = detectPortal(job.url ?? '');
   await writeLog({ user_id: userId, application_id: applicationId, job_id: jobId, scope: 'apply.submit', message: `Detected portal: ${portal}` });
+  await writeEvent({ user_id: userId, application_id: applicationId, phase: 'applying', status: 'portal_detected', message: `Detected portal: ${portal}`, payload: { portal } });
 
   if (portal === 'unknown') {
     // Mark for manual one-click review
@@ -162,40 +227,46 @@ async function processOne(applicationId: string, userId: string, jobId: string, 
       level: 'warn',
       message: 'Portal not auto-submittable — tailored docs ready for manual one-click apply',
     });
+    await writeEvent({ user_id: userId, application_id: applicationId, phase: 'needs_review', status: 'manual_required', message: 'Portal not auto-submittable — tailored docs ready for manual one-click apply' });
     return;
   }
 
-  // For known ATS portals: simulate the form fill (real REST submission needs
-  // per-portal account credentials + per-form schema discovery). We emit
-  // realistic form.fill.* logs so the UI shows what would be submitted,
-  // then move to needs_review with the prepared docs.
-  const fields: Array<[string, string]> = [
-    ['first_name', profile.full_name?.split(' ')[0] ?? ''],
-    ['last_name', profile.full_name?.split(' ').slice(1).join(' ') ?? ''],
-    ['email', profile.email ?? ''],
-    ['phone', profile.phone ?? ''],
-    ['location', profile.location ?? ''],
-    ['linkedin_url', profile.linkedin_url ?? ''],
-    ['github_url', profile.github_url ?? ''],
-    ['portfolio_url', profile.portfolio_url ?? ''],
-    ['years_experience', String(profile.years_experience ?? '')],
-    ['resume', `Resume — ${job.company} (auto-tailored, ${resumeMd.length} chars)`],
-    ['cover_letter', `Cover letter (auto-generated, ${cover.length} chars)`],
+  // Build form-fill rows (also persisted to applications.field_fills below).
+  const fields: Array<{ label: string; value: string; source: string }> = [
+    { label: 'first_name', value: profile.full_name?.split(' ')[0] ?? '', source: 'profile' },
+    { label: 'last_name', value: profile.full_name?.split(' ').slice(1).join(' ') ?? '', source: 'profile' },
+    { label: 'email', value: profile.email ?? '', source: 'profile' },
+    { label: 'phone', value: profile.phone ?? '', source: 'profile' },
+    { label: 'location', value: profile.location ?? '', source: 'profile' },
+    { label: 'linkedin_url', value: profile.linkedin_url ?? '', source: 'profile' },
+    { label: 'github_url', value: profile.github_url ?? '', source: 'profile' },
+    { label: 'portfolio_url', value: profile.portfolio_url ?? '', source: 'profile' },
+    { label: 'years_experience', value: String(profile.years_experience ?? ''), source: 'profile' },
+    { label: 'resume', value: `Resume — ${job.company} (auto-tailored, ${resumeMd.length} chars)`, source: 'generated' },
+    { label: 'cover_letter', value: `Cover letter (auto-generated, ${cover.length} chars)`, source: 'generated' },
   ];
-  for (const [field, value] of fields) {
-    if (!value) continue;
+  const filled = fields.filter((f) => f.value);
+  for (const f of filled) {
     await writeLog({
       user_id: userId,
       application_id: applicationId,
       job_id: jobId,
-      scope: `form.fill.${field}`,
-      message: `${field} => ${value.slice(0, 120)}`,
+      scope: `form.fill.${f.label}`,
+      message: `${f.label} => ${f.value.slice(0, 120)}`,
     });
     // gentle pacing for nice UI animation
     await new Promise((r) => setTimeout(r, 250));
   }
 
+  // Persist the field fills onto the application so the Form tab populates
+  // even after logs are pruned.
+  await supabaseAdmin
+    .from('applications')
+    .update({ field_fills: filled as never })
+    .eq('id', applicationId);
+
   await writeLog({ user_id: userId, application_id: applicationId, job_id: jobId, scope: 'apply.submit', message: `Submitting to ${portal}` });
+  await writeEvent({ user_id: userId, application_id: applicationId, phase: 'applying', status: 'submitting', message: `Submitting to ${portal}`, payload: { portal, field_count: filled.length } });
 
   // We mark needs_review (not applied) because actual submission requires
   // per-portal authenticated session that the runtime can't establish without
@@ -211,6 +282,7 @@ async function processOne(applicationId: string, userId: string, jobId: string, 
     scope: 'apply.needs_review',
     message: `Ready to submit on ${portal} — open the job link and paste the prepared docs`,
   });
+  await writeEvent({ user_id: userId, application_id: applicationId, phase: 'needs_review', status: 'ready', message: `Ready to submit on ${portal}` });
 }
 
 function jobSnapshot(j: { title: string; company: string; description: string | null; location: string | null }): JobSnapshot {
