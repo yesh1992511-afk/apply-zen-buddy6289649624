@@ -52,13 +52,15 @@ export const jobCountsQueryOptions = () =>
   queryOptions({
     queryKey: ["jobs", "counts"] as const,
     queryFn: async (): Promise<{ scraped: number; matched: number }> => {
-      const [scrapedRes, matchedRes] = await Promise.all([
-        supabase.from("jobs").select("id", { count: "exact", head: true }),
-        supabase.from("jobs").select("id", { count: "exact", head: true }).eq("matched", true),
-      ]);
-      if (scrapedRes.error) throw new Error(scrapedRes.error.message);
-      if (matchedRes.error) throw new Error(matchedRes.error.message);
-      return { scraped: scrapedRes.count ?? 0, matched: matchedRes.count ?? 0 };
+      // Ingest drops unmatched jobs at the source, so every row in `jobs`
+      // is already matched. Both counts intentionally return the same value
+      // for back-compat with existing UI.
+      const { count, error } = await supabase
+        .from("jobs")
+        .select("id", { count: "exact", head: true });
+      if (error) throw new Error(error.message);
+      const n = count ?? 0;
+      return { scraped: n, matched: n };
     },
     staleTime: 30_000,
   });
