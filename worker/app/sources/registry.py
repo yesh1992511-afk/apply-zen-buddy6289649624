@@ -70,13 +70,22 @@ ADAPTERS: dict[str, Source] = {a.key: a for a in [
 ]}
 
 
+def _peak_multiplier(now: datetime) -> float:
+    """US peak posting window: Mon-Fri 13:00-20:00 UTC (~9am-4pm ET).
+    Halve cadences during peak so we pick up fresh listings faster,
+    keep normal cadence off-peak/weekends to control Apify spend."""
+    if now.weekday() >= 5:
+        return 1.0
+    return 0.5 if 13 <= now.hour < 20 else 1.0
+
+
 def _due(row: dict[str, Any], now: datetime) -> bool:
     if not row.get("enabled"):
         return False
     last = row.get("last_run_at")
     if not last:
         return True
-    cadence = row.get("cadence_minutes") or 60
+    cadence = (row.get("cadence_minutes") or 60) * _peak_multiplier(now)
     last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
     return now - last_dt >= timedelta(minutes=cadence)
 
