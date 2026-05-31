@@ -302,3 +302,37 @@ function ResumePage() {
     </div>
   );
 }
+
+function DownloadPdfButton({ resumeId, name }: { resumeId: string; name: string }) {
+  const compile = useServerFn(compileResumeToPdf);
+  const [busy, setBusy] = useState(false);
+  const onClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setBusy(true);
+    try {
+      const res = await compile({ data: { resume_id: resumeId } });
+      const bin = atob(res.base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.name || `${name}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Compile failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Button size="sm" variant="outline" onClick={onClick} disabled={busy} title="Compile & download PDF">
+      <Download className="h-4 w-4" />
+      {busy && <span className="ml-1 text-xs">…</span>}
+    </Button>
+  );
+}
