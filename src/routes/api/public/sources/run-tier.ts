@@ -114,7 +114,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                 summary[sourceKey].errors++;
                 summary[sourceKey].error_message = String(r.reason).slice(0, 200);
                 totalErr++;
-                // Per-source health: failed
+                // Per-source health: failed — upsert base row then update status fields
                 await supabaseAdmin.from('sources').upsert(
                   {
                     user_id: userId,
@@ -123,13 +123,15 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                     kind: sourceKindFor(spec.provider),
                     enabled: true,
                     cadence_minutes: tier === 'hot' ? 15 : tier === 'apify' ? 240 : 60,
-                    last_run_at: runAt,
-                    last_run_status: 'failed',
-                    last_run_count: 0,
-                    last_error: String(r.reason).slice(0, 500),
                   },
                   { onConflict: 'user_id,key' },
                 );
+                await supabaseAdmin.from('sources').update({
+                  last_run_at: runAt,
+                  last_run_status: 'failed',
+                  last_run_count: 0,
+                  last_error: String(r.reason).slice(0, 500),
+                }).eq('user_id', userId).eq('key', sourceKey);
                 continue;
               }
 
