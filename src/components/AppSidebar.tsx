@@ -24,6 +24,7 @@ import {
   LogOut,
   Bell,
   FileText,
+  Mail,
   Chrome,
   Sparkles,
   CreditCard,
@@ -43,6 +44,7 @@ const pilot = [
   { title: "Filters", to: "/filters", icon: Filter },
   { title: "Jobs", to: "/jobs", icon: Briefcase },
   { title: "Applications", to: "/applications", icon: Send },
+  { title: "Cover letters", to: "/cover-letters", icon: Mail },
 ];
 
 const profile = [

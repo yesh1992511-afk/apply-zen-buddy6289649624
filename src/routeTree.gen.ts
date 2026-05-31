@@ -33,6 +33,7 @@ import { Route as AuthenticatedJobsRouteImport } from './routes/_authenticated/j
 import { Route as AuthenticatedFiltersRouteImport } from './routes/_authenticated/filters'
 import { Route as AuthenticatedExtensionRouteImport } from './routes/_authenticated/extension'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedCoverLettersRouteImport } from './routes/_authenticated/cover-letters'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedAutomationRouteImport } from './routes/_authenticated/automation'
 import { Route as AuthenticatedApplicationsRouteImport } from './routes/_authenticated/applications'
@@ -167,6 +168,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedCoverLettersRoute =
+  AuthenticatedCoverLettersRouteImport.update({
+    id: '/cover-letters',
+    path: '/cover-letters',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
   id: '/billing',
   path: '/billing',
@@ -252,6 +259,7 @@ export interface FileRoutesByFullPath {
   '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/cover-letters': typeof AuthenticatedCoverLettersRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/extension': typeof AuthenticatedExtensionRoute
   '/filters': typeof AuthenticatedFiltersRoute
@@ -289,6 +297,7 @@ export interface FileRoutesByTo {
   '/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/automation': typeof AuthenticatedAutomationRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/cover-letters': typeof AuthenticatedCoverLettersRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/extension': typeof AuthenticatedExtensionRoute
   '/filters': typeof AuthenticatedFiltersRoute
@@ -329,6 +338,7 @@ export interface FileRoutesById {
   '/_authenticated/applications': typeof AuthenticatedApplicationsRouteWithChildren
   '/_authenticated/automation': typeof AuthenticatedAutomationRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
+  '/_authenticated/cover-letters': typeof AuthenticatedCoverLettersRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/extension': typeof AuthenticatedExtensionRoute
   '/_authenticated/filters': typeof AuthenticatedFiltersRoute
@@ -369,6 +379,7 @@ export interface FileRouteTypes {
     | '/applications'
     | '/automation'
     | '/billing'
+    | '/cover-letters'
     | '/dashboard'
     | '/extension'
     | '/filters'
@@ -406,6 +417,7 @@ export interface FileRouteTypes {
     | '/applications'
     | '/automation'
     | '/billing'
+    | '/cover-letters'
     | '/dashboard'
     | '/extension'
     | '/filters'
@@ -445,6 +457,7 @@ export interface FileRouteTypes {
     | '/_authenticated/applications'
     | '/_authenticated/automation'
     | '/_authenticated/billing'
+    | '/_authenticated/cover-letters'
     | '/_authenticated/dashboard'
     | '/_authenticated/extension'
     | '/_authenticated/filters'
@@ -663,6 +676,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/cover-letters': {
+      id: '/_authenticated/cover-letters'
+      path: '/cover-letters'
+      fullPath: '/cover-letters'
+      preLoaderRoute: typeof AuthenticatedCoverLettersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/billing': {
       id: '/_authenticated/billing'
       path: '/billing'
@@ -775,6 +795,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedApplicationsRoute: typeof AuthenticatedApplicationsRouteWithChildren
   AuthenticatedAutomationRoute: typeof AuthenticatedAutomationRoute
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
+  AuthenticatedCoverLettersRoute: typeof AuthenticatedCoverLettersRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedExtensionRoute: typeof AuthenticatedExtensionRoute
   AuthenticatedFiltersRoute: typeof AuthenticatedFiltersRoute
@@ -793,6 +814,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedApplicationsRoute: AuthenticatedApplicationsRouteWithChildren,
   AuthenticatedAutomationRoute: AuthenticatedAutomationRoute,
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
+  AuthenticatedCoverLettersRoute: AuthenticatedCoverLettersRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedExtensionRoute: AuthenticatedExtensionRoute,
   AuthenticatedFiltersRoute: AuthenticatedFiltersRoute,

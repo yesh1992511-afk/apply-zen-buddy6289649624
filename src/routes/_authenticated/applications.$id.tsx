@@ -67,6 +67,7 @@ function ApplicationDetailPage() {
   const [coverLetter, setCoverLetter] = useState<ResumeRow | null>(null);
   const [resumeUrl, setResumeUrl] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [coverBody, setCoverBody] = useState<string | null>(null);
   const [tab, setTab] = useState("form");
   const [loading, setLoading] = useState(true);
 
@@ -112,27 +113,35 @@ function ApplicationDetailPage() {
     return () => { supabase.removeChannel(ch); };
   }, [id]);
 
-  // Fetch resume rows when ids change
+  // Fetch resume + cover-letter rows when ids change
   useEffect(() => {
     (async () => {
-      const ids = [app?.resume_id, app?.cover_letter_id].filter(Boolean) as string[];
-      if (ids.length === 0) return;
-      const { data } = await supabase
-        .from("resumes")
-        .select("id, name, pdf_storage_path, kind")
-        .in("id", ids);
-      const list = (data ?? []) as ResumeRow[];
-      const r = list.find((x) => x.id === app?.resume_id) ?? null;
-      const c = list.find((x) => x.id === app?.cover_letter_id) ?? null;
-      setResume(r);
-      setCoverLetter(c);
-      if (r?.pdf_storage_path) {
-        const { data: s } = await supabase.storage.from("resumes").createSignedUrl(r.pdf_storage_path, 3600);
-        setResumeUrl(s?.signedUrl ?? null);
+      if (app?.resume_id) {
+        const { data: r } = await supabase
+          .from("resumes")
+          .select("id, name, pdf_storage_path, kind")
+          .eq("id", app.resume_id)
+          .maybeSingle();
+        setResume((r as ResumeRow | null) ?? null);
+        if (r?.pdf_storage_path) {
+          const { data: s } = await supabase.storage.from("resumes").createSignedUrl(r.pdf_storage_path, 3600);
+          setResumeUrl(s?.signedUrl ?? null);
+        }
+      } else {
+        setResume(null);
+        setResumeUrl(null);
       }
-      if (c?.pdf_storage_path) {
-        const { data: s } = await supabase.storage.from("resumes").createSignedUrl(c.pdf_storage_path, 3600);
-        setCoverUrl(s?.signedUrl ?? null);
+      if (app?.cover_letter_id) {
+        const { data: c } = await supabase
+          .from("cover_letters")
+          .select("id, name, body, kind")
+          .eq("id", app.cover_letter_id)
+          .maybeSingle();
+        setCoverLetter(c ? { id: c.id, name: c.name, kind: c.kind, pdf_storage_path: null } : null);
+        setCoverBody(c?.body ?? null);
+      } else {
+        setCoverLetter(null);
+        setCoverBody(null);
       }
     })();
   }, [app?.resume_id, app?.cover_letter_id]);
@@ -291,7 +300,16 @@ function ApplicationDetailPage() {
               <PdfViewer url={resumeUrl} title={resume?.name ?? "Tailored resume"} isGenerating={isActive && !resumeUrl} />
             </TabsContent>
             <TabsContent value="cover" className="mt-0">
-              <PdfViewer url={coverUrl} title={coverLetter?.name ?? "Cover letter"} isGenerating={isActive && !coverUrl} />
+              {coverBody ? (
+                <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-border/40 flex items-center justify-between">
+                    <h3 className="text-sm font-medium">{coverLetter?.name ?? "Cover letter"}</h3>
+                  </div>
+                  <pre className="whitespace-pre-wrap p-5 text-sm leading-relaxed font-sans">{coverBody}</pre>
+                </div>
+              ) : (
+                <PdfViewer url={coverUrl} title={coverLetter?.name ?? "Cover letter"} isGenerating={isActive && !coverUrl} />
+              )}
             </TabsContent>
           </Tabs>
 
