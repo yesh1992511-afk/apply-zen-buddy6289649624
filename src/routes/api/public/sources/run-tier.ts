@@ -76,6 +76,13 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
             new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)),
           ]);
 
+        // sources.kind is an enum: 'apify' | 'rest' | 'board'
+        const sourceKindFor = (provider: string): 'apify' | 'rest' | 'board' => {
+          if (provider.startsWith('apify:')) return 'apify';
+          if (['greenhouse','lever','ashby','workable','smartrecruiters','recruitee','teamtailor','personio','bamboohr'].includes(provider)) return 'board';
+          return 'rest';
+        };
+
         const summary: Record<
           string,
           { fetched: number; inserted: number; errors: number; error_message?: string }
