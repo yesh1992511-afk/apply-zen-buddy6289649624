@@ -249,7 +249,7 @@ function SetupPage() {
         </CardHeader>
         <CardContent>
           <ul className="ml-5 list-disc space-y-1 text-sm">
-            <li><strong>Decodo residential proxies</strong> — sticky session per portal, rotating exit IPs.</li>
+            <li><strong><a className="underline" href="/automation">Decodo residential proxies</a></strong> — sticky session per portal, rotating exit IPs. Configure in Automation → Proxy provider.</li>
             <li><strong>20-fingerprint pool</strong> — UA + sec-ch-ua client hints + viewport + locale + timezone, matched per OS.</li>
             <li><strong>Persistent browser profiles</strong> — cookies, cache, IndexedDB survive restarts (looks like a returning user).</li>
             <li><strong>playwright-stealth</strong> — patches <code>navigator.webdriver</code>, plugins, WebGL, etc.</li>
