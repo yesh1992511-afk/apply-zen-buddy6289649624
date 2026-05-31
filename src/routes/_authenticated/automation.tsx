@@ -15,6 +15,10 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/PageHeader";
+import { useProfileCompleteness } from "@/components/profile/CompletenessBar";
+import { Link } from "@tanstack/react-router";
+import { AlertTriangle } from "lucide-react";
+
 import { SectionCard } from "@/components/SectionCard";
 import { FieldError } from "@/components/FieldError";
 import { QueryErrorState } from "@/components/QueryErrorState";
@@ -158,7 +162,10 @@ function AutomationPage() {
         description="Master controls for the autopilot worker. Changes save automatically."
       />
 
+      <ProfileWarning />
+
       <TestModeCard />
+
 
       <SectionCard
         title="Master switch"
