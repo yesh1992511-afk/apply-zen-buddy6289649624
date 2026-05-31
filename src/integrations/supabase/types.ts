@@ -1060,12 +1060,14 @@ export type Database = {
           email: string | null
           ethnicity: string | null
           excluded_industries: string[] | null
+          first_name: string | null
           full_name: string | null
           gender: string | null
           github_url: string | null
           has_own_transport: boolean | null
           has_passport: boolean | null
           headline: string | null
+          last_name: string | null
           lgbtq_status: string | null
           linkedin_url: string | null
           linkedin_username: string | null
@@ -1146,12 +1148,14 @@ export type Database = {
           email?: string | null
           ethnicity?: string | null
           excluded_industries?: string[] | null
+          first_name?: string | null
           full_name?: string | null
           gender?: string | null
           github_url?: string | null
           has_own_transport?: boolean | null
           has_passport?: boolean | null
           headline?: string | null
+          last_name?: string | null
           lgbtq_status?: string | null
           linkedin_url?: string | null
           linkedin_username?: string | null
@@ -1232,12 +1236,14 @@ export type Database = {
           email?: string | null
           ethnicity?: string | null
           excluded_industries?: string[] | null
+          first_name?: string | null
           full_name?: string | null
           gender?: string | null
           github_url?: string | null
           has_own_transport?: boolean | null
           has_passport?: boolean | null
           headline?: string | null
+          last_name?: string | null
           lgbtq_status?: string | null
           linkedin_url?: string | null
           linkedin_username?: string | null
