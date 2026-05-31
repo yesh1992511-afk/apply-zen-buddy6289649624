@@ -75,11 +75,29 @@ def _due(row: dict[str, Any], now: datetime) -> bool:
 
 
 async def run_due_sources(force: bool = False) -> None:
+    """Run all due sources in parallel (capped by user parallelism setting)."""
     now = datetime.now(timezone.utc)
     rows = db().table("sources").select("*").eq("user_id", user_id()).execute().data or []
-    for r in rows:
-        if force or _due(r, now):
-            await _run_source(r)
+    due = [r for r in rows if force or _due(r, now)]
+    if not due:
+        return
+    # Read user's parallelism preference (1-10) → scrape concurrency = parallelism * 4 (cap 16).
+    s = db().table("automation_settings").select("parallelism").eq(
+        "user_id", user_id()
+    ).single().execute().data or {}
+    concurrency = max(2, min(int(s.get("parallelism") or 2) * 4, 16))
+    sem = asyncio.Semaphore(concurrency)
+
+    async def _bounded(r: dict[str, Any]) -> None:
+        async with sem:
+            try:
+                await asyncio.wait_for(_run_source(r), timeout=180)
+            except asyncio.TimeoutError:
+                db_log("warning", f"source {r['key']} timed out after 180s", scope="sources")
+            except Exception as e:
+                db_log("error", f"source {r['key']} crashed: {e}", scope="sources")
+
+    await asyncio.gather(*[_bounded(r) for r in due], return_exceptions=True)
 
 
 async def run_source_by_key(key: str, force: bool = True, match_limit: int | None = None) -> list[str]:
