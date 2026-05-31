@@ -1333,6 +1333,48 @@ export type Database = {
         }
         Relationships: []
       }
+      publications: {
+        Row: {
+          authors: string | null
+          created_at: string
+          description: string | null
+          doi: string | null
+          id: string
+          publication_date: string | null
+          sort_order: number | null
+          title: string
+          url: string | null
+          user_id: string
+          venue: string | null
+        }
+        Insert: {
+          authors?: string | null
+          created_at?: string
+          description?: string | null
+          doi?: string | null
+          id?: string
+          publication_date?: string | null
+          sort_order?: number | null
+          title?: string
+          url?: string | null
+          user_id: string
+          venue?: string | null
+        }
+        Update: {
+          authors?: string | null
+          created_at?: string
+          description?: string | null
+          doi?: string | null
+          id?: string
+          publication_date?: string | null
+          sort_order?: number | null
+          title?: string
+          url?: string | null
+          user_id?: string
+          venue?: string | null
+        }
+        Relationships: []
+      }
       references_list: {
         Row: {
           company: string | null
