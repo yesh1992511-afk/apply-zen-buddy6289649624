@@ -97,6 +97,7 @@ async def fill_text_inputs(page, profile: dict, lists: dict | None = None,
             label = await _label_for(page, h)
             ans = answer_for(label, profile, lists)
             source = "profile"
+            needs_review = False
             if ans is None or ans == "":
                 # AI fallback only for textareas (free-form questions). Skip small inputs.
                 tag = (await h.evaluate("e => e.tagName") or "").lower()
@@ -107,20 +108,23 @@ async def fill_text_inputs(page, profile: dict, lists: dict | None = None,
                         if ai_ans:
                             ans = ai_ans
                             source = "screening_cache" if src == "cache" else "ai_generated"
+                            # Long-form AI answers get flagged for review (user can verify)
+                            if src == "ai":
+                                needs_review = True
                     except Exception:
                         pass
                 if ans is None or ans == "":
                     continue
             else:
-                # Decide tailored vs profile vs cache
                 if ff.is_tailored_field(label, profile):
                     source = "tailored"
             await h.fill(str(ans))
-            ff.record(label, ans, source)
+            ff.record(label, ans, source, needs_review=needs_review)
             filled += 1
         except Exception:
             continue
     return filled
+
 
 
 async def select_dropdowns(page, profile: dict, lists: dict | None = None) -> int:
