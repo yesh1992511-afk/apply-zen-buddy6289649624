@@ -70,6 +70,9 @@ const PRESETS: Array<Omit<Source, "id" | "enabled" | "last_run_at" | "last_run_s
   { key: "usajobs", display_name: "USAJobs (federal, free)", kind: "rest", cadence_minutes: 240, config: {} },
   { key: "builtin", display_name: "BuiltIn (US tech)", kind: "rest", cadence_minutes: 120, config: { rows: 50 } },
   { key: "workatastartup", display_name: "YC Work At A Startup (free)", kind: "rest", cadence_minutes: 240, config: { rows: 50 } },
+  { key: "infosec_jobs", display_name: "infosec-jobs.com (cyber, free)", kind: "rest", cadence_minutes: 180, config: { limit: 100 } },
+  { key: "hn_jobs", display_name: "Hacker News jobs (free)", kind: "rest", cadence_minutes: 240, config: { limit: 50 } },
+  { key: "hn_who_is_hiring", display_name: "HN 'Who is Hiring' thread (free)", kind: "rest", cadence_minutes: 720, config: { limit: 200, remote_only: false } },
   // Direct ATS boards (public APIs, no proxy needed)
   { key: "greenhouse_boards", display_name: "Greenhouse boards", kind: "board", cadence_minutes: 180, config: { companies: ["stripe", "airbnb"] } },
   { key: "lever_boards", display_name: "Lever boards", kind: "board", cadence_minutes: 180, config: { companies: ["netflix"] } },
