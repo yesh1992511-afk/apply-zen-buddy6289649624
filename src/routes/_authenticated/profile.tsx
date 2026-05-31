@@ -740,7 +740,7 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
   };
 
   return (
-    <div className="space-y-3 pt-4">
+    <div className="space-y-3 pt-4" data-listsection="true">
       <div className="flex justify-end">
         <Button size="sm" onClick={add}><Plus className="mr-1 h-4 w-4" /> Add {schema.title.toLowerCase()}</Button>
       </div>
