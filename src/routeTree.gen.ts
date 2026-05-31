@@ -48,6 +48,7 @@ import { Route as ApiPublicSourcesQueueApplyRouteImport } from './routes/api/pub
 import { Route as ApiPublicSourcesIngestExtensionRouteImport } from './routes/api/public/sources/ingest-extension'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
+import { Route as ApiPublicHooksBootstrapCronRouteImport } from './routes/api/public/hooks/bootstrap-cron'
 import { Route as ApiPublicHooksApplyWorkerRouteImport } from './routes/api/public/hooks/apply-worker'
 import { Route as ApiPublicExtensionErrorReportRouteImport } from './routes/api/public/extension/error-report'
 
@@ -256,6 +257,12 @@ const ApiPublicHooksCheckHeartbeatRoute =
     path: '/api/public/hooks/check-heartbeat',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksBootstrapCronRoute =
+  ApiPublicHooksBootstrapCronRouteImport.update({
+    id: '/api/public/hooks/bootstrap-cron',
+    path: '/api/public/hooks/bootstrap-cron',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksApplyWorkerRoute =
   ApiPublicHooksApplyWorkerRouteImport.update({
     id: '/api/public/hooks/apply-worker',
@@ -302,6 +309,7 @@ export interface FileRoutesByFullPath {
   '/profile/screening': typeof AuthenticatedProfileScreeningRoute
   '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
+  '/api/public/hooks/bootstrap-cron': typeof ApiPublicHooksBootstrapCronRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
@@ -343,6 +351,7 @@ export interface FileRoutesByTo {
   '/profile/screening': typeof AuthenticatedProfileScreeningRoute
   '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
+  '/api/public/hooks/bootstrap-cron': typeof ApiPublicHooksBootstrapCronRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
@@ -387,6 +396,7 @@ export interface FileRoutesById {
   '/_authenticated/profile/screening': typeof AuthenticatedProfileScreeningRoute
   '/api/public/extension/error-report': typeof ApiPublicExtensionErrorReportRoute
   '/api/public/hooks/apply-worker': typeof ApiPublicHooksApplyWorkerRoute
+  '/api/public/hooks/bootstrap-cron': typeof ApiPublicHooksBootstrapCronRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
@@ -431,6 +441,7 @@ export interface FileRouteTypes {
     | '/profile/screening'
     | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
+    | '/api/public/hooks/bootstrap-cron'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/ingest-extension'
@@ -472,6 +483,7 @@ export interface FileRouteTypes {
     | '/profile/screening'
     | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
+    | '/api/public/hooks/bootstrap-cron'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/ingest-extension'
@@ -515,6 +527,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile/screening'
     | '/api/public/extension/error-report'
     | '/api/public/hooks/apply-worker'
+    | '/api/public/hooks/bootstrap-cron'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/ingest-extension'
@@ -534,6 +547,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPublicExtensionErrorReportRoute: typeof ApiPublicExtensionErrorReportRoute
   ApiPublicHooksApplyWorkerRoute: typeof ApiPublicHooksApplyWorkerRoute
+  ApiPublicHooksBootstrapCronRoute: typeof ApiPublicHooksBootstrapCronRoute
   ApiPublicHooksCheckHeartbeatRoute: typeof ApiPublicHooksCheckHeartbeatRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
   ApiPublicSourcesIngestExtensionRoute: typeof ApiPublicSourcesIngestExtensionRoute
@@ -819,6 +833,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksCheckHeartbeatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/bootstrap-cron': {
+      id: '/api/public/hooks/bootstrap-cron'
+      path: '/api/public/hooks/bootstrap-cron'
+      fullPath: '/api/public/hooks/bootstrap-cron'
+      preLoaderRoute: typeof ApiPublicHooksBootstrapCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/apply-worker': {
       id: '/api/public/hooks/apply-worker'
       path: '/api/public/hooks/apply-worker'
@@ -934,6 +955,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   ApiPublicExtensionErrorReportRoute: ApiPublicExtensionErrorReportRoute,
   ApiPublicHooksApplyWorkerRoute: ApiPublicHooksApplyWorkerRoute,
+  ApiPublicHooksBootstrapCronRoute: ApiPublicHooksBootstrapCronRoute,
   ApiPublicHooksCheckHeartbeatRoute: ApiPublicHooksCheckHeartbeatRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
   ApiPublicSourcesIngestExtensionRoute: ApiPublicSourcesIngestExtensionRoute,
