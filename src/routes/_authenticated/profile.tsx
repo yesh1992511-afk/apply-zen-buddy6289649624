@@ -701,6 +701,8 @@ function ListSection({ table }: { table: keyof typeof SCHEMAS }) {
           setLoaded(true);
           return;
         }
+        // Seed failed (network / RLS) — allow a retry on next mount.
+        seededRef.current[table] = false;
       }
       setItems(rows);
       setLoaded(true);
