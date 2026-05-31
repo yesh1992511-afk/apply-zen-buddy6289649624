@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { LiveDot } from "@/components/LiveDot";
 import { toast } from "sonner";
+import { ChevronDown, ChevronRight, AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/worker")({
   head: () => ({ meta: [{ title: "Worker — JobPilot" }] }),
@@ -54,35 +55,65 @@ const QUICK_COMMANDS: Array<{ kind: string; label: string; description: string }
   { kind: "test_apply", label: "Dry-run apply", description: "Run an apply flow against a fake job for diagnostics" },
 ];
 
+function fmtAge(ms: number): string {
+  if (!isFinite(ms)) return "never";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+function tone(ms: number): string {
+  if (ms < 30_000) return "bg-emerald-500";
+  if (ms < 5 * 60_000) return "bg-amber-500";
+  return "bg-red-500";
+}
+
 function WorkerPage() {
   const [hb, setHb] = useState<HB | null>(null);
   const [cmds, setCmds] = useState<Cmd[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [srcHealth, setSrcHealth] = useState<SourceHealth[]>([]);
   const [sending, setSending] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const load = async () => {
-    const [{ data: h }, { data: c }, { data: r }, { data: s }] = await Promise.all([
-      supabase.from("worker_heartbeat").select("last_seen, version").maybeSingle(),
-      supabase
-        .from("worker_commands")
-        .select("id, kind, status, created_at, started_at, finished_at, last_error, payload")
-        .order("created_at", { ascending: false })
-        .limit(50),
-      supabase
-        .from("automation_runs")
-        .select("id, kind, source_key, status, items_in, items_out, errors, started_at, finished_at")
-        .order("started_at", { ascending: false })
-        .limit(20),
-      supabase
-        .from("sources")
-        .select("key, display_name, enabled, cadence_minutes, last_run_at, last_run_status, last_run_count, last_error")
-        .order("display_name"),
-    ]);
-    setHb(h as HB);
-    setCmds((c ?? []) as Cmd[]);
-    setRuns((r ?? []) as Run[]);
-    setSrcHealth((s ?? []) as SourceHealth[]);
+    try {
+      const [hbRes, cmdRes, runRes, srcRes] = await Promise.all([
+        supabase.from("worker_heartbeat").select("last_seen, version").maybeSingle(),
+        supabase
+          .from("worker_commands")
+          .select("id, kind, status, created_at, started_at, finished_at, last_error, payload")
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase
+          .from("automation_runs")
+          .select("id, kind, source_key, status, items_in, items_out, errors, started_at, finished_at")
+          .order("started_at", { ascending: false })
+          .limit(20),
+        supabase
+          .from("sources")
+          .select("key, display_name, enabled, cadence_minutes, last_run_at, last_run_status, last_run_count, last_error")
+          .order("display_name"),
+      ]);
+
+      const firstError = hbRes.error || cmdRes.error || runRes.error || srcRes.error;
+      if (firstError) {
+        setLoadError(firstError.message);
+        return;
+      }
+      setLoadError(null);
+      setHb(hbRes.data as HB);
+      setCmds((cmdRes.data ?? []) as Cmd[]);
+      setRuns((runRes.data ?? []) as Run[]);
+      setSrcHealth((srcRes.data ?? []) as SourceHealth[]);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -92,22 +123,30 @@ function WorkerPage() {
 
   const send = async (kind: string) => {
     setSending(kind);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSending(null); return; }
-    const { error } = await supabase.from("worker_commands").insert({
-      user_id: user.id,
-      kind,
-      payload: {},
-      status: "pending",
-    });
-    setSending(null);
-    if (error) toast.error(`Couldn't queue command: ${error.message}`);
-    else toast.success(`Queued: ${kind}`);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast.error("Not signed in"); return; }
+      const { error } = await supabase.from("worker_commands").insert({
+        user_id: user.id,
+        kind,
+        payload: {},
+        status: "pending",
+      });
+      if (error) toast.error(`Couldn't queue command: ${error.message}`);
+      else toast.success(`Queued: ${kind}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setSending(null);
+    }
   };
 
-  const ageMs = hb?.last_seen ? Date.now() - new Date(hb.last_seen).getTime() : Infinity;
-  const ageStr = hb?.last_seen ? `${Math.round(ageMs / 1000)}s ago` : "never";
-  const hbTone = ageMs < 30_000 ? "bg-emerald-500" : ageMs < 5 * 60_000 ? "bg-amber-500" : "bg-red-500";
+  // Apply worker = VPS heartbeat
+  const applyAgeMs = hb?.last_seen ? Date.now() - new Date(hb.last_seen).getTime() : Infinity;
+  // Scraper = most recent scrape-style run
+  const lastScrape = runs.find((r) => r.kind === "scrape" || r.source_key) ?? runs[0];
+  const scrapeAgeMs = lastScrape ? Date.now() - new Date(lastScrape.started_at).getTime() : Infinity;
+
   const fmtDur = (a: string, b: string | null) => {
     if (!b) return "running…";
     const ms = new Date(b).getTime() - new Date(a).getTime();
@@ -124,30 +163,96 @@ function WorkerPage() {
             <LiveDot /> Worker
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Heartbeat from your VPS, plus on-demand commands.
+            Health of scraping (Lovable Cloud) and auto-apply (your VPS).
           </p>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-2xl border border-border/60 bg-card p-5">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Last seen</div>
-          <div className="mt-2 flex items-center gap-2">
-            <span className={"inline-block h-2 w-2 rounded-full " + hbTone + (ageMs < 30_000 ? " animate-pulse" : "")} />
-            <span className="font-heading text-2xl tabular-nums">{ageStr}</span>
+      {loadError && (
+        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <div className="font-medium text-red-300">Couldn't load worker status</div>
+            <div className="mt-1 font-mono text-xs text-red-200/80 break-all">{loadError}</div>
           </div>
         </div>
+      )}
+
+      {/* What runs where — collapsible help */}
+      <div className="rounded-2xl border border-border/60 bg-card">
+        <button
+          onClick={() => setHelpOpen((v) => !v)}
+          className="w-full flex items-center gap-2 px-5 py-3 text-left hover:bg-surface-2/40 transition-colors rounded-2xl"
+        >
+          {helpOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <span className="font-heading text-sm font-semibold">What runs where?</span>
+          <span className="text-xs text-muted-foreground ml-1">
+            Why some things need your VPS and others don't
+          </span>
+        </button>
+        {helpOpen && (
+          <div className="px-5 pb-5 pt-1 space-y-3 text-sm text-muted-foreground">
+            <div>
+              <span className="text-foreground font-medium">Scraping (Lovable Cloud)</span> — public job
+              boards (Greenhouse, Lever, Apify, USAJobs, etc.) are pulled directly by this app on a
+              schedule. No VPS required.
+            </div>
+            <div>
+              <span className="text-foreground font-medium">Auto-apply worker (your VPS)</span> — actually
+              filling out application forms needs a real Chromium browser, captcha solving, and OAuth
+              login state, which can't run on Lovable's edge runtime. This is the Python worker in{" "}
+              <code className="text-foreground bg-surface-2 px-1.5 py-0.5 rounded text-xs">/root/jobpilot/worker</code>.
+            </div>
+            <div>
+              <span className="text-foreground font-medium">Red dot but pushed to GitHub?</span> The
+              dashboard reads <span className="text-foreground">live database state</span>, not GitHub
+              files. Your VPS must <code className="text-foreground bg-surface-2 px-1.5 py-0.5 rounded text-xs">git pull</code>{" "}
+              and restart the worker (now automatic — see <code className="text-foreground bg-surface-2 px-1.5 py-0.5 rounded text-xs">worker/README.md</code> "Auto-deploy from GitHub").
+            </div>
+            <div>
+              <span className="text-foreground font-medium">Secrets in <code className="bg-surface-2 px-1.5 py-0.5 rounded text-xs">.env.example</code>?</span> That file is a
+              template only. Real secrets must be in <code className="text-foreground bg-surface-2 px-1.5 py-0.5 rounded text-xs">worker/.env</code>{" "}
+              on the VPS, or added via the Setup page for Lovable-side runs.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Two heartbeats: scraper vs apply worker */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-2xl border border-border/60 bg-card p-5">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Version</div>
-          <div className="mt-2 font-mono text-sm">{hb?.version ?? "—"}</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Scraper (Lovable Cloud)</div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className={"inline-block h-2 w-2 rounded-full " + tone(scrapeAgeMs) + (scrapeAgeMs < 30_000 ? " animate-pulse" : "")} />
+            <span className="font-heading text-2xl tabular-nums">{fmtAge(scrapeAgeMs)}</span>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {lastScrape ? `Last: ${lastScrape.source_key ?? lastScrape.kind}` : "No runs recorded yet"}
+          </div>
         </div>
+
+        <div className="rounded-2xl border border-border/60 bg-card p-5">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Apply worker (VPS)</div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className={"inline-block h-2 w-2 rounded-full " + tone(applyAgeMs) + (applyAgeMs < 30_000 ? " animate-pulse" : "")} />
+            <span className="font-heading text-2xl tabular-nums">{fmtAge(applyAgeMs)}</span>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground font-mono">
+            {hb?.version ?? "no version reported"}
+          </div>
+        </div>
+
         <div className="rounded-2xl border border-border/60 bg-card p-5">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Commands queued</div>
-          <div className="mt-2 font-heading text-2xl tabular-nums">{cmds.filter(c => c.status === "pending").length}</div>
+          <div className="mt-2 font-heading text-2xl tabular-nums">
+            {cmds.filter((c) => c.status === "pending").length}
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {cmds.filter((c) => c.status === "failed").length} failed in last 50
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border/60 bg-card p-5">
       {/* Per-source health */}
       <div className="rounded-2xl border border-border/60 bg-card p-5">
         <h2 className="font-heading text-base font-semibold mb-3">Source health</h2>
@@ -158,14 +263,14 @@ function WorkerPage() {
             {srcHealth.map((s) => {
               const age = s.last_run_at ? Date.now() - new Date(s.last_run_at).getTime() : Infinity;
               const overdue = s.enabled && age > s.cadence_minutes * 60_000 * 2;
-              const tone = !s.enabled
+              const t = !s.enabled
                 ? "bg-zinc-500"
                 : s.last_run_status === "ok"
                   ? overdue ? "bg-amber-500" : "bg-emerald-500"
                   : s.last_run_status === "failed" ? "bg-red-500" : "bg-zinc-500";
               return (
                 <div key={s.key} className="flex items-center gap-3 text-xs py-1.5 border-b border-border/40 last:border-0">
-                  <span className={"inline-block h-1.5 w-1.5 rounded-full " + tone} />
+                  <span className={"inline-block h-1.5 w-1.5 rounded-full " + t} />
                   <span className="font-medium w-44 shrink-0 truncate">{s.display_name}</span>
                   <span className="text-muted-foreground w-20 shrink-0">{s.enabled ? `${s.cadence_minutes}m` : "off"}</span>
                   <span className="text-muted-foreground tabular-nums w-28 shrink-0">
@@ -201,6 +306,8 @@ function WorkerPage() {
         )}
       </div>
 
+      {/* Quick commands */}
+      <div className="rounded-2xl border border-border/60 bg-card p-5">
         <h2 className="font-heading text-base font-semibold mb-3">Quick commands</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {QUICK_COMMANDS.map((q) => (
@@ -217,6 +324,7 @@ function WorkerPage() {
         </div>
       </div>
 
+      {/* Recent commands */}
       <div className="rounded-2xl border border-border/60 bg-card p-5">
         <h2 className="font-heading text-base font-semibold mb-3">Recent commands</h2>
         {cmds.length === 0 ? (
@@ -233,7 +341,6 @@ function WorkerPage() {
                      c.status === "running" ? "bg-amber-500 animate-pulse" : "bg-zinc-500")
                   }
                 />
-
                 <span className="font-mono text-[11px] text-muted-foreground tabular-nums w-32 shrink-0">
                   {new Date(c.created_at).toLocaleTimeString()}
                 </span>
