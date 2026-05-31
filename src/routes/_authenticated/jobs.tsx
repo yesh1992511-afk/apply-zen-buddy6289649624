@@ -46,6 +46,26 @@ function scoreChip(s: number) {
   return "bg-gradient-to-br from-rose-500/15 to-rose-700/20 text-rose-200/90 ring-1 ring-rose-400/20";
 }
 
+function jdSnippet(j: { description?: string | null; description_html?: string | null }): string | null {
+  const raw = j.description?.trim();
+  if (raw) return raw.replace(/\s+/g, " ").trim() || null;
+  const html = j.description_html?.trim();
+  if (!html) return null;
+  const stripped = html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+  return stripped || null;
+}
+
 function JobsPage() {
   const navigate = useNavigate();
   const [hours, setHours] = useState(24);
@@ -293,6 +313,12 @@ function JobsPage() {
                     {j.salary_currency ?? "$"}{j.salary_min ?? "?"}–{j.salary_max ?? "?"}
                   </div>
                 )}
+                {(() => {
+                  const snip = jdSnippet(j);
+                  return snip ? (
+                    <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-muted-foreground/90">{snip}</p>
+                  ) : null;
+                })()}
 
                 <div className="mt-auto pt-3 flex items-center justify-between border-t border-border/50 mt-3">
                   <div className="flex items-center gap-2">
