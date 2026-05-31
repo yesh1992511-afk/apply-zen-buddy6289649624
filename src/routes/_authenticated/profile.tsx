@@ -165,6 +165,7 @@ function ProfilePage() {
           <TabsTrigger value="address" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Address</TabsTrigger>
           <TabsTrigger value="workauth" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Work auth</TabsTrigger>
           <TabsTrigger value="comp" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Comp</TabsTrigger>
+          <TabsTrigger value="compliance" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Compliance</TabsTrigger>
           <TabsTrigger value="prefs" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Preferences</TabsTrigger>
           <TabsTrigger value="links" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Links</TabsTrigger>
           <TabsTrigger value="experiences" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Experience</TabsTrigger>
