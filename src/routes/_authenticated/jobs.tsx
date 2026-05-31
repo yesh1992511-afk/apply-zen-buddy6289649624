@@ -46,6 +46,27 @@ function scoreChip(s: number) {
   return "bg-gradient-to-br from-rose-500/15 to-rose-700/20 text-rose-200/90 ring-1 ring-rose-400/20";
 }
 
+type AppStatusMeta = { label: string; chip: string };
+function appStatusMeta(s: string | null): AppStatusMeta | null {
+  if (!s) return null;
+  switch (s) {
+    case "applied":
+      return { label: "Applied", chip: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30" };
+    case "queued":
+      return { label: "Queued", chip: "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/30" };
+    case "applying":
+      return { label: "Applying…", chip: "bg-amber-500/20 text-amber-100 ring-1 ring-amber-400/40 animate-pulse" };
+    case "needs_review":
+      return { label: "Needs review", chip: "bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/30" };
+    case "failed":
+      return { label: "Failed", chip: "bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/30" };
+    case "skipped":
+      return { label: "Skipped", chip: "bg-muted/40 text-muted-foreground ring-1 ring-border/60" };
+    default:
+      return { label: s, chip: "bg-muted/40 text-muted-foreground ring-1 ring-border/60" };
+  }
+}
+
 function jdSnippet(j: { description?: string | null; description_html?: string | null }): string | null {
   const raw = j.description?.trim();
   if (raw) return raw.replace(/\s+/g, " ").trim() || null;
