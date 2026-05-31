@@ -7,9 +7,13 @@ import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { Send, Clock, Loader2, CheckCircle2, AlertTriangle, AlertCircle, ExternalLink, Eye, Mail, MessageCircle, Award, ThumbsDown, FileEdit, Inbox } from "lucide-react";
+import { Send, Clock, Loader2, CheckCircle2, AlertTriangle, AlertCircle, ExternalLink, Eye, Mail, MessageCircle, Award, ThumbsDown, FileEdit, Inbox, RotateCcw, Trash2, Skull } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMutation } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { retryApplication, discardApplication } from "@/lib/applications.functions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/applications")({
   head: () => ({ meta: [{ title: "Applications — JobPilot" }] }),
