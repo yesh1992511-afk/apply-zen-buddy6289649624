@@ -616,7 +616,7 @@ function SourcesPage() {
             </div>
           )}
           {sources.map((s) => {
-            const statusOk = s.last_run_status === "ok" || s.last_run_status === "success";
+            const statusOk = s.last_run_status === "ok" || s.last_run_status === "success" || s.last_run_status === "succeeded";
             const statusPartial = s.last_run_status === "partial";
             // Cadence-aware staleness: even an OK source is "Stale" if it hasn't run in 2× its cadence.
             const ageMs = s.last_run_at ? Date.now() - new Date(s.last_run_at).getTime() : 0;
