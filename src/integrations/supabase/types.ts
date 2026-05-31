@@ -725,6 +725,7 @@ export type Database = {
           salary_max: number | null
           salary_min: number | null
           score: number | null
+          score_breakdown: Json | null
           scraped_at: string
           seniority: string | null
           source_job_id: string | null
@@ -752,6 +753,7 @@ export type Database = {
           salary_max?: number | null
           salary_min?: number | null
           score?: number | null
+          score_breakdown?: Json | null
           scraped_at?: string
           seniority?: string | null
           source_job_id?: string | null
@@ -779,6 +781,7 @@ export type Database = {
           salary_max?: number | null
           salary_min?: number | null
           score?: number | null
+          score_breakdown?: Json | null
           scraped_at?: string
           seniority?: string | null
           source_job_id?: string | null
@@ -1742,6 +1745,7 @@ export type Database = {
       }
       match_job_to_filters: { Args: { _job_id: string }; Returns: undefined }
       prune_worker_invocations: { Args: never; Returns: undefined }
+      rescore_all_jobs_for_user: { Args: { _user_id: string }; Returns: number }
       usage_mtd_by_provider: {
         Args: { _user_id: string }
         Returns: {
