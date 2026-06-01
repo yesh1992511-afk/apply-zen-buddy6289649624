@@ -108,18 +108,19 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
           const runId = crypto.randomUUID();
           const startedAt = new Date().toISOString();
 
-          // Build per-user apify context from automation_settings (keywords + locations).
-          let apifyCtx: { queries: string[]; locations: string[] } | undefined;
-          if (tier === 'apify' || tier === 'hot') {
-            const { data: s } = await supabaseAdmin
-              .from('automation_settings')
-              .select('target_titles, target_locations')
-              .eq('user_id', userId)
-              .maybeSingle();
-            const queries = (s?.target_titles ?? []).filter((q: string) => q && q.trim().length > 0);
-            const locations = (s?.target_locations ?? []).filter((l: string) => l && l.trim().length > 0);
-            apifyCtx = { queries, locations };
-          }
+          // Per-user context (target keywords + locations) for ALL tiers.
+          // The adapter layer uses ctx.queries to gate keyword relevance —
+          // without it, generic aggregators (RemoteOK, Remotive, USAJobs,
+          // Apify) would either return everything or fall back to cyber-only
+          // defaults, dropping every job for non-cyber targets.
+          const { data: s } = await supabaseAdmin
+            .from('automation_settings')
+            .select('target_titles, target_locations')
+            .eq('user_id', userId)
+            .maybeSingle();
+          const queries = (s?.target_titles ?? []).filter((q: string) => q && q.trim().length > 0);
+          const locations = (s?.target_locations ?? []).filter((l: string) => l && l.trim().length > 0);
+          const apifyCtx: { queries: string[]; locations: string[] } = { queries, locations };
 
           let totalIn = 0;
           let totalOut = 0;
@@ -216,7 +217,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
               const warning = fetchedZero
                 ? (spec.provider.startsWith('apify:')
                     ? 'Apify actor returned 0 items for your keywords/locations — verify actor input.'
-                    : 'Source returned 0 cyber-relevant jobs this run.')
+                    : 'Source returned 0 jobs matching your target keywords this run.')
                 : null;
               await supabaseAdmin.from('sources').update({
                 last_run_at: runAt,
