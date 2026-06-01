@@ -44,6 +44,7 @@ import { Route as ApiPublicWorkerEnvRouteImport } from './routes/api/public/work
 import { Route as ApiPublicSourcesWorkerStatusRouteImport } from './routes/api/public/sources/worker-status'
 import { Route as ApiPublicSourcesUploadCookiesRouteImport } from './routes/api/public/sources/upload-cookies'
 import { Route as ApiPublicSourcesRunTierRouteImport } from './routes/api/public/sources/run-tier'
+import { Route as ApiPublicSourcesRunBatchRouteImport } from './routes/api/public/sources/run-batch'
 import { Route as ApiPublicSourcesQueueApplyRouteImport } from './routes/api/public/sources/queue-apply'
 import { Route as ApiPublicSourcesIngestExtensionRouteImport } from './routes/api/public/sources/ingest-extension'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
@@ -233,6 +234,12 @@ const ApiPublicSourcesRunTierRoute = ApiPublicSourcesRunTierRouteImport.update({
   path: '/api/public/sources/run-tier',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSourcesRunBatchRoute =
+  ApiPublicSourcesRunBatchRouteImport.update({
+    id: '/api/public/sources/run-batch',
+    path: '/api/public/sources/run-batch',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicSourcesQueueApplyRoute =
   ApiPublicSourcesQueueApplyRouteImport.update({
     id: '/api/public/sources/queue-apply',
@@ -314,6 +321,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
   '/api/public/sources/queue-apply': typeof ApiPublicSourcesQueueApplyRoute
+  '/api/public/sources/run-batch': typeof ApiPublicSourcesRunBatchRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
   '/api/public/sources/upload-cookies': typeof ApiPublicSourcesUploadCookiesRoute
   '/api/public/sources/worker-status': typeof ApiPublicSourcesWorkerStatusRoute
@@ -356,6 +364,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
   '/api/public/sources/queue-apply': typeof ApiPublicSourcesQueueApplyRoute
+  '/api/public/sources/run-batch': typeof ApiPublicSourcesRunBatchRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
   '/api/public/sources/upload-cookies': typeof ApiPublicSourcesUploadCookiesRoute
   '/api/public/sources/worker-status': typeof ApiPublicSourcesWorkerStatusRoute
@@ -401,6 +410,7 @@ export interface FileRoutesById {
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
   '/api/public/sources/queue-apply': typeof ApiPublicSourcesQueueApplyRoute
+  '/api/public/sources/run-batch': typeof ApiPublicSourcesRunBatchRoute
   '/api/public/sources/run-tier': typeof ApiPublicSourcesRunTierRoute
   '/api/public/sources/upload-cookies': typeof ApiPublicSourcesUploadCookiesRoute
   '/api/public/sources/worker-status': typeof ApiPublicSourcesWorkerStatusRoute
@@ -446,6 +456,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/ingest-extension'
     | '/api/public/sources/queue-apply'
+    | '/api/public/sources/run-batch'
     | '/api/public/sources/run-tier'
     | '/api/public/sources/upload-cookies'
     | '/api/public/sources/worker-status'
@@ -488,6 +499,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/ingest-extension'
     | '/api/public/sources/queue-apply'
+    | '/api/public/sources/run-batch'
     | '/api/public/sources/run-tier'
     | '/api/public/sources/upload-cookies'
     | '/api/public/sources/worker-status'
@@ -532,6 +544,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/daily-summary'
     | '/api/public/sources/ingest-extension'
     | '/api/public/sources/queue-apply'
+    | '/api/public/sources/run-batch'
     | '/api/public/sources/run-tier'
     | '/api/public/sources/upload-cookies'
     | '/api/public/sources/worker-status'
@@ -552,6 +565,7 @@ export interface RootRouteChildren {
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
   ApiPublicSourcesIngestExtensionRoute: typeof ApiPublicSourcesIngestExtensionRoute
   ApiPublicSourcesQueueApplyRoute: typeof ApiPublicSourcesQueueApplyRoute
+  ApiPublicSourcesRunBatchRoute: typeof ApiPublicSourcesRunBatchRoute
   ApiPublicSourcesRunTierRoute: typeof ApiPublicSourcesRunTierRoute
   ApiPublicSourcesUploadCookiesRoute: typeof ApiPublicSourcesUploadCookiesRoute
   ApiPublicSourcesWorkerStatusRoute: typeof ApiPublicSourcesWorkerStatusRoute
@@ -805,6 +819,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSourcesRunTierRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sources/run-batch': {
+      id: '/api/public/sources/run-batch'
+      path: '/api/public/sources/run-batch'
+      fullPath: '/api/public/sources/run-batch'
+      preLoaderRoute: typeof ApiPublicSourcesRunBatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/sources/queue-apply': {
       id: '/api/public/sources/queue-apply'
       path: '/api/public/sources/queue-apply'
@@ -960,6 +981,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
   ApiPublicSourcesIngestExtensionRoute: ApiPublicSourcesIngestExtensionRoute,
   ApiPublicSourcesQueueApplyRoute: ApiPublicSourcesQueueApplyRoute,
+  ApiPublicSourcesRunBatchRoute: ApiPublicSourcesRunBatchRoute,
   ApiPublicSourcesRunTierRoute: ApiPublicSourcesRunTierRoute,
   ApiPublicSourcesUploadCookiesRoute: ApiPublicSourcesUploadCookiesRoute,
   ApiPublicSourcesWorkerStatusRoute: ApiPublicSourcesWorkerStatusRoute,

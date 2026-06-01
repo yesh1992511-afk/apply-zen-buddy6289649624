@@ -168,7 +168,7 @@ export const Route = createFileRoute('/api/public/sources/run-batch')({
           user_id: userId,
           kind: 'source.batch',
           source_key: `batch:target:${target}`,
-          status: totalMatched > 0 ? 'succeeded' : 'partial',
+          status: totalMatched > 0 ? 'succeeded' : 'failed',
           items_in: totalFetched,
           items_out: totalInserted,
           errors: perSource.filter((p) => p.error).length,
