@@ -1,48 +1,56 @@
-I checked the live data and this is not “no jobs exist.” The system scraped 389 jobs recently, including security jobs, but 0 are visible because the matching logic is too strict/buggy and the Jobs page only shows `matched = true`.
+# Fix scraping pipeline
 
-Root causes found:
-- `automation_settings.enabled` is currently false, so the “Match & prepare” batch refuses to run unless Autopilot is enabled.
-- Recent Apify tier returned 0 items for all Apify sources, while ATS/board tiers did scrape jobs.
-- Cybersecurity jobs are being discarded. Example: “Product Security Engineer” and “Staff Security Engineer, Application Security” exist in the database but are marked discarded.
-- The database matcher treats exclude keyword `security guard` as matching any text containing both “security” and “guard” too loosely in practice, and its array phrase handling appears to be failing for multi-word phrases like “product security engineer” / “application security.”
-- The UI has no “show scraped/discarded jobs” view, so when filters are too strict it looks like scraping found nothing.
+## Problem
 
-Plan:
+All 6 Apify sources (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Wellfound, Google Jobs) are returning **0 items** every run, despite a valid `APIFY_TOKEN` and 20+ targeted cybersecurity keywords being sent. ATS/board sources (Greenhouse, Ashby, USAJobs) work fine and deliver hundreds of jobs.
 
-1. Fix the matcher so real cyber jobs match
-- Update the database scoring function to tokenize and phrase-match correctly.
-- Count exact phrases like `application security`, `cloud security`, `security engineer`, `threat intelligence` as strong matches.
-- Keep exclusions precise: `security guard` should only exclude actual guard/physical-security roles, not product/application/security-engineering roles.
-- Preserve the existing country/language gates and user-owned RLS model.
-- Re-score existing scraped jobs after the matcher update so already-scraped security jobs appear without waiting for a new scrape.
+Root cause: our adapters send **the wrong input payload shape** to each Apify actor. For example, `bebity/linkedin-jobs-scraper` does not accept `{ queries, locations, rows }` — it expects an array of LinkedIn job-search URLs. The actor runs succeed (HTTP 200), but with invalid input it produces an empty dataset, so we record `last_run_count = 0` with no error.
 
-2. Make scraped-but-discarded jobs visible
-- Add a Jobs page toggle/tab for `Matched` vs `All scraped`.
-- In `All scraped`, show discarded jobs with their discard reason/score breakdown so you can see what the scraper found and why it was hidden.
-- Keep `Matched` as the default apply queue view so low-quality jobs do not auto-queue.
+A second issue: when an Apify run returns 0, we silently store "succeeded" with no error. The user has no way to tell the difference between "site has no matching jobs" and "we sent garbage to the actor".
 
-3. Fix batch behavior when Autopilot is paused
-- Let “Match & prepare” scrape and match even if Autopilot is paused.
-- If Autopilot is off, do not auto-queue applications; show a clear result like “matched X jobs; enable Autopilot or queue manually.”
-- If Autopilot is on, keep the existing prepare/queue flow.
+## Scope
 
-4. Fix Apify source inputs and diagnostics
-- Align the server-side Apify LinkedIn actor payload with the working Python worker payload (`title`, `location`, `rows`, `publishedAt`) instead of the current mismatched `queries/locations` shape.
-- Apply similar known-good payload mapping for Glassdoor/Google Jobs where the server adapter currently differs from the worker adapter.
-- Store clear per-source warnings when Apify returns 0 so the Sources/Worker UI shows whether it was “actor returned no items,” “actor auth/subscription issue,” or “request timed out.”
+Frontend-light, backend-focused. Only files involved in source scraping. No schema changes.
 
-5. Add an immediate verification path
-- After implementation, run a user-scoped source tier/batch check.
-- Verify that current security jobs re-score to matched and appear on Jobs.
-- Verify Apify LinkedIn either returns jobs or shows a clear source error instead of silently looking empty.
+## Plan
 
-Files/areas to change:
-- Database function: `match_job_to_filters` via migration.
-- Frontend Jobs query/UI: `src/lib/queries/jobs.ts`, `src/routes/_authenticated/jobs.tsx`.
-- Batch server function: `src/lib/applications.functions.ts`, `src/routes/api/public/sources/run-batch.ts`.
-- Apify adapters: `src/lib/sources/adapters.server.ts`.
+### 1. Rewrite Apify adapter inputs (`src/lib/sources/adapters.server.ts`)
 
-Security notes:
-- No public data exposure; all job queries remain user-scoped by existing RLS.
-- No secrets added to code; Apify token continues to be read from backend secrets only.
-- The new “All scraped” view still only shows the signed-in user’s own scraped jobs.
+For each of the 6 Apify actors, send the schema the actor actually documents:
+
+- **`bebity/linkedin-jobs-scraper`** — build LinkedIn job-search URLs from each `(query, location)` pair: `https://www.linkedin.com/jobs/search/?keywords=...&location=...&f_TPR=r604800` (last 7 days). Send `{ urls: [...up to 10...], scrapeCompany: false, count: 50, proxy: { useApifyProxy: true } }`. Cap query×location combinations to keep one run under the 100 s sync timeout.
+- **`misceres/indeed-scraper`** — switch to per-query loop, send `{ position, country: 'US', location, maxItems: 50, parseCompanyDetails: false, saveOnlyUniqueItems: true }` and merge results (capped). Current single-query call is correct shape, just under-utilized.
+- **`bebity/glassdoor-jobs-scraper`** — same URL-based pattern as LinkedIn but for Glassdoor search URLs.
+- **`bebity/ziprecruiter-scraper`** — replace `queries/locations/rows` with the documented `{ searchUrls: [...zip job search URLs...], maxItems: 50, proxy }`.
+- **`epctex/wellfound-scraper`** — Wellfound (AngelList) actor takes `{ startUrls: [{ url: 'https://wellfound.com/jobs?role=...&location=...' }], maxItems: 50 }`. Rewrite accordingly.
+- **`dan.poltawski/google-jobs-scraper`** — this actor slug is unreliable. Switch to the well-maintained `apify/google-jobs-scraper` (or `dan.poltawski~google-jobs-scraper-2`) with `{ queries: [...], countryCode: 'us', languageCode: 'en', maxPagesPerQuery: 2 }`. Probe once and pick whichever returns items.
+
+Add a small helper `buildLinkedInSearchUrls(queries, locations)` and `buildGlassdoorSearchUrls(...)` to keep adapter bodies clean.
+
+### 2. Cap query fan-out + add timing safety
+
+The user has 20 target titles × 1 location = 20 combinations. Sending all to one actor will time out. Add a top-level cap (e.g. 8 query×location URLs per actor run) and pick the longest/most-specific queries first. Document the cap in code.
+
+### 3. Surface "0 items but ran" as a soft warning
+
+In `run-tier.ts` / `run-batch.ts`, when an Apify source returns 0 items:
+- Store `last_run_status = 'succeeded'` with `last_error = "Apify run returned 0 items — actor input may be misconfigured (see logs)."` so the existing Sources UI shows it.
+- Log the actor id, payload keys, and the raw Apify response length so we can debug from server logs.
+
+### 4. One verification batch + manual check
+
+After deploy, trigger one batch from "Match & prepare" with the user's existing targets, then verify in the `jobs` table that each Apify source produced > 0 rows (or has a clear `last_error` if it didn't). Re-rescore via the existing `rescore_all_jobs_for_user`.
+
+## Files touched
+
+- `src/lib/sources/adapters.server.ts` — rewrite 6 Apify adapter bodies + add URL helpers + cap.
+- `src/routes/api/public/sources/run-tier.ts` — record 0-item warning into `sources.last_error`.
+- `src/routes/api/public/sources/run-batch.ts` — same 0-item warning in batch path.
+
+No schema changes, no new secrets, no UI changes. All queries remain user-scoped via existing RLS.
+
+## Out of scope
+
+- New scraper providers (e.g. JobSpy, SerpAPI). Can be a follow-up.
+- Changing the matcher (already fixed in previous turn).
+- UI changes — the existing "All scraped" toggle on Jobs already covers visibility.
