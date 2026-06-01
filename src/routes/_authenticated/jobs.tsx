@@ -92,12 +92,13 @@ function jdSnippet(j: { description?: string | null; description_html?: string |
 function JobsPage() {
   const navigate = useNavigate();
   const [hours, setHours] = useState(24);
+  const [mode, setMode] = useState<"matched" | "all">("matched");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dialogJob, setDialogJob] = useState<JobDialogJob | null>(null);
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
 
-  const jobsQuery = useQuery(jobsQueryOptions({ hours }));
+  const jobsQuery = useQuery(jobsQueryOptions({ hours, mode }));
   const countsQuery = useQuery(jobCountsQueryOptions());
   const filtersQuery = useQuery(savedFiltersQueryOptions());
   const applyMutation = useApplyToJob();
