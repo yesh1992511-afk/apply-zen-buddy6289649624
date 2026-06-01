@@ -324,6 +324,7 @@ function ApplicationDetailPage() {
               { v: "timeline", label: "Timeline", icon: History },
               { v: "resume", label: "Resume", icon: FileText },
               { v: "cover", label: "Cover letter", icon: Mail },
+              { v: "screenshots", label: "Screenshots", icon: ImageIcon },
             ].map((it) => (
               <button
                 key={it.v}
@@ -339,6 +340,11 @@ function ApplicationDetailPage() {
                 {it.v === "timeline" && eventsQuery.data && eventsQuery.data.length > 0 && (
                   <span className="ml-auto rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
                     {eventsQuery.data.length}
+                  </span>
+                )}
+                {it.v === "screenshots" && app.screenshots && app.screenshots.length > 0 && (
+                  <span className="ml-auto rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+                    {app.screenshots.length}
                   </span>
                 )}
               </button>
