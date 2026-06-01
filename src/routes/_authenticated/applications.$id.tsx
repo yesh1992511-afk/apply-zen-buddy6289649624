@@ -244,10 +244,25 @@ function ApplicationDetailPage() {
             <h1 className="font-heading text-xl font-bold">{app.job?.company}</h1>
             <span className="text-muted-foreground">·</span>
             <h2 className="text-lg text-muted-foreground">{app.job?.title}</h2>
+            {app.job?.score != null && (
+              <span className={cn(
+                "rounded-full px-2 py-0.5 text-[11px] font-mono font-bold tabular-nums",
+                app.job.score >= 85 ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"
+                : app.job.score >= 60 ? "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/30"
+                : "bg-rose-500/10 text-rose-200/80 ring-1 ring-rose-400/20",
+              )}>{app.job.score}</span>
+            )}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             {app.job?.source_key && <PortalBadge source={app.job.source_key} size="sm" />}
             {app.job?.location && <span>{app.job.location}{app.job.remote ? ` · ${app.job.remote}` : ""}</span>}
+            {app.job?.seniority && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-foreground/70">{app.job.seniority}</span>}
+            {app.job?.employment_type && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-foreground/70">{app.job.employment_type}</span>}
+            {(app.job?.salary_min || app.job?.salary_max) && (
+              <span className="rounded bg-gold/10 text-gold px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                {app.job?.salary_currency ?? "$"}{app.job?.salary_min ?? "?"}–{app.job?.salary_max ?? "?"}
+              </span>
+            )}
             <span>Queued {timeAgo(app.queued_at)}</span>
             {app.applied_at && <span className="text-success">Applied {timeAgo(app.applied_at)}</span>}
           </div>
