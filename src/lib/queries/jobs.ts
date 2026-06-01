@@ -142,20 +142,22 @@ export type Job = {
   application_id: string | null;
 };
 
-export const jobsKey = (params: { hours: number }) =>
-  ["jobs", "matched", params] as const;
+export const jobsKey = (params: { hours: number; mode?: "matched" | "all" }) =>
+  ["jobs", params.mode ?? "matched", params] as const;
 
-export const jobsQueryOptions = (params: { hours: number }) =>
+export const jobsQueryOptions = (params: { hours: number; mode?: "matched" | "all" }) =>
   queryOptions({
     queryKey: jobsKey(params),
     queryFn: async (): Promise<Job[]> => {
       let q = supabase
         .from("jobs")
         .select("*, applications(id, status, queued_at)")
-        .eq("matched", true)
         .order("score", { ascending: false })
-        .order("posted_at", { ascending: false, nullsFirst: false })
-        .limit(200);
+        .order("scraped_at", { ascending: false, nullsFirst: false })
+        .limit(300);
+      if ((params.mode ?? "matched") === "matched") {
+        q = q.eq("matched", true);
+      }
       if (params.hours > 0) {
         const since = new Date(Date.now() - params.hours * 3600_000).toISOString();
         q = q.gte("scraped_at", since);

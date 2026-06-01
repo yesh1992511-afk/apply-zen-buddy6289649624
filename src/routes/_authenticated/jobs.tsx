@@ -92,12 +92,13 @@ function jdSnippet(j: { description?: string | null; description_html?: string |
 function JobsPage() {
   const navigate = useNavigate();
   const [hours, setHours] = useState(24);
+  const [mode, setMode] = useState<"matched" | "all">("matched");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dialogJob, setDialogJob] = useState<JobDialogJob | null>(null);
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
 
-  const jobsQuery = useQuery(jobsQueryOptions({ hours }));
+  const jobsQuery = useQuery(jobsQueryOptions({ hours, mode }));
   const countsQuery = useQuery(jobCountsQueryOptions());
   const filtersQuery = useQuery(savedFiltersQueryOptions());
   const applyMutation = useApplyToJob();
@@ -155,7 +156,7 @@ function JobsPage() {
     <div className="space-y-6 max-w-[1400px]">
       <PageHeader
         title="Jobs"
-        description={`${filtered.length} matched · sorted by relevance score`}
+        description={`${filtered.length} ${mode === "matched" ? "matched" : "scraped"} · sorted by relevance score`}
         actions={
           <div className="flex items-center gap-2">
             <RunBatchButton defaultTarget={10} />
@@ -200,6 +201,14 @@ function JobsPage() {
 
       <div className="sticky top-14 z-10 -mx-4 px-4 py-3 md:-mx-6 md:px-6 surface-frost rounded-none border-x-0 border-y border-border/40 space-y-2">
         <div className="flex flex-wrap items-center gap-3">
+          <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as "matched" | "all")} className="bg-surface-2 rounded-lg p-0.5">
+            <ToggleGroupItem value="matched" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-md text-xs px-3">
+              Matched{countsQuery.data ? ` (${countsQuery.data.matched})` : ""}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="all" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-md text-xs px-3">
+              All scraped{countsQuery.data ? ` (${countsQuery.data.scraped})` : ""}
+            </ToggleGroupItem>
+          </ToggleGroup>
           <ToggleGroup type="single" value={String(hours)} onValueChange={(v) => v && setHours(Number(v))} className="bg-surface-2 rounded-lg p-0.5">
             {windows.map((w) => (
               <ToggleGroupItem key={w.label} value={String(w.hours)} className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-md text-xs">

@@ -78,29 +78,31 @@ export const runOneShotBatch = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const requested = data.target ?? 10;
 
-    // Check automation enabled (trigger is no-op when disabled).
+    // Automation toggle gates *auto-queueing*, not scraping. Even when paused,
+    // the batch still scrapes + matches so jobs become visible on the Jobs page.
     const { data: settings, error: sErr } = await supabase
       .from("automation_settings")
       .select("enabled, max_applies_per_day")
       .eq("user_id", userId)
       .maybeSingle();
     if (sErr) { console.error("[server-fn] supabase error", sErr); throw new Error("Request failed"); }
-    if (!settings?.enabled) {
-      throw new Error("Enable Automation in Settings before running a batch.");
-    }
 
-    // Clamp to remaining daily apply quota.
-    const cap = settings.max_applies_per_day ?? 50;
-    const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
-    const { count: usedToday } = await supabase
-      .from("applications")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("queued_at", todayStart.toISOString());
-    const remaining = Math.max(0, cap - (usedToday ?? 0));
-    const target = Math.min(requested, remaining);
-    if (target <= 0) {
-      throw new Error(`Daily apply cap reached (${usedToday ?? 0}/${cap}). Try again tomorrow.`);
+    const cap = settings?.max_applies_per_day ?? 50;
+    let target = requested;
+    let usedToday = 0;
+    if (settings?.enabled) {
+      const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from("applications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .gte("queued_at", todayStart.toISOString());
+      usedToday = count ?? 0;
+      const remaining = Math.max(0, cap - usedToday);
+      target = Math.min(requested, remaining);
+      if (target <= 0) {
+        throw new Error(`Daily apply cap reached (${usedToday}/${cap}). Try again tomorrow.`);
+      }
     }
 
     const secret = process.env.WORKER_CRON_SECRET;

@@ -1,60 +1,48 @@
-## Audit summary
+I checked the live data and this is not “no jobs exist.” The system scraped 389 jobs recently, including security jobs, but 0 are visible because the matching logic is too strict/buggy and the Jobs page only shows `matched = true`.
 
-I traced the full scrape → match → queue → apply pipeline against the live DB and code. Wiring is intact:
+Root causes found:
+- `automation_settings.enabled` is currently false, so the “Match & prepare” batch refuses to run unless Autopilot is enabled.
+- Recent Apify tier returned 0 items for all Apify sources, while ATS/board tiers did scrape jobs.
+- Cybersecurity jobs are being discarded. Example: “Product Security Engineer” and “Staff Security Engineer, Application Security” exist in the database but are marked discarded.
+- The database matcher treats exclude keyword `security guard` as matching any text containing both “security” and “guard” too loosely in practice, and its array phrase handling appears to be failing for multi-word phrases like “product security engineer” / “application security.”
+- The UI has no “show scraped/discarded jobs” view, so when filters are too strict it looks like scraping found nothing.
 
-- **All 32 triggers attached** — `jobs_auto_queue_matched_job` (queues applications when `matched` flips true), `enforce_apply_quota_trg` (caps daily applies), `block_extra_signups_trigger` (single-user lock), `on_auth_user_created` (seeds profile/settings), `validate_*` and `set_updated_at` triggers all present.
-- **All crons scheduled** — `apply-worker-every-minute`, `sources-hot-tier` */15, `scrape-usajobs` hourly, `scrape-apify` /4h, 8 `sources-warm-shard-*` jobs, heartbeat /5, daily-summary /15, log purge & worker-invocations prune nightly.
-- **`runOneShotBatch` → `/api/public/sources/run-batch`** is fully wired with `WORKER_CRON_SECRET`, daily-cap clamp, `RunBatchButton` mounted on `/jobs` and `/applications`.
-- **RLS** — every user-data table scoped to `auth.uid() = user_id`. `service_role`-only on `jd_analysis_cache`. No leaks.
+Plan:
 
-## Real issues to fix
+1. Fix the matcher so real cyber jobs match
+- Update the database scoring function to tokenize and phrase-match correctly.
+- Count exact phrases like `application security`, `cloud security`, `security engineer`, `threat intelligence` as strong matches.
+- Keep exclusions precise: `security guard` should only exclude actual guard/physical-security roles, not product/application/security-engineering roles.
+- Preserve the existing country/language gates and user-owned RLS model.
+- Re-score existing scraped jobs after the matcher update so already-scraped security jobs appear without waiting for a new scrape.
 
-### 1. Auto-apply UX is misleading (HIGH — the one you actually care about)
+2. Make scraped-but-discarded jobs visible
+- Add a Jobs page toggle/tab for `Matched` vs `All scraped`.
+- In `All scraped`, show discarded jobs with their discard reason/score breakdown so you can see what the scraper found and why it was hidden.
+- Keep `Matched` as the default apply queue view so low-quality jobs do not auto-queue.
 
-`src/routes/api/public/hooks/apply-worker.ts` lines 211–286 always set `status = 'needs_review'` even when a supported portal (greenhouse / lever / ashby / workable / smartrecruiters / recruitee) is detected. The worker tailors the resume + cover letter and prepares form fills, then stops at "ready to submit" because actual browser submission requires a headless browser, which the Cloudflare Worker runtime cannot host. The user-facing copy still says "Auto apply", which is misleading.
+3. Fix batch behavior when Autopilot is paused
+- Let “Match & prepare” scrape and match even if Autopilot is paused.
+- If Autopilot is off, do not auto-queue applications; show a clear result like “matched X jobs; enable Autopilot or queue manually.”
+- If Autopilot is on, keep the existing prepare/queue flow.
 
-Fix (frontend + copy + status semantics — no backend behavior change because the runtime constraint is real):
-- Rename the user-visible label everywhere from "Auto apply" → **"Auto prepare & queue for 1-click submit"** in `RunBatchButton`, `automation.tsx`, `jobs.tsx`, `applications.tsx`, kanban column header.
-- Add a clear `needs_review` kanban column tooltip: "Resume + cover letter generated, form fills mapped. Click 'Open & 1-click apply' to submit on the portal."
-- In `AllApplicationsKanban` / `applications.$id.tsx`, add a prominent **"Open job → 1-click submit"** button on `needs_review` cards that opens `job.url` in a new tab and copies the cover letter to clipboard.
-- Update the success toast in `RunBatchButton` from "Apply worker will submit them" → "Apply worker will prepare them — review and 1-click submit from Applications."
+4. Fix Apify source inputs and diagnostics
+- Align the server-side Apify LinkedIn actor payload with the working Python worker payload (`title`, `location`, `rows`, `publishedAt`) instead of the current mismatched `queries/locations` shape.
+- Apply similar known-good payload mapping for Glassdoor/Google Jobs where the server adapter currently differs from the worker adapter.
+- Store clear per-source warnings when Apify returns 0 so the Sources/Worker UI shows whether it was “actor returned no items,” “actor auth/subscription issue,” or “request timed out.”
 
-(No headless-browser feature is added — that would require a separate VPS/Browserless service the user hasn't provisioned. We make the existing semi-automated flow honest and 1-click fast.)
+5. Add an immediate verification path
+- After implementation, run a user-scoped source tier/batch check.
+- Verify that current security jobs re-score to matched and appear on Jobs.
+- Verify Apify LinkedIn either returns jobs or shows a clear source error instead of silently looking empty.
 
-### 2. Missing Content-Security-Policy header (MEDIUM — security scanner finding)
+Files/areas to change:
+- Database function: `match_job_to_filters` via migration.
+- Frontend Jobs query/UI: `src/lib/queries/jobs.ts`, `src/routes/_authenticated/jobs.tsx`.
+- Batch server function: `src/lib/applications.functions.ts`, `src/routes/api/public/sources/run-batch.ts`.
+- Apify adapters: `src/lib/sources/adapters.server.ts`.
 
-`applications.$id.tsx` renders scraped job HTML via `dangerouslySetInnerHTML` with DOMPurify. Add a CSP response header as defense-in-depth.
-
-Fix: extend `src/start.ts` request middleware (`errorMiddleware` lives there) with a small `securityHeadersMiddleware` that sets:
-```
-Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.gpteng.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'self'
-X-Content-Type-Options: nosniff
-Referrer-Policy: strict-origin-when-cross-origin
-```
-(`'unsafe-inline'` for scripts kept because Lovable's preview shim needs it; the policy still blocks injected `<script src=…>` and `eval`, which is the real XSS surface.)
-
-### 3. pg extensions in `public` schema (LOW — Supabase linter warn)
-
-`pg_net` and `pg_cron` are installed in `public`. Move them to a dedicated `extensions` schema via migration:
-```sql
-CREATE SCHEMA IF NOT EXISTS extensions;
-ALTER EXTENSION pg_net SET SCHEMA extensions;
-ALTER EXTENSION pg_cron SET SCHEMA extensions;
-GRANT USAGE ON SCHEMA extensions TO postgres, service_role;
-```
-Then update `bootstrap_apply_worker_cron` `SET search_path` to include `extensions`, and verify cron jobs still tick (they reference `cron.schedule` / `net.http_post` by full qualification already, so no breakage expected).
-
-## Out of scope (intentionally)
-
-- Building a true headless-browser submitter (needs separate infra; user hasn't provisioned).
-- Re-architecting source adapters (they work, audited in prior turn).
-- Adding new tables, RLS changes, or new server fns (system is feature-complete).
-
-## Files changed
-
-- `src/components/RunBatchButton.tsx` (copy)
-- `src/components/AllApplicationsKanban.tsx` (column label + tooltip + 1-click button)
-- `src/routes/_authenticated/applications.$id.tsx` (1-click submit panel for `needs_review`)
-- `src/routes/_authenticated/automation.tsx` (label clarity)
-- `src/start.ts` (add `securityHeadersMiddleware`)
-- New migration: move extensions to `extensions` schema
+Security notes:
+- No public data exposure; all job queries remain user-scoped by existing RLS.
+- No secrets added to code; Apify token continues to be read from backend secrets only.
+- The new “All scraped” view still only shows the signed-in user’s own scraped jobs.
