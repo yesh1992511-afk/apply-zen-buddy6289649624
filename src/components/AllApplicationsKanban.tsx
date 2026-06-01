@@ -22,7 +22,7 @@ const COLS: Array<{ phase: AppPhase; label: string; icon: LucideIcon; accent: st
   { phase: "queued", label: "Queued", icon: Clock, accent: "text-primary" },
   { phase: "applying", label: "Applying", icon: Loader2, accent: "text-primary" },
   { phase: "submitted", label: "Submitted", icon: CheckCircle2, accent: "text-success" },
-  { phase: "needs_review", label: "Needs review", icon: AlertTriangle, accent: "text-warning" },
+  { phase: "needs_review", label: "Ready to submit", icon: AlertTriangle, accent: "text-warning" },
   { phase: "failed", label: "Failed", icon: AlertCircle, accent: "text-destructive" },
   { phase: "dead_letter", label: "Dead letter", icon: Skull, accent: "text-destructive" },
   { phase: "follow_up_sent", label: "Followed up", icon: Mail, accent: "text-primary/80" },
@@ -88,7 +88,12 @@ export function AllApplicationsKanban({
         if (items.length === 0 && HIDE_WHEN_EMPTY.includes(phase)) return null;
         return (
           <div key={phase} className="flex flex-col rounded-xl border border-border/60 bg-card">
-            <div className="flex items-center justify-between border-b border-border/40 px-3 py-2.5">
+            <div
+              className="flex items-center justify-between border-b border-border/40 px-3 py-2.5"
+              title={phase === "needs_review"
+                ? "Resume + cover letter generated and form fills mapped. Open the job and 1-click submit."
+                : undefined}
+            >
               <div className="flex items-center gap-2 min-w-0">
                 <Icon className={cn("h-3.5 w-3.5 shrink-0", accent, phase === "applying" && "animate-spin")} />
                 <h3 className="truncate text-xs font-semibold">{label}</h3>
@@ -137,6 +142,20 @@ export function AllApplicationsKanban({
                   {(a.last_error || a.dlq_reason) && (
                     <div className="mt-1.5 line-clamp-2 rounded border border-destructive/20 bg-destructive/5 p-1.5 text-[10px] text-destructive">
                       {a.dlq_reason || a.last_error}
+                    </div>
+                  )}
+                  {phase === "needs_review" && a.job?.url && (
+                    <div className="mt-2" onClick={(e) => e.preventDefault()}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(a.job!.url, "_blank", "noopener,noreferrer");
+                          toast.success("Job opened — paste your tailored docs from the Application page");
+                        }}
+                        className="inline-flex w-full items-center justify-center gap-1 rounded border border-primary/40 bg-primary/10 px-1.5 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Open & 1-click apply
+                      </button>
                     </div>
                   )}
                   {(phase === "failed" || phase === "dead_letter" || phase === "needs_review") && (
