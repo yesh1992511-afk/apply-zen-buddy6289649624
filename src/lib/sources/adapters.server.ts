@@ -958,10 +958,13 @@ export async function runSource(spec: SourceSpec, ctx?: ApifyCtx): Promise<Norma
     default: jobs = [];
   }
 
-  // Cybersecurity relevance gate at the adapter layer. Keeps the jobs
-  // table from filling with unrelated roles when generic boards run.
-  if (!CYBER_NATIVE_PROVIDERS.has(spec.provider) && jobs.length > 0) {
-    jobs = jobs.filter(isCyberRelevant);
+  // Keyword relevance gate driven by the user's configured target titles.
+  // Boards / ATS slugs are curated per-company so we skip the gate for them
+  // and rely on per-user filters/scoring downstream.
+  const SLUG_BASED = new Set(['greenhouse','lever','ashby','workable','smartrecruiters','recruitee','teamtailor','personio','bamboohr']);
+  if (!SLUG_BASED.has(spec.provider) && jobs.length > 0) {
+    const re = buildRelevanceRegex(ctx?.queries);
+    if (re) jobs = jobs.filter((j) => isRelevant(j, re));
   }
   return jobs;
 }
