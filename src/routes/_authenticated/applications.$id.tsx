@@ -38,6 +38,7 @@ type AppRow = {
   job_id: string;
   resume_id: string | null;
   cover_letter_id: string | null;
+  generated_resume_id: string | null;
   attempts: number;
   retry_count: number | null;
   last_error: string | null;
@@ -53,6 +54,9 @@ type AppRow = {
     location: string | null; remote: string | null; posted_at: string | null;
     scraped_at: string;
     description: string | null; description_html: string | null;
+    score: number | null;
+    salary_min: number | null; salary_max: number | null; salary_currency: string | null;
+    employment_type: string | null; seniority: string | null;
   } | null;
 };
 
