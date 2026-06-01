@@ -871,20 +871,9 @@ export async function fetchApifyGoogleJobs(ctx?: ApifyCtx): Promise<NormalizedJo
 // ============================================================
 // InfoSec-Jobs / isecjobs — dedicated cybersecurity job board.
 // ============================================================
-function decodeHtml(input: string): string {
-  return input
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+const decodeHtml = (s: string) => _decodeHtmlEntities(s).replace(/\s+/g, ' ').trim();
+const stripTags = (s: string) => _stripTags(_decodeHtmlEntities(s));
 
-function stripTags(input: string): string {
-  return decodeHtml(input.replace(/<[^>]+>/g, ' '));
-}
 
 function parseIsecJobsHtml(html: string): NormalizedJob[] {
   const abs = (u: string) => (u.startsWith('http') ? u : `https://isecjobs.com${u.startsWith('/') ? '' : '/'}${u}`);
