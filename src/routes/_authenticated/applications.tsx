@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { AllApplicationsKanban } from "@/components/AllApplicationsKanban";
+import { RunBatchButton } from "@/components/RunBatchButton";
 import { applicationsListQueryOptions, bucketOf, type AppBucket } from "@/lib/queries/applications";
 
 export const Route = createFileRoute("/_authenticated/applications")({
