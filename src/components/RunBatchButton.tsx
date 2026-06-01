@@ -20,7 +20,7 @@ export function RunBatchButton({ defaultTarget = 10 }: { defaultTarget?: number 
     mutationFn: (t: number) => runBatch({ data: { target: t } }),
     onSuccess: (r) => {
       toast.success(
-        `Batch done — matched ${r.matched}/${r.target} jobs (fetched ${r.fetched}). Apply worker will submit them.`,
+        `Matched ${r.matched}/${r.target} jobs (fetched ${r.fetched}). Tailored resume + cover letter are being prepared — review and 1-click submit from Applications.`,
       );
       qc.invalidateQueries({ queryKey: ["jobs"] });
       qc.invalidateQueries({ queryKey: ["applications"] });
@@ -54,7 +54,7 @@ export function RunBatchButton({ defaultTarget = 10 }: { defaultTarget?: number 
         ) : (
           <Zap className="h-3.5 w-3.5" />
         )}
-        {mutation.isPending ? "Running…" : "Run batch & apply"}
+        {mutation.isPending ? "Running…" : "Match & prepare"}
       </Button>
     </div>
   );
