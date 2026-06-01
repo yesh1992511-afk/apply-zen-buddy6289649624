@@ -598,7 +598,7 @@ async function runApifyActor(
 export type ApifyCtx = { queries: string[]; locations: string[] };
 
 const defaultCtx = (ctx?: ApifyCtx): ApifyCtx => ({
-  queries: ctx?.queries?.length ? ctx.queries : ['cybersecurity', 'security engineer', 'SOC analyst'],
+  queries: ctx?.queries?.length ? ctx.queries : ['software engineer'],
   locations: ctx?.locations?.length ? ctx.locations : ['United States'],
 });
 
