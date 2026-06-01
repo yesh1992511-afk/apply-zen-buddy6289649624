@@ -87,7 +87,11 @@ export type ApplicationRow = {
   resume_id: string | null;
   cover_letter_id: string | null;
   generated_resume_id: string | null;
-  job?: { title: string; company: string; url: string } | null;
+  job?: {
+    title: string; company: string; url: string;
+    score?: number | null; source_key?: string | null;
+    salary_min?: number | null; salary_max?: number | null; salary_currency?: string | null;
+  } | null;
 };
 
 export const APPLICATIONS_QUERY_KEY = ["applications", "list"] as const;
@@ -99,7 +103,7 @@ export function applicationsListQueryOptions() {
       const { data, error } = await supabase
         .from("applications")
         .select(
-          "id, status, phase, job_id, attempts, retry_count, last_error, dlq_reason, queued_at, applied_at, resume_id, cover_letter_id, generated_resume_id, job:jobs(title, company, url)",
+          "id, status, phase, job_id, attempts, retry_count, last_error, dlq_reason, queued_at, applied_at, resume_id, cover_letter_id, generated_resume_id, job:jobs(title, company, url, score, source_key, salary_min, salary_max, salary_currency)",
         )
         .order("queued_at", { ascending: false })
         .limit(500);
