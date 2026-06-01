@@ -106,16 +106,32 @@ export const Route = createFileRoute('/api/public/sources/run-batch')({
           };
 
           let jobs: NormalizedJob[] = [];
+          const runAt = new Date().toISOString();
           try {
             jobs = await withTimeout(runSource(spec, ctx), ADAPTER_TIMEOUT_MS);
           } catch (e) {
             entry.error = String(e).slice(0, 200);
+            await supabaseAdmin.from('sources').update({
+              last_run_at: runAt,
+              last_run_status: 'failed',
+              last_run_count: 0,
+              last_error: entry.error,
+            }).eq('user_id', userId).eq('key', sourceKey);
             perSource.push(entry);
             continue;
           }
           entry.fetched = jobs.length;
           totalFetched += jobs.length;
           if (jobs.length === 0) {
+            const warning = spec.provider.startsWith('apify:')
+              ? 'Apify actor returned 0 items for your keywords/locations — verify actor input.'
+              : 'Source returned 0 jobs this run.';
+            await supabaseAdmin.from('sources').update({
+              last_run_at: runAt,
+              last_run_status: 'succeeded',
+              last_run_count: 0,
+              last_error: warning,
+            }).eq('user_id', userId).eq('key', sourceKey);
             perSource.push(entry);
             continue;
           }
@@ -160,6 +176,13 @@ export const Route = createFileRoute('/api/public/sources/run-batch')({
             entry.matched += matchedHere;
             totalMatched += matchedHere;
           }
+          await supabaseAdmin.from('sources').update({
+            last_run_at: runAt,
+            last_run_status: 'succeeded',
+            last_run_count: entry.inserted,
+            last_error: entry.error ?? null,
+          }).eq('user_id', userId).eq('key', sourceKey);
+
           perSource.push(entry);
         }
 
