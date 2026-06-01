@@ -27,6 +27,26 @@ export type NormalizedJob = {
 };
 
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
+
+/** Decode HTML entities (named + numeric) without using the DOM. Safe in Worker runtime. */
+export function decodeHtmlEntities(str: string): string {
+  if (!str || str.indexOf('&') === -1) return str;
+  const named: Record<string, string> = {
+    lt: '<', gt: '>', amp: '&', quot: '"', apos: "'", nbsp: ' ',
+    copy: '©', reg: '®', trade: '™', hellip: '…', mdash: '—', ndash: '–',
+    lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', bull: '•', middot: '·',
+  };
+  return str
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
+      const n = parseInt(h, 16);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
+    })
+    .replace(/&#(\d+);/g, (_, d) => {
+      const n = parseInt(d, 10);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
+    })
+    .replace(/&([a-zA-Z]+);/g, (m, name) => (name in named ? named[name] : m));
+}
 /** Safely parse any date-like value to ISO; returns null for invalid/missing input. */
 function safeIsoDate(v: unknown): string | null {
   if (v === null || v === undefined || v === '') return null;
