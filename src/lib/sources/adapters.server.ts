@@ -572,48 +572,22 @@ export async function fetchUSAJobs(keyword = 'software', location = ''): Promise
 // with 0 items every time — which is exactly what was happening before
 // this rewrite.
 // ============================================================
-const APIFY_RUN_TIMEOUT_MS = 110_000; // a touch under the run-tier 120s cap
-
 // Hard cap on (query × location) URLs per actor run, so 20 cyber keywords
 // don't blow past Apify's sync 100s window.
 const APIFY_MAX_URLS_PER_ACTOR = 8;
 
+/**
+ * Thin shim — every adapter calls into the shared apify-client module so
+ * errors / empty-dataset diagnostics become real exceptions the run-tier
+ * route can surface to the user.
+ */
 async function runApifyActor(
   actorId: string,
   payload: Record<string, unknown>,
 ): Promise<Array<Record<string, unknown>>> {
-  const token = process.env.APIFY_TOKEN;
-  if (!token) return [];
-  const url =
-    `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items` +
-    `?token=${token}&timeout=100&memory=1024&clean=true`;
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), APIFY_RUN_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'LovableJobBot/1.0' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`apify ${actorId} ${res.status}: ${body.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    const arr = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
-    // Lightweight observability: server logs let us tell "0 items but
-    // ran" from "garbage in" after the fact.
-    if (arr.length === 0) {
-      console.log(
-        `[apify] ${actorId} returned 0 items; payload keys=${Object.keys(payload).join(',')}`,
-      );
-    }
-    return arr;
-  } finally {
-    clearTimeout(to);
-  }
+  return runActorSync(actorId, payload);
 }
+
 
 export type ApifyCtx = { queries: string[]; locations: string[] };
 
