@@ -360,6 +360,7 @@ function ApplicationDetailPage() {
 
         {/* Right pane */}
         <div className="space-y-4 min-w-0">
+          <LatestEventBanner events={eventsQuery.data ?? []} />
           <LiveActivityPanel logs={logs} active={isActive} />
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="hidden">
@@ -368,6 +369,7 @@ function ApplicationDetailPage() {
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="resume">Resume</TabsTrigger>
               <TabsTrigger value="cover">Cover</TabsTrigger>
+              <TabsTrigger value="screenshots">Screenshots</TabsTrigger>
             </TabsList>
             <TabsContent value="jd" className="mt-0">
               <JobDescriptionPanel
@@ -398,6 +400,9 @@ function ApplicationDetailPage() {
               ) : (
                 <PdfViewer url={coverUrl} title={coverLetter?.name ?? "Cover letter"} isGenerating={isActive && !coverUrl} />
               )}
+            </TabsContent>
+            <TabsContent value="screenshots" className="mt-0">
+              <ScreenshotsPanel paths={app.screenshots ?? []} />
             </TabsContent>
           </Tabs>
 
