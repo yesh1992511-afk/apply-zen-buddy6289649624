@@ -1,44 +1,60 @@
-# One-shot batch: scrape until N matched, then auto-apply
+## Audit summary
 
-A single button that scrapes source-by-source until N matched jobs are inserted, then stops scraping. The existing apply worker (pg_cron every minute + `auto_queue_matched_job` trigger) submits the resulting applications automatically. Default N = 10, user-adjustable (1–50).
+I traced the full scrape → match → queue → apply pipeline against the live DB and code. Wiring is intact:
 
-## How it works end-to-end
+- **All 32 triggers attached** — `jobs_auto_queue_matched_job` (queues applications when `matched` flips true), `enforce_apply_quota_trg` (caps daily applies), `block_extra_signups_trigger` (single-user lock), `on_auth_user_created` (seeds profile/settings), `validate_*` and `set_updated_at` triggers all present.
+- **All crons scheduled** — `apply-worker-every-minute`, `sources-hot-tier` */15, `scrape-usajobs` hourly, `scrape-apify` /4h, 8 `sources-warm-shard-*` jobs, heartbeat /5, daily-summary /15, log purge & worker-invocations prune nightly.
+- **`runOneShotBatch` → `/api/public/sources/run-batch`** is fully wired with `WORKER_CRON_SECRET`, daily-cap clamp, `RunBatchButton` mounted on `/jobs` and `/applications`.
+- **RLS** — every user-data table scoped to `auth.uid() = user_id`. `service_role`-only on `jd_analysis_cache`. No leaks.
 
-1. User clicks **"Run batch (10)"** on `/jobs`.
-2. Client calls `runOneShotBatch` server fn (auth-protected).
-3. Server fn:
-   - Reads `automation_settings` to honor `max_applies_per_day` remaining today → effective target = `min(N, remaining)`.
-   - Lists enabled `sources` for the user, ordered hot → warm → apify (matches existing tier ordering).
-   - POSTs to the worker route `/api/public/sources/run-batch` with `{ userId, target }` and an internal-secret header.
-4. The new worker route loops sources sequentially, calling Python `run_source_by_key(key, match_limit=remaining)` (already exists in `worker/app/sources/registry.py`). After each source, decrements `remaining`; stops at 0 or when sources exhausted.
-5. As matched jobs are inserted, the existing `auto_queue_matched_job` DB trigger creates `applications` rows in `queued` state (only when `automation_settings.enabled = true`).
-6. The existing `apply-worker-every-minute` pg_cron job drains the queue and submits them. Nothing else to wire.
+## Real issues to fix
 
-## Files
+### 1. Auto-apply UX is misleading (HIGH — the one you actually care about)
 
-**New**
-- `src/routes/api/public/sources/run-batch.ts` — public route. Validates `x-internal-secret` against `WORKER_CRON_SECRET`. Body: `{ userId: uuid, target: 1..50 }`. Uses `supabaseAdmin` to list enabled sources (ordered by kind: hot→warm→apify), then forwards `match_limit` per source to the worker process via the same mechanism used by `run-tier.ts`. Returns `{ inserted, perSource: [{key, inserted}] }`.
+`src/routes/api/public/hooks/apply-worker.ts` lines 211–286 always set `status = 'needs_review'` even when a supported portal (greenhouse / lever / ashby / workable / smartrecruiters / recruitee) is detected. The worker tailors the resume + cover letter and prepares form fills, then stops at "ready to submit" because actual browser submission requires a headless browser, which the Cloudflare Worker runtime cannot host. The user-facing copy still says "Auto apply", which is misleading.
 
-**Edited**
-- `src/lib/applications.functions.ts` — add `runOneShotBatch` server fn (`requireSupabaseAuth`), Zod-validated `{ target?: number }`, default 10. Computes remaining daily quota, calls the public batch route via `fetch` with internal secret, returns summary. Logs to `logs` table via existing pattern.
-- `src/routes/_authenticated/jobs.tsx` — header action: a dropdown/number input (default 10) + **Run batch** button. Disabled while in-flight. On success: toast `"Inserted X matched jobs — apply worker will submit them"` + `queryClient.invalidateQueries(['jobs'])` and `['applications']`. On error: toast error.
-- `src/routes/_authenticated/applications.tsx` — mirror the same button above the kanban so user can trigger from either page.
-- `worker/app/sources/registry.py` — small helper `run_batch_until(target, source_keys)` that iterates keys and calls `run_source_by_key(k, match_limit=remaining)` decrementing `remaining`. Returns `{inserted, perSource}`. (Existing `match_limit` plumbing already supported.)
-- `src/routes/api/public/sources/run-tier.ts` — no change needed; new batch route is a sibling.
+Fix (frontend + copy + status semantics — no backend behavior change because the runtime constraint is real):
+- Rename the user-visible label everywhere from "Auto apply" → **"Auto prepare & queue for 1-click submit"** in `RunBatchButton`, `automation.tsx`, `jobs.tsx`, `applications.tsx`, kanban column header.
+- Add a clear `needs_review` kanban column tooltip: "Resume + cover letter generated, form fills mapped. Click 'Open & 1-click apply' to submit on the portal."
+- In `AllApplicationsKanban` / `applications.$id.tsx`, add a prominent **"Open job → 1-click submit"** button on `needs_review` cards that opens `job.url` in a new tab and copies the cover letter to clipboard.
+- Update the success toast in `RunBatchButton` from "Apply worker will submit them" → "Apply worker will prepare them — review and 1-click submit from Applications."
 
-## Guardrails
+(No headless-browser feature is added — that would require a separate VPS/Browserless service the user hasn't provisioned. We make the existing semi-automated flow honest and 1-click fast.)
 
-- **Auth**: server fn requires session; public worker route requires `x-internal-secret == process.env.WORKER_CRON_SECRET` (existing pattern).
-- **Quota**: target is clamped to remaining daily apply quota so the worker doesn't scrape jobs that can't be queued today.
-- **Idempotency**: existing `dedupe_hash` on jobs + `auto_queue_matched_job` skip-if-exists logic prevent duplicates if the user clicks twice.
-- **Automation enabled check**: server fn returns a clear error if `automation_settings.enabled = false` (since `auto_queue_matched_job` is a no-op then). UI shows: "Enable Automation in Settings first."
-- **Input validation**: Zod `target: z.number().int().min(1).max(50)`.
-- **No new tables, no schema changes, no RLS edits, no cron changes.**
+### 2. Missing Content-Security-Policy header (MEDIUM — security scanner finding)
 
-## Out of scope
+`applications.$id.tsx` renders scraped job HTML via `dangerouslySetInnerHTML` with DOMPurify. Add a CSP response header as defense-in-depth.
 
-- Pausing source cadence permanently (this is one-shot only; scheduled runs continue on their own).
-- Progress streaming (the call is synchronous and returns once the worker loop finishes; for N=10 across hot sources this is typically <60s).
-- Worker-side per-source parallelism changes.
+Fix: extend `src/start.ts` request middleware (`errorMiddleware` lives there) with a small `securityHeadersMiddleware` that sets:
+```
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.gpteng.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'self'
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+```
+(`'unsafe-inline'` for scripts kept because Lovable's preview shim needs it; the policy still blocks injected `<script src=…>` and `eval`, which is the real XSS surface.)
 
-Approve to build.
+### 3. pg extensions in `public` schema (LOW — Supabase linter warn)
+
+`pg_net` and `pg_cron` are installed in `public`. Move them to a dedicated `extensions` schema via migration:
+```sql
+CREATE SCHEMA IF NOT EXISTS extensions;
+ALTER EXTENSION pg_net SET SCHEMA extensions;
+ALTER EXTENSION pg_cron SET SCHEMA extensions;
+GRANT USAGE ON SCHEMA extensions TO postgres, service_role;
+```
+Then update `bootstrap_apply_worker_cron` `SET search_path` to include `extensions`, and verify cron jobs still tick (they reference `cron.schedule` / `net.http_post` by full qualification already, so no breakage expected).
+
+## Out of scope (intentionally)
+
+- Building a true headless-browser submitter (needs separate infra; user hasn't provisioned).
+- Re-architecting source adapters (they work, audited in prior turn).
+- Adding new tables, RLS changes, or new server fns (system is feature-complete).
+
+## Files changed
+
+- `src/components/RunBatchButton.tsx` (copy)
+- `src/components/AllApplicationsKanban.tsx` (column label + tooltip + 1-click button)
+- `src/routes/_authenticated/applications.$id.tsx` (1-click submit panel for `needs_review`)
+- `src/routes/_authenticated/automation.tsx` (label clarity)
+- `src/start.ts` (add `securityHeadersMiddleware`)
+- New migration: move extensions to `extensions` schema
