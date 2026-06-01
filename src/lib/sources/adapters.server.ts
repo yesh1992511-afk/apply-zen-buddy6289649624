@@ -5,6 +5,14 @@
  * Server-only file: ".server.ts" prevents client-bundle leakage.
  */
 import { createHash } from 'crypto';
+import {
+  decodeHtmlEntities as _decodeHtmlEntities,
+  normalizeDescription,
+  stripTags as _stripTags,
+} from './normalize.server';
+import { runActorSync, ApifyEmptyError } from './apify-client.server';
+
+export { ApifyEmptyError };
 
 export type NormalizedJob = {
   source_key: string;
@@ -28,25 +36,9 @@ export type NormalizedJob = {
 
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 
-/** Decode HTML entities (named + numeric) without using the DOM. Safe in Worker runtime. */
-export function decodeHtmlEntities(str: string): string {
-  if (!str || str.indexOf('&') === -1) return str;
-  const named: Record<string, string> = {
-    lt: '<', gt: '>', amp: '&', quot: '"', apos: "'", nbsp: ' ',
-    copy: '©', reg: '®', trade: '™', hellip: '…', mdash: '—', ndash: '–',
-    lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', bull: '•', middot: '·',
-  };
-  return str
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
-      const n = parseInt(h, 16);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
-    })
-    .replace(/&#(\d+);/g, (_, d) => {
-      const n = parseInt(d, 10);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
-    })
-    .replace(/&([a-zA-Z]+);/g, (m, name) => (name in named ? named[name] : m));
-}
+/** Back-compat re-export so any external import keeps working. */
+export const decodeHtmlEntities = _decodeHtmlEntities;
+
 /** Safely parse any date-like value to ISO; returns null for invalid/missing input. */
 function safeIsoDate(v: unknown): string | null {
   if (v === null || v === undefined || v === '') return null;
