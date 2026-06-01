@@ -27,6 +27,26 @@ export type NormalizedJob = {
 };
 
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
+
+/** Decode HTML entities (named + numeric) without using the DOM. Safe in Worker runtime. */
+export function decodeHtmlEntities(str: string): string {
+  if (!str || str.indexOf('&') === -1) return str;
+  const named: Record<string, string> = {
+    lt: '<', gt: '>', amp: '&', quot: '"', apos: "'", nbsp: ' ',
+    copy: '©', reg: '®', trade: '™', hellip: '…', mdash: '—', ndash: '–',
+    lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', bull: '•', middot: '·',
+  };
+  return str
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
+      const n = parseInt(h, 16);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
+    })
+    .replace(/&#(\d+);/g, (_, d) => {
+      const n = parseInt(d, 10);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
+    })
+    .replace(/&([a-zA-Z]+);/g, (m, name) => (name in named ? named[name] : m));
+}
 /** Safely parse any date-like value to ISO; returns null for invalid/missing input. */
 function safeIsoDate(v: unknown): string | null {
   if (v === null || v === undefined || v === '') return null;
@@ -255,7 +275,10 @@ export async function fetchGreenhouse(slug: string): Promise<NormalizedJob[]> {
     `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
   );
   if (!data?.jobs) return [];
-  return data.jobs.map((j) => ({
+  return data.jobs.map((j) => {
+    const rawContent = typeof j.content === 'string' ? j.content : null;
+    const html = rawContent ? decodeHtmlEntities(rawContent) : null;
+    return {
     source_key: `greenhouse:${slug}`,
     source_job_id: String(j.id),
     dedupe_hash: mkHash(`greenhouse:${slug}`, String(j.id), String(j.absolute_url ?? '')),
@@ -264,8 +287,8 @@ export async function fetchGreenhouse(slug: string): Promise<NormalizedJob[]> {
     location: (j.location as { name?: string } | null)?.name ?? null,
     remote: null,
     url: String(j.absolute_url ?? ''),
-    description: typeof j.content === 'string' ? j.content.replace(/<[^>]+>/g, ' ').slice(0, 8000) : null,
-    description_html: typeof j.content === 'string' ? j.content : null,
+    description: html ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 8000) : null,
+    description_html: html,
     salary_min: null,
     salary_max: null,
     salary_currency: null,
@@ -273,8 +296,10 @@ export async function fetchGreenhouse(slug: string): Promise<NormalizedJob[]> {
     seniority: null,
     posted_at: j.updated_at ? new Date(String(j.updated_at)).toISOString() : null,
     raw: j,
-  }));
+    };
+  });
 }
+
 
 export async function fetchLever(slug: string): Promise<NormalizedJob[]> {
   const data = await fetchJson<Array<Record<string, unknown>>>(`https://api.lever.co/v0/postings/${slug}?mode=json`);

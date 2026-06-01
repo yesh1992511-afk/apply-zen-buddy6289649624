@@ -4,6 +4,15 @@ import { Building2, MapPin, ExternalLink, Send, Clock, DollarSign } from "lucide
 import { PortalBadge } from "@/components/PortalBadge";
 import { timeAgo, sanitizeHtml } from "@/lib/timeAgo";
 
+function decodeEntities(str: string): string {
+  if (!str || !/&(?:lt|gt|amp|quot|#\d+|#x[0-9a-f]+);/i.test(str)) return str;
+  const named: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'", nbsp: " " };
+  return str
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&([a-zA-Z]+);/g, (m, n) => (n in named ? named[n] : m));
+}
+
 export type JobDialogJob = {
   id: string;
   title: string;
@@ -67,7 +76,7 @@ export function JobDescriptionDialog({
           {job.description_html ? (
             <div
               className="prose prose-sm prose-invert max-w-none [&_a]:text-primary [&_h1,&_h2,&_h3]:font-heading [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(job.description_html) }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(decodeEntities(job.description_html)) }}
             />
           ) : job.description ? (
             <div className="whitespace-pre-wrap text-foreground/90">{job.description}</div>
