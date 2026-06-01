@@ -299,23 +299,7 @@ export async function fetchGreenhouse(slug: string): Promise<NormalizedJob[]> {
     };
   });
 }
-    dedupe_hash: mkHash(`greenhouse:${slug}`, String(j.id), String(j.absolute_url ?? '')),
-    title: String(j.title ?? ''),
-    company: slug,
-    location: (j.location as { name?: string } | null)?.name ?? null,
-    remote: null,
-    url: String(j.absolute_url ?? ''),
-    description: typeof j.content === 'string' ? j.content.replace(/<[^>]+>/g, ' ').slice(0, 8000) : null,
-    description_html: typeof j.content === 'string' ? j.content : null,
-    salary_min: null,
-    salary_max: null,
-    salary_currency: null,
-    employment_type: null,
-    seniority: null,
-    posted_at: j.updated_at ? new Date(String(j.updated_at)).toISOString() : null,
-    raw: j,
-  }));
-}
+
 
 export async function fetchLever(slug: string): Promise<NormalizedJob[]> {
   const data = await fetchJson<Array<Record<string, unknown>>>(`https://api.lever.co/v0/postings/${slug}?mode=json`);
