@@ -24,8 +24,10 @@ import {
   AGGREGATOR_PROVIDERS,
   APIFY_PROVIDERS,
   USAJOBS_QUERIES,
+  ApifyEmptyError,
   type NormalizedJob,
 } from '@/lib/sources/adapters.server';
+
 
 const BodySchema = z.object({
   userId: z.string().uuid(),
@@ -110,12 +112,14 @@ export const Route = createFileRoute('/api/public/sources/run-batch')({
           try {
             jobs = await withTimeout(runSource(spec, ctx), ADAPTER_TIMEOUT_MS);
           } catch (e) {
-            entry.error = String(e).slice(0, 200);
+            const isEmpty = e instanceof ApifyEmptyError;
+            const msg = String((e as Error)?.message ?? e).slice(0, 500);
+            entry.error = msg.slice(0, 200);
             await supabaseAdmin.from('sources').update({
               last_run_at: runAt,
-              last_run_status: 'failed',
+              last_run_status: isEmpty ? 'succeeded' : 'failed',
               last_run_count: 0,
-              last_error: entry.error,
+              last_error: msg,
             }).eq('user_id', userId).eq('key', sourceKey);
             perSource.push(entry);
             continue;
@@ -123,18 +127,16 @@ export const Route = createFileRoute('/api/public/sources/run-batch')({
           entry.fetched = jobs.length;
           totalFetched += jobs.length;
           if (jobs.length === 0) {
-            const warning = spec.provider.startsWith('apify:')
-              ? 'Apify actor returned 0 items for your keywords/locations — verify actor input.'
-              : 'Source returned 0 jobs this run.';
             await supabaseAdmin.from('sources').update({
               last_run_at: runAt,
               last_run_status: 'succeeded',
               last_run_count: 0,
-              last_error: warning,
+              last_error: 'Source returned 0 jobs this run for your configured keywords/locations.',
             }).eq('user_id', userId).eq('key', sourceKey);
             perSource.push(entry);
             continue;
           }
+
 
           // Upsert in chunks but check matched count after every chunk so we can stop early.
           const remaining = () => target - totalMatched;

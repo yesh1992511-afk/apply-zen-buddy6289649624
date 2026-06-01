@@ -5,9 +5,11 @@ import {
   AGGREGATOR_PROVIDERS,
   APIFY_PROVIDERS,
   USAJOBS_QUERIES,
+  ApifyEmptyError,
   type NormalizedJob,
 } from '@/lib/sources/adapters.server';
 import { SEED_SLUGS } from '@/lib/sources/seed-slugs';
+
 
 /**
  * Public cron endpoint. Called by pg_cron at multiple cadences.
@@ -140,10 +142,15 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
 
               const runAt = new Date().toISOString();
               if (r.status === 'rejected') {
-                summary[sourceKey].errors++;
-                summary[sourceKey].error_message = String(r.reason).slice(0, 200);
-                totalErr++;
-                // Per-source health: failed — upsert base row then update status fields
+                const reason = r.reason;
+                const isEmpty = reason instanceof ApifyEmptyError;
+                const msg = String((reason as Error)?.message ?? reason).slice(0, 500);
+                if (!isEmpty) {
+                  summary[sourceKey].errors++;
+                  summary[sourceKey].error_message = msg.slice(0, 200);
+                  totalErr++;
+                }
+                // Per-source health — upsert base row then update status fields
                 await supabaseAdmin.from('sources').upsert(
                   {
                     user_id: userId,
@@ -157,12 +164,13 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
                 );
                 await supabaseAdmin.from('sources').update({
                   last_run_at: runAt,
-                  last_run_status: 'failed',
+                  last_run_status: isEmpty ? 'succeeded' : 'failed',
                   last_run_count: 0,
-                  last_error: String(r.reason).slice(0, 500),
+                  last_error: msg,
                 }).eq('user_id', userId).eq('key', sourceKey);
                 continue;
               }
+
 
               const jobs: NormalizedJob[] = r.value;
               summary[sourceKey].fetched += jobs.length;

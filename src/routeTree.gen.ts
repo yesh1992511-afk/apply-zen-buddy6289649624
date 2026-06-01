@@ -47,6 +47,7 @@ import { Route as ApiPublicSourcesRunTierRouteImport } from './routes/api/public
 import { Route as ApiPublicSourcesRunBatchRouteImport } from './routes/api/public/sources/run-batch'
 import { Route as ApiPublicSourcesQueueApplyRouteImport } from './routes/api/public/sources/queue-apply'
 import { Route as ApiPublicSourcesIngestExtensionRouteImport } from './routes/api/public/sources/ingest-extension'
+import { Route as ApiPublicSourcesApifyProbeRouteImport } from './routes/api/public/sources/apify-probe'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksCheckHeartbeatRouteImport } from './routes/api/public/hooks/check-heartbeat'
 import { Route as ApiPublicHooksBootstrapCronRouteImport } from './routes/api/public/hooks/bootstrap-cron'
@@ -252,6 +253,12 @@ const ApiPublicSourcesIngestExtensionRoute =
     path: '/api/public/sources/ingest-extension',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicSourcesApifyProbeRoute =
+  ApiPublicSourcesApifyProbeRouteImport.update({
+    id: '/api/public/sources/apify-probe',
+    path: '/api/public/sources/apify-probe',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksDailySummaryRoute =
   ApiPublicHooksDailySummaryRouteImport.update({
     id: '/api/public/hooks/daily-summary',
@@ -319,6 +326,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/bootstrap-cron': typeof ApiPublicHooksBootstrapCronRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/sources/apify-probe': typeof ApiPublicSourcesApifyProbeRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
   '/api/public/sources/queue-apply': typeof ApiPublicSourcesQueueApplyRoute
   '/api/public/sources/run-batch': typeof ApiPublicSourcesRunBatchRoute
@@ -362,6 +370,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/bootstrap-cron': typeof ApiPublicHooksBootstrapCronRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/sources/apify-probe': typeof ApiPublicSourcesApifyProbeRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
   '/api/public/sources/queue-apply': typeof ApiPublicSourcesQueueApplyRoute
   '/api/public/sources/run-batch': typeof ApiPublicSourcesRunBatchRoute
@@ -408,6 +417,7 @@ export interface FileRoutesById {
   '/api/public/hooks/bootstrap-cron': typeof ApiPublicHooksBootstrapCronRoute
   '/api/public/hooks/check-heartbeat': typeof ApiPublicHooksCheckHeartbeatRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/sources/apify-probe': typeof ApiPublicSourcesApifyProbeRoute
   '/api/public/sources/ingest-extension': typeof ApiPublicSourcesIngestExtensionRoute
   '/api/public/sources/queue-apply': typeof ApiPublicSourcesQueueApplyRoute
   '/api/public/sources/run-batch': typeof ApiPublicSourcesRunBatchRoute
@@ -454,6 +464,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/bootstrap-cron'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/sources/apify-probe'
     | '/api/public/sources/ingest-extension'
     | '/api/public/sources/queue-apply'
     | '/api/public/sources/run-batch'
@@ -497,6 +508,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/bootstrap-cron'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/sources/apify-probe'
     | '/api/public/sources/ingest-extension'
     | '/api/public/sources/queue-apply'
     | '/api/public/sources/run-batch'
@@ -542,6 +554,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/bootstrap-cron'
     | '/api/public/hooks/check-heartbeat'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/sources/apify-probe'
     | '/api/public/sources/ingest-extension'
     | '/api/public/sources/queue-apply'
     | '/api/public/sources/run-batch'
@@ -563,6 +576,7 @@ export interface RootRouteChildren {
   ApiPublicHooksBootstrapCronRoute: typeof ApiPublicHooksBootstrapCronRoute
   ApiPublicHooksCheckHeartbeatRoute: typeof ApiPublicHooksCheckHeartbeatRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
+  ApiPublicSourcesApifyProbeRoute: typeof ApiPublicSourcesApifyProbeRoute
   ApiPublicSourcesIngestExtensionRoute: typeof ApiPublicSourcesIngestExtensionRoute
   ApiPublicSourcesQueueApplyRoute: typeof ApiPublicSourcesQueueApplyRoute
   ApiPublicSourcesRunBatchRoute: typeof ApiPublicSourcesRunBatchRoute
@@ -840,6 +854,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSourcesIngestExtensionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sources/apify-probe': {
+      id: '/api/public/sources/apify-probe'
+      path: '/api/public/sources/apify-probe'
+      fullPath: '/api/public/sources/apify-probe'
+      preLoaderRoute: typeof ApiPublicSourcesApifyProbeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/daily-summary': {
       id: '/api/public/hooks/daily-summary'
       path: '/api/public/hooks/daily-summary'
@@ -979,6 +1000,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksBootstrapCronRoute: ApiPublicHooksBootstrapCronRoute,
   ApiPublicHooksCheckHeartbeatRoute: ApiPublicHooksCheckHeartbeatRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
+  ApiPublicSourcesApifyProbeRoute: ApiPublicSourcesApifyProbeRoute,
   ApiPublicSourcesIngestExtensionRoute: ApiPublicSourcesIngestExtensionRoute,
   ApiPublicSourcesQueueApplyRoute: ApiPublicSourcesQueueApplyRoute,
   ApiPublicSourcesRunBatchRoute: ApiPublicSourcesRunBatchRoute,

@@ -5,6 +5,14 @@
  * Server-only file: ".server.ts" prevents client-bundle leakage.
  */
 import { createHash } from 'crypto';
+import {
+  decodeHtmlEntities as _decodeHtmlEntities,
+  normalizeDescription,
+  stripTags as _stripTags,
+} from './normalize.server';
+import { runActorSync, ApifyEmptyError } from './apify-client.server';
+
+export { ApifyEmptyError };
 
 export type NormalizedJob = {
   source_key: string;
@@ -28,25 +36,9 @@ export type NormalizedJob = {
 
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 
-/** Decode HTML entities (named + numeric) without using the DOM. Safe in Worker runtime. */
-export function decodeHtmlEntities(str: string): string {
-  if (!str || str.indexOf('&') === -1) return str;
-  const named: Record<string, string> = {
-    lt: '<', gt: '>', amp: '&', quot: '"', apos: "'", nbsp: ' ',
-    copy: '©', reg: '®', trade: '™', hellip: '…', mdash: '—', ndash: '–',
-    lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', bull: '•', middot: '·',
-  };
-  return str
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
-      const n = parseInt(h, 16);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
-    })
-    .replace(/&#(\d+);/g, (_, d) => {
-      const n = parseInt(d, 10);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
-    })
-    .replace(/&([a-zA-Z]+);/g, (m, name) => (name in named ? named[name] : m));
-}
+/** Back-compat re-export so any external import keeps working. */
+export const decodeHtmlEntities = _decodeHtmlEntities;
+
 /** Safely parse any date-like value to ISO; returns null for invalid/missing input. */
 function safeIsoDate(v: unknown): string | null {
   if (v === null || v === undefined || v === '') return null;
@@ -118,8 +110,7 @@ export async function fetchRemoteOK(): Promise<NormalizedJob[]> {
       location: (j.location as string) || 'Remote',
       remote: 'remote',
       url: String(j.url ?? `https://remoteok.com/remote-jobs/${j.id}`),
-      description: typeof j.description === 'string' ? j.description.slice(0, 8000) : null,
-      description_html: typeof j.description === 'string' ? j.description : null,
+      ...normalizeDescription(j.description),
       salary_min: typeof j.salary_min === 'number' ? j.salary_min : null,
       salary_max: typeof j.salary_max === 'number' ? j.salary_max : null,
       salary_currency: 'USD',
@@ -144,8 +135,7 @@ export async function fetchRemotive(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
     location: (j.candidate_required_location as string) || 'Remote',
     remote: 'remote',
     url: String(j.url ?? ''),
-    description: typeof j.description === 'string' ? j.description.replace(/<[^>]+>/g, ' ').slice(0, 8000) : null,
-    description_html: typeof j.description === 'string' ? j.description : null,
+    ...normalizeDescription(j.description),
     salary_min: null,
     salary_max: null,
     salary_currency: null,
@@ -168,8 +158,7 @@ export async function fetchArbeitnow(): Promise<NormalizedJob[]> {
     location: (j.location as string) || null,
     remote: j.remote ? 'remote' : null,
     url: String(j.url ?? ''),
-    description: typeof j.description === 'string' ? j.description.replace(/<[^>]+>/g, ' ').slice(0, 8000) : null,
-    description_html: typeof j.description === 'string' ? j.description : null,
+    ...normalizeDescription(j.description),
     salary_min: null,
     salary_max: null,
     salary_currency: null,
@@ -192,8 +181,7 @@ export async function fetchHimalayas(): Promise<NormalizedJob[]> {
     location: (j.locationRestrictions as string[])?.join(', ') || 'Remote',
     remote: 'remote',
     url: String(j.applicationLink ?? ''),
-    description: typeof j.excerpt === 'string' ? j.excerpt : null,
-    description_html: typeof j.excerpt === 'string' ? j.excerpt : null,
+    ...normalizeDescription(j.excerpt),
     salary_min: typeof j.minSalary === 'number' ? j.minSalary : null,
     salary_max: typeof j.maxSalary === 'number' ? j.maxSalary : null,
     salary_currency: (j.currency as string) || 'USD',
@@ -216,8 +204,7 @@ export async function fetchJobicy(): Promise<NormalizedJob[]> {
     location: (j.jobGeo as string) || 'Remote',
     remote: 'remote',
     url: String(j.url ?? ''),
-    description: typeof j.jobExcerpt === 'string' ? j.jobExcerpt : null,
-    description_html: typeof j.jobDescription === 'string' ? j.jobDescription : null,
+    ...normalizeDescription((j.jobDescription as string) || (j.jobExcerpt as string)),
     salary_min: typeof j.annualSalaryMin === 'number' ? j.annualSalaryMin : null,
     salary_max: typeof j.annualSalaryMax === 'number' ? j.annualSalaryMax : null,
     salary_currency: (j.salaryCurrency as string) || 'USD',
@@ -253,8 +240,7 @@ export async function fetchWeWorkRemotely(): Promise<NormalizedJob[]> {
       location: 'Remote',
       remote: 'remote',
       url: link,
-      description: desc.replace(/<[^>]+>/g, ' ').slice(0, 8000),
-      description_html: desc,
+      ...normalizeDescription(desc),
       salary_min: null,
       salary_max: null,
       salary_currency: null,
@@ -275,10 +261,7 @@ export async function fetchGreenhouse(slug: string): Promise<NormalizedJob[]> {
     `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
   );
   if (!data?.jobs) return [];
-  return data.jobs.map((j) => {
-    const rawContent = typeof j.content === 'string' ? j.content : null;
-    const html = rawContent ? decodeHtmlEntities(rawContent) : null;
-    return {
+  return data.jobs.map((j) => ({
     source_key: `greenhouse:${slug}`,
     source_job_id: String(j.id),
     dedupe_hash: mkHash(`greenhouse:${slug}`, String(j.id), String(j.absolute_url ?? '')),
@@ -287,8 +270,7 @@ export async function fetchGreenhouse(slug: string): Promise<NormalizedJob[]> {
     location: (j.location as { name?: string } | null)?.name ?? null,
     remote: null,
     url: String(j.absolute_url ?? ''),
-    description: html ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 8000) : null,
-    description_html: html,
+    ...normalizeDescription(j.content),
     salary_min: null,
     salary_max: null,
     salary_currency: null,
@@ -296,8 +278,8 @@ export async function fetchGreenhouse(slug: string): Promise<NormalizedJob[]> {
     seniority: null,
     posted_at: j.updated_at ? new Date(String(j.updated_at)).toISOString() : null,
     raw: j,
-    };
-  });
+  }));
+
 }
 
 
@@ -315,8 +297,7 @@ export async function fetchLever(slug: string): Promise<NormalizedJob[]> {
       location: (cat.location as string) || null,
       remote: typeof cat.location === 'string' && /remote/i.test(cat.location) ? 'remote' : null,
       url: String(j.hostedUrl ?? ''),
-      description: typeof j.descriptionPlain === 'string' ? j.descriptionPlain.slice(0, 8000) : null,
-      description_html: typeof j.description === 'string' ? j.description : null,
+      ...normalizeDescription((j.description as string) || (j.descriptionPlain as string)),
       salary_min: null,
       salary_max: null,
       salary_currency: null,
@@ -342,8 +323,7 @@ export async function fetchAshby(slug: string): Promise<NormalizedJob[]> {
     location: (j.location as string) || null,
     remote: j.isRemote ? 'remote' : null,
     url: String(j.jobUrl ?? ''),
-    description: typeof j.descriptionPlain === 'string' ? j.descriptionPlain.slice(0, 8000) : null,
-    description_html: typeof j.descriptionHtml === 'string' ? j.descriptionHtml : null,
+    ...normalizeDescription((j.descriptionHtml as string) || (j.descriptionPlain as string)),
     salary_min: null,
     salary_max: null,
     salary_currency: null,
@@ -426,8 +406,7 @@ export async function fetchRecruitee(slug: string): Promise<NormalizedJob[]> {
     location: (j.location as string) || null,
     remote: j.remote ? 'remote' : null,
     url: String(j.careers_url ?? ''),
-    description: typeof j.description === 'string' ? j.description.replace(/<[^>]+>/g, ' ').slice(0, 8000) : null,
-    description_html: typeof j.description === 'string' ? j.description : null,
+    ...normalizeDescription(j.description),
     salary_min: null,
     salary_max: null,
     salary_currency: null,
@@ -459,8 +438,7 @@ export async function fetchTeamtailor(slug: string): Promise<NormalizedJob[]> {
       location: null,
       remote: attrs['remote-status'] === 'fully' ? 'remote' : null,
       url,
-      description: typeof attrs.body === 'string' ? attrs.body.replace(/<[^>]+>/g, ' ').slice(0, 8000) : null,
-      description_html: typeof attrs.body === 'string' ? attrs.body : null,
+      ...normalizeDescription(attrs.body),
       salary_min: null, salary_max: null, salary_currency: null,
       employment_type: (attrs['employment-type'] as string) || null,
       seniority: (attrs['experience'] as string) || null,
@@ -495,8 +473,7 @@ export async function fetchPersonio(slug: string): Promise<NormalizedJob[]> {
       location: office || null,
       remote: /remote/i.test(office) ? 'remote' : null,
       url,
-      description: get(b, 'jobDescriptions').replace(/<[^>]+>/g, ' ').slice(0, 8000) || null,
-      description_html: get(b, 'jobDescriptions') || null,
+      ...normalizeDescription(get(b, 'jobDescriptions')),
       salary_min: null, salary_max: null, salary_currency: null,
       employment_type: get(b, 'employmentType') || null,
       seniority: get(b, 'seniority') || null,
@@ -571,8 +548,7 @@ export async function fetchUSAJobs(keyword = 'software', location = ''): Promise
       location: locs.map((l) => l.LocationName).filter(Boolean).join('; ') || null,
       remote: /remote/i.test(String(d.PositionTitle ?? '')) ? 'remote' : null,
       url,
-      description: typeof d.QualificationSummary === 'string' ? (d.QualificationSummary as string).slice(0, 8000) : null,
-      description_html: null,
+      ...normalizeDescription(d.QualificationSummary),
       salary_min: ((d.PositionRemuneration as Array<Record<string, unknown>>)?.[0]?.MinimumRange) ? Math.round(Number((d.PositionRemuneration as Array<Record<string, unknown>>)[0].MinimumRange)) : null,
       salary_max: ((d.PositionRemuneration as Array<Record<string, unknown>>)?.[0]?.MaximumRange) ? Math.round(Number((d.PositionRemuneration as Array<Record<string, unknown>>)[0].MaximumRange)) : null,
       salary_currency: 'USD',
@@ -596,48 +572,22 @@ export async function fetchUSAJobs(keyword = 'software', location = ''): Promise
 // with 0 items every time — which is exactly what was happening before
 // this rewrite.
 // ============================================================
-const APIFY_RUN_TIMEOUT_MS = 110_000; // a touch under the run-tier 120s cap
-
 // Hard cap on (query × location) URLs per actor run, so 20 cyber keywords
 // don't blow past Apify's sync 100s window.
 const APIFY_MAX_URLS_PER_ACTOR = 8;
 
+/**
+ * Thin shim — every adapter calls into the shared apify-client module so
+ * errors / empty-dataset diagnostics become real exceptions the run-tier
+ * route can surface to the user.
+ */
 async function runApifyActor(
   actorId: string,
   payload: Record<string, unknown>,
 ): Promise<Array<Record<string, unknown>>> {
-  const token = process.env.APIFY_TOKEN;
-  if (!token) return [];
-  const url =
-    `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items` +
-    `?token=${token}&timeout=100&memory=1024&clean=true`;
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), APIFY_RUN_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'LovableJobBot/1.0' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`apify ${actorId} ${res.status}: ${body.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    const arr = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
-    // Lightweight observability: server logs let us tell "0 items but
-    // ran" from "garbage in" after the fact.
-    if (arr.length === 0) {
-      console.log(
-        `[apify] ${actorId} returned 0 items; payload keys=${Object.keys(payload).join(',')}`,
-      );
-    }
-    return arr;
-  } finally {
-    clearTimeout(to);
-  }
+  return runActorSync(actorId, payload);
 }
+
 
 export type ApifyCtx = { queries: string[]; locations: string[] };
 
@@ -731,8 +681,7 @@ export async function fetchApifyLinkedIn(ctx?: ApifyCtx): Promise<NormalizedJob[
         location: (it.location as string) || null,
         remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
         url,
-        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-        description_html: null,
+        ...normalizeDescription(it.description),
         salary_min: null, salary_max: null, salary_currency: null,
         employment_type: (it.employmentType as string) || null,
         seniority: (it.seniorityLevel as string) || null,
@@ -773,8 +722,7 @@ export async function fetchApifyIndeed(ctx?: ApifyCtx): Promise<NormalizedJob[]>
         location: (it.location as string) || null,
         remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
         url,
-        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-        description_html: null,
+        ...normalizeDescription(it.description),
         salary_min: null, salary_max: null,
         salary_currency: (it.salary as { currency?: string } | undefined)?.currency ?? null,
         employment_type: (it.jobType as string) || null,
@@ -808,8 +756,7 @@ export async function fetchApifyGlassdoor(ctx?: ApifyCtx): Promise<NormalizedJob
         location: (it.location as string) || null,
         remote: null,
         url,
-        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-        description_html: null,
+        ...normalizeDescription(it.description),
         salary_min: null, salary_max: null, salary_currency: null,
         employment_type: null, seniority: null,
         posted_at: safeIsoDate(it.postedAt),
@@ -841,8 +788,7 @@ export async function fetchApifyZipRecruiter(ctx?: ApifyCtx): Promise<Normalized
         location: (it.location as string) || null,
         remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
         url,
-        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-        description_html: null,
+        ...normalizeDescription(it.description),
         salary_min: null, salary_max: null, salary_currency: 'USD',
         employment_type: (it.employmentType as string) || null,
         seniority: null,
@@ -875,8 +821,7 @@ export async function fetchApifyWellfound(ctx?: ApifyCtx): Promise<NormalizedJob
         location: (it.location as string) || null,
         remote: it.remote ? 'remote' : null,
         url,
-        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-        description_html: null,
+        ...normalizeDescription(it.description),
         salary_min: (it.salaryMin as number) ?? null,
         salary_max: (it.salaryMax as number) ?? null,
         salary_currency: (it.salaryCurrency as string) || 'USD',
@@ -913,8 +858,7 @@ export async function fetchApifyGoogleJobs(ctx?: ApifyCtx): Promise<NormalizedJo
         location: (it.location as string) || null,
         remote: /remote/i.test(String(it.location ?? '')) ? 'remote' : null,
         url,
-        description: typeof it.description === 'string' ? it.description.slice(0, 8000) : null,
-        description_html: null,
+        ...normalizeDescription(it.description),
         salary_min: null, salary_max: null, salary_currency: null,
         employment_type: null, seniority: null,
         posted_at: safeIsoDate(it.postedAt),
@@ -927,20 +871,9 @@ export async function fetchApifyGoogleJobs(ctx?: ApifyCtx): Promise<NormalizedJo
 // ============================================================
 // InfoSec-Jobs / isecjobs — dedicated cybersecurity job board.
 // ============================================================
-function decodeHtml(input: string): string {
-  return input
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+const decodeHtml = (s: string) => _decodeHtmlEntities(s).replace(/\s+/g, ' ').trim();
+const stripTags = (s: string) => _stripTags(_decodeHtmlEntities(s));
 
-function stripTags(input: string): string {
-  return decodeHtml(input.replace(/<[^>]+>/g, ' '));
-}
 
 function parseIsecJobsHtml(html: string): NormalizedJob[] {
   const abs = (u: string) => (u.startsWith('http') ? u : `https://isecjobs.com${u.startsWith('/') ? '' : '/'}${u}`);
@@ -1014,8 +947,7 @@ export async function fetchInfosecJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]>
         location: loc.slice(0, 300),
         remote: /remote/i.test(loc) ? 'remote' : null,
         url,
-        description: desc ? desc.slice(0, 8000) : null,
-        description_html: null,
+        ...normalizeDescription(desc),
         salary_min: null, salary_max: null, salary_currency: null,
         employment_type: (it.employment_type as string) || null,
         seniority: null,
