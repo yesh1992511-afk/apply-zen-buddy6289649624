@@ -275,9 +275,30 @@ export async function fetchGreenhouse(slug: string): Promise<NormalizedJob[]> {
     `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
   );
   if (!data?.jobs) return [];
-  return data.jobs.map((j) => ({
+  return data.jobs.map((j) => {
+    const rawContent = typeof j.content === 'string' ? j.content : null;
+    const html = rawContent ? decodeHtmlEntities(rawContent) : null;
+    return {
     source_key: `greenhouse:${slug}`,
     source_job_id: String(j.id),
+    dedupe_hash: mkHash(`greenhouse:${slug}`, String(j.id), String(j.absolute_url ?? '')),
+    title: String(j.title ?? ''),
+    company: slug,
+    location: (j.location as { name?: string } | null)?.name ?? null,
+    remote: null,
+    url: String(j.absolute_url ?? ''),
+    description: html ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 8000) : null,
+    description_html: html,
+    salary_min: null,
+    salary_max: null,
+    salary_currency: null,
+    employment_type: null,
+    seniority: null,
+    posted_at: j.updated_at ? new Date(String(j.updated_at)).toISOString() : null,
+    raw: j,
+    };
+  });
+}
     dedupe_hash: mkHash(`greenhouse:${slug}`, String(j.id), String(j.absolute_url ?? '')),
     title: String(j.title ?? ''),
     company: slug,
