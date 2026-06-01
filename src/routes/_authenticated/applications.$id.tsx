@@ -141,6 +141,8 @@ function ApplicationDetailPage() {
   // Fetch resume + cover-letter rows when ids change
   useEffect(() => {
     (async () => {
+      // Prefer the explicit resume_id, but fall back to the AI-generated resume
+      // that the worker stores in `generated_resumes` and references via `generated_resume_id`.
       if (app?.resume_id) {
         const { data: r } = await supabase
           .from("resumes")
@@ -151,6 +153,25 @@ function ApplicationDetailPage() {
         if (r?.pdf_storage_path) {
           const { getResumePdfUrl } = await import("@/lib/commands");
           setResumeUrl(await getResumePdfUrl(r.pdf_storage_path));
+        } else {
+          setResumeUrl(null);
+        }
+      } else if (app?.generated_resume_id) {
+        const { data: gr } = await supabase
+          .from("generated_resumes")
+          .select("id, pdf_storage_path, model")
+          .eq("id", app.generated_resume_id)
+          .maybeSingle();
+        if (gr) {
+          setResume({ id: gr.id, name: gr.model ? `AI-tailored (${gr.model})` : "AI-tailored resume", pdf_storage_path: gr.pdf_storage_path, kind: "generated" });
+          if (gr.pdf_storage_path) {
+            const { getResumePdfUrl } = await import("@/lib/commands");
+            setResumeUrl(await getResumePdfUrl(gr.pdf_storage_path));
+          } else {
+            setResumeUrl(null);
+          }
+        } else {
+          setResume(null); setResumeUrl(null);
         }
       } else {
         setResume(null);
@@ -169,7 +190,7 @@ function ApplicationDetailPage() {
         setCoverBody(null);
       }
     })();
-  }, [app?.resume_id, app?.cover_letter_id]);
+  }, [app?.resume_id, app?.generated_resume_id, app?.cover_letter_id]);
 
   const lastScope = logs.length > 0 ? logs[logs.length - 1].scope : null;
   const activeIdx = app ? deriveStep(app.status, lastScope) : 0;
