@@ -107,8 +107,20 @@ export function AllApplicationsKanban({
                   key={a.id}
                   className="block group rounded-lg border border-border/40 bg-surface-1 p-2.5 text-xs transition-all hover:border-primary/50 hover:bg-surface-2 hover:shadow-elegant"
                 >
-                  <div className="line-clamp-2 font-medium leading-snug">{a.job?.title ?? "Job"}</div>
-                  <div className="mt-0.5 truncate text-muted-foreground">{a.job?.company}</div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-2 font-medium leading-snug">{a.job?.title ?? "Job"}</div>
+                      <div className="mt-0.5 truncate text-muted-foreground">{a.job?.company}</div>
+                    </div>
+                    {a.job?.score != null && (
+                      <span className={cn(
+                        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-mono font-bold tabular-nums",
+                        a.job.score >= 85 ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"
+                        : a.job.score >= 60 ? "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/30"
+                        : "bg-rose-500/10 text-rose-200/80 ring-1 ring-rose-400/20",
+                      )}>{a.job.score}</span>
+                    )}
+                  </div>
                   <div className="mt-1.5 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground tabular-nums">
                       {(a.retry_count > 0 || a.attempts > 0) && (

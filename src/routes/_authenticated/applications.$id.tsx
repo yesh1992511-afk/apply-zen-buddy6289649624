@@ -13,7 +13,7 @@ import { PortalBadge } from "@/components/PortalBadge";
 import { ApplicationTimeline } from "@/components/ApplicationTimeline";
 import { applicationEventsQueryOptions, useRetryApplication } from "@/lib/queries/applications";
 import { timeAgo } from "@/lib/timeAgo";
-import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2, RefreshCw, History, Briefcase } from "lucide-react";
+import { ExternalLink, FileText, Mail, ClipboardList, ArrowLeft, CheckCircle2, AlertCircle, Loader2, RefreshCw, History, Briefcase, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -38,6 +38,7 @@ type AppRow = {
   job_id: string;
   resume_id: string | null;
   cover_letter_id: string | null;
+  generated_resume_id: string | null;
   attempts: number;
   retry_count: number | null;
   last_error: string | null;
@@ -53,6 +54,9 @@ type AppRow = {
     location: string | null; remote: string | null; posted_at: string | null;
     scraped_at: string;
     description: string | null; description_html: string | null;
+    score: number | null;
+    salary_min: number | null; salary_max: number | null; salary_currency: string | null;
+    employment_type: string | null; seniority: string | null;
   } | null;
 };
 
@@ -103,7 +107,7 @@ function ApplicationDetailPage() {
     (async () => {
       const { data, error } = await supabase
         .from("applications")
-        .select("id, status, job_id, resume_id, cover_letter_id, attempts, retry_count, last_error, dlq_reason, queued_at, started_at, applied_at, finished_at, screenshots, field_fills, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at, description, description_html)")
+        .select("id, status, job_id, resume_id, cover_letter_id, generated_resume_id, attempts, retry_count, last_error, dlq_reason, queued_at, started_at, applied_at, finished_at, screenshots, field_fills, job:jobs(title, company, url, source_key, location, remote, posted_at, scraped_at, description, description_html, score, salary_min, salary_max, salary_currency, employment_type, seniority)")
         .eq("id", id)
         .maybeSingle();
       if (cancelled) return;
@@ -137,6 +141,8 @@ function ApplicationDetailPage() {
   // Fetch resume + cover-letter rows when ids change
   useEffect(() => {
     (async () => {
+      // Prefer the explicit resume_id, but fall back to the AI-generated resume
+      // that the worker stores in `generated_resumes` and references via `generated_resume_id`.
       if (app?.resume_id) {
         const { data: r } = await supabase
           .from("resumes")
@@ -147,6 +153,25 @@ function ApplicationDetailPage() {
         if (r?.pdf_storage_path) {
           const { getResumePdfUrl } = await import("@/lib/commands");
           setResumeUrl(await getResumePdfUrl(r.pdf_storage_path));
+        } else {
+          setResumeUrl(null);
+        }
+      } else if (app?.generated_resume_id) {
+        const { data: gr } = await supabase
+          .from("generated_resumes")
+          .select("id, pdf_storage_path, model")
+          .eq("id", app.generated_resume_id)
+          .maybeSingle();
+        if (gr) {
+          setResume({ id: gr.id, name: gr.model ? `AI-tailored (${gr.model})` : "AI-tailored resume", pdf_storage_path: gr.pdf_storage_path, kind: "generated" });
+          if (gr.pdf_storage_path) {
+            const { getResumePdfUrl } = await import("@/lib/commands");
+            setResumeUrl(await getResumePdfUrl(gr.pdf_storage_path));
+          } else {
+            setResumeUrl(null);
+          }
+        } else {
+          setResume(null); setResumeUrl(null);
         }
       } else {
         setResume(null);
@@ -165,7 +190,7 @@ function ApplicationDetailPage() {
         setCoverBody(null);
       }
     })();
-  }, [app?.resume_id, app?.cover_letter_id]);
+  }, [app?.resume_id, app?.generated_resume_id, app?.cover_letter_id]);
 
   const lastScope = logs.length > 0 ? logs[logs.length - 1].scope : null;
   const activeIdx = app ? deriveStep(app.status, lastScope) : 0;
@@ -219,10 +244,25 @@ function ApplicationDetailPage() {
             <h1 className="font-heading text-xl font-bold">{app.job?.company}</h1>
             <span className="text-muted-foreground">·</span>
             <h2 className="text-lg text-muted-foreground">{app.job?.title}</h2>
+            {app.job?.score != null && (
+              <span className={cn(
+                "rounded-full px-2 py-0.5 text-[11px] font-mono font-bold tabular-nums",
+                app.job.score >= 85 ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"
+                : app.job.score >= 60 ? "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/30"
+                : "bg-rose-500/10 text-rose-200/80 ring-1 ring-rose-400/20",
+              )}>{app.job.score}</span>
+            )}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             {app.job?.source_key && <PortalBadge source={app.job.source_key} size="sm" />}
             {app.job?.location && <span>{app.job.location}{app.job.remote ? ` · ${app.job.remote}` : ""}</span>}
+            {app.job?.seniority && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-foreground/70">{app.job.seniority}</span>}
+            {app.job?.employment_type && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-foreground/70">{app.job.employment_type}</span>}
+            {(app.job?.salary_min || app.job?.salary_max) && (
+              <span className="rounded bg-gold/10 text-gold px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                {app.job?.salary_currency ?? "$"}{app.job?.salary_min ?? "?"}–{app.job?.salary_max ?? "?"}
+              </span>
+            )}
             <span>Queued {timeAgo(app.queued_at)}</span>
             {app.applied_at && <span className="text-success">Applied {timeAgo(app.applied_at)}</span>}
           </div>
@@ -284,6 +324,7 @@ function ApplicationDetailPage() {
               { v: "timeline", label: "Timeline", icon: History },
               { v: "resume", label: "Resume", icon: FileText },
               { v: "cover", label: "Cover letter", icon: Mail },
+              { v: "screenshots", label: "Screenshots", icon: ImageIcon },
             ].map((it) => (
               <button
                 key={it.v}
@@ -301,6 +342,11 @@ function ApplicationDetailPage() {
                     {eventsQuery.data.length}
                   </span>
                 )}
+                {it.v === "screenshots" && app.screenshots && app.screenshots.length > 0 && (
+                  <span className="ml-auto rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+                    {app.screenshots.length}
+                  </span>
+                )}
               </button>
             ))}
             {app.job?.url && (
@@ -314,6 +360,7 @@ function ApplicationDetailPage() {
 
         {/* Right pane */}
         <div className="space-y-4 min-w-0">
+          <LatestEventBanner events={eventsQuery.data ?? []} />
           <LiveActivityPanel logs={logs} active={isActive} />
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="hidden">
@@ -322,6 +369,7 @@ function ApplicationDetailPage() {
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="resume">Resume</TabsTrigger>
               <TabsTrigger value="cover">Cover</TabsTrigger>
+              <TabsTrigger value="screenshots">Screenshots</TabsTrigger>
             </TabsList>
             <TabsContent value="jd" className="mt-0">
               <JobDescriptionPanel
@@ -352,6 +400,9 @@ function ApplicationDetailPage() {
               ) : (
                 <PdfViewer url={coverUrl} title={coverLetter?.name ?? "Cover letter"} isGenerating={isActive && !coverUrl} />
               )}
+            </TabsContent>
+            <TabsContent value="screenshots" className="mt-0">
+              <ScreenshotsPanel paths={app.screenshots ?? []} />
             </TabsContent>
           </Tabs>
 
@@ -513,5 +564,75 @@ function TailoredResumePanel({ jobId }: { jobId: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+function LatestEventBanner({ events }: { events: Array<{ phase: string; status: string | null; message: string | null; ts: string }> }) {
+  if (events.length === 0) return null;
+  const last = events[events.length - 1];
+  const isErr = (last.status ?? "").toLowerCase().includes("fail") || (last.status ?? "").toLowerCase().includes("error");
+  const isOk = last.phase === "submitted" || last.phase === "offer" || last.phase === "interview";
+  const cls = isErr ? "border-destructive/40 bg-destructive/5 text-destructive"
+    : isOk ? "border-success/40 bg-success/5 text-success"
+    : "border-primary/30 bg-primary/5 text-foreground";
+  return (
+    <div className={cn("rounded-xl border px-4 py-3 flex items-start gap-3", cls)}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider">
+          <span>{last.phase}</span>
+          {last.status && <span className="opacity-70">· {last.status}</span>}
+          <span className="ml-auto opacity-70 normal-case font-normal tracking-normal">{timeAgo(last.ts)}</span>
+        </div>
+        {last.message && <div className="mt-1 text-sm leading-relaxed text-foreground/90">{last.message}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ScreenshotsPanel({ paths }: { paths: string[] }) {
+  const [urls, setUrls] = useState<Array<{ path: string; url: string }>>([]);
+  const [zoom, setZoom] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (paths.length === 0) { setUrls([]); return; }
+      const results: Array<{ path: string; url: string }> = [];
+      for (const p of paths) {
+        const { data } = await supabase.storage.from("screenshots").createSignedUrl(p, 3600);
+        if (data?.signedUrl) results.push({ path: p, url: data.signedUrl });
+      }
+      if (!cancelled) setUrls(results);
+    })();
+    return () => { cancelled = true; };
+  }, [paths]);
+
+  if (paths.length === 0) {
+    return (
+      <div className="rounded-xl border border-border/60 bg-card p-8 text-center text-sm text-muted-foreground italic">
+        No screenshots captured for this application yet.
+      </div>
+    );
+  }
+  return (
+    <>
+      <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border/40">
+          <h3 className="text-sm font-medium">Screenshots ({paths.length})</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3">
+          {urls.map((s, i) => (
+            <button key={s.path} onClick={() => setZoom(s.url)} className="group relative rounded-lg overflow-hidden border border-border/40 bg-surface-1 aspect-video hover:border-primary/50 transition-colors">
+              <img src={s.url} alt={`Screenshot ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+              <div className="absolute bottom-1 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white tabular-nums">#{i + 1}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      {zoom && (
+        <div onClick={() => setZoom(null)} className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 cursor-zoom-out">
+          <img src={zoom} alt="Screenshot" className="max-h-full max-w-full rounded-lg shadow-2xl" />
+        </div>
+      )}
+    </>
   );
 }

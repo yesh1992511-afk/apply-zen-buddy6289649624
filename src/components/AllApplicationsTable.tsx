@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, CheckCheck, AlertCircle, Inbox, LayoutGrid, Table as TableIcon } from "lucide-react";
+import { Search, AlertCircle, Inbox, LayoutGrid, Table as TableIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/timeAgo";
 import { EmptyState } from "@/components/EmptyState";
@@ -135,10 +134,6 @@ export function AllApplicationsTable() {
               <LayoutGrid className="h-3.5 w-3.5" /> Kanban
             </button>
           </div>
-          <Button variant="outline" size="sm" disabled className="gap-1.5">
-            <CheckCheck className="h-4 w-4" />
-            Approve all
-          </Button>
         </div>
       </div>
 
@@ -198,8 +193,9 @@ export function AllApplicationsTable() {
         />
       ) : (
         <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
-          <div className="hidden md:grid grid-cols-[1.7fr_0.7fr_0.7fr_0.9fr_0.7fr] gap-4 border-b border-border/40 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="hidden md:grid grid-cols-[1.7fr_0.5fr_0.7fr_0.7fr_0.9fr_0.7fr] gap-4 border-b border-border/40 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             <span>Company</span>
+            <span>Score</span>
             <span>Resume</span>
             <span>Cover letter</span>
             <span>Status</span>
@@ -211,12 +207,13 @@ export function AllApplicationsTable() {
               const company = a.job?.company ?? "—";
               const title = a.job?.title ?? "Application";
               const appliedTs = a.applied_at ?? a.queued_at;
+              const score = a.job?.score ?? null;
               return (
                 <li key={a.id}>
                   <Link
                     to="/applications/$id"
                     params={{ id: a.id }}
-                    className="grid grid-cols-[1.7fr_0.7fr_0.7fr_0.9fr_0.7fr] gap-4 px-4 py-3 items-center text-sm transition-colors hover:bg-surface-2/60"
+                    className="grid grid-cols-[1.7fr_0.5fr_0.7fr_0.7fr_0.9fr_0.7fr] gap-4 px-4 py-3 items-center text-sm transition-colors hover:bg-surface-2/60"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <CompanyAvatar name={company} />
@@ -224,6 +221,16 @@ export function AllApplicationsTable() {
                         <div className="font-medium truncate">{company}</div>
                         <div className="text-xs text-muted-foreground truncate">{title}</div>
                       </div>
+                    </div>
+                    <div>
+                      {score != null ? (
+                        <span className={cn(
+                          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-mono font-bold tabular-nums",
+                          score >= 85 ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"
+                          : score >= 60 ? "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/30"
+                          : "bg-rose-500/10 text-rose-200/80 ring-1 ring-rose-400/20",
+                        )}>{score}</span>
+                      ) : <span className="text-muted-foreground/60">—</span>}
                     </div>
                     <div>{readyDash(!!(a.resume_id || a.generated_resume_id))}</div>
                     <div>{readyDash(!!a.cover_letter_id)}</div>
