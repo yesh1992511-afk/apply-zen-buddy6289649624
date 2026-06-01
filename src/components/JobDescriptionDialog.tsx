@@ -76,7 +76,7 @@ export function JobDescriptionDialog({
           {job.description_html ? (
             <div
               className="prose prose-sm prose-invert max-w-none [&_a]:text-primary [&_h1,&_h2,&_h3]:font-heading [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(job.description_html) }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(decodeEntities(job.description_html)) }}
             />
           ) : job.description ? (
             <div className="whitespace-pre-wrap text-foreground/90">{job.description}</div>
