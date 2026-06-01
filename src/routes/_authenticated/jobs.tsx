@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { jobsQueryOptions, jobCountsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies, useClearAllJobs, useRescoreAllJobs, useLoosenActiveFilter, useDisableNoisySources, useDailyApplyBudget } from "@/lib/queries/jobs";
 import { Link } from "@tanstack/react-router";
 import { AllApplicationsTable } from "@/components/AllApplicationsTable";
+import { RunBatchButton } from "@/components/RunBatchButton";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
   head: () => ({ meta: [{ title: "Jobs — JobPilot" }] }),
@@ -157,6 +158,7 @@ function JobsPage() {
         description={`${filtered.length} matched · sorted by relevance score`}
         actions={
           <div className="flex items-center gap-2">
+            <RunBatchButton defaultTarget={10} />
             <Button variant="outline" size="sm" onClick={() => rescore.mutate()} disabled={rescore.isPending} className="gap-1.5">
               {rescore.isPending ? "Re-scoring…" : "Re-score"}
             </Button>

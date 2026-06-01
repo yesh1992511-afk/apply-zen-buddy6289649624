@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { AllApplicationsKanban } from "@/components/AllApplicationsKanban";
+import { RunBatchButton } from "@/components/RunBatchButton";
 import { applicationsListQueryOptions, bucketOf, type AppBucket } from "@/lib/queries/applications";
 
 export const Route = createFileRoute("/_authenticated/applications")({
@@ -40,7 +41,7 @@ function ApplicationsPage() {
 
   return (
     <div className="space-y-5 max-w-[1600px]">
-      <PageHeader title="Applications" description="Full pipeline view · live" />
+      <PageHeader title="Applications" description="Full pipeline view · live" actions={<RunBatchButton defaultTarget={10} />} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5">
           {TABS.map((t) => {
