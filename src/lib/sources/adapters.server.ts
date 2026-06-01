@@ -911,15 +911,22 @@ export async function fetchInfosecJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]>
 
 export type SourceSpec = { provider: string; slug?: string };
 
-// Only adapters that are 100% cybersecurity boards skip the relevance gate.
-// USAJobs is NOT here because users can configure non-cyber keyword queries.
-const CYBER_NATIVE_PROVIDERS = new Set<string>(['infosec_jobs']);
+// Keyword relevance gate. Respects the user's configured target titles
+// (ctx.queries). If no queries are provided, jobs pass through unfiltered
+// — better to surface noise than to silently drop every job for users
+// who target fields other than cybersecurity.
+function buildRelevanceRegex(queries: string[] | undefined): RegExp | null {
+  if (!queries) return null;
+  const cleaned = queries.map((q) => q.trim().toLowerCase()).filter((q) => q.length >= 2);
+  if (cleaned.length === 0) return null;
+  const escaped = cleaned.map((q) => q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`(${escaped.join('|')})`, 'i');
+}
 
-const CYBER_RE = /\b(cyber|cybersecurity|security engineer|security analyst|security architect|security operations|infosec|information security|appsec|application security|netsec|network security|secops|devsecops|soc analyst|siem|penetration|pentest|pen-test|red team|blue team|purple team|incident response|threat intel|threat hunt|vulnerab|malware|forensic|iam |identity (and|&) access|grc\b|compliance officer|ciso|cloud security|product security|offensive security|defensive security|security researcher|security consultant)\b/i;
-
-function isCyberRelevant(j: NormalizedJob): boolean {
+function isRelevant(j: NormalizedJob, re: RegExp | null): boolean {
+  if (!re) return true;
   const hay = `${j.title} ${j.company} ${j.description ?? ''}`;
-  return CYBER_RE.test(hay);
+  return re.test(hay);
 }
 
 export async function runSource(spec: SourceSpec, ctx?: ApifyCtx): Promise<NormalizedJob[]> {
