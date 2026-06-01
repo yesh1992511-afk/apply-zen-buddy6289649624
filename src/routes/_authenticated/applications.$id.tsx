@@ -566,3 +566,73 @@ function TailoredResumePanel({ jobId }: { jobId: string }) {
     </div>
   );
 }
+
+function LatestEventBanner({ events }: { events: Array<{ phase: string; status: string | null; message: string | null; ts: string }> }) {
+  if (events.length === 0) return null;
+  const last = events[events.length - 1];
+  const isErr = (last.status ?? "").toLowerCase().includes("fail") || (last.status ?? "").toLowerCase().includes("error");
+  const isOk = last.phase === "submitted" || last.phase === "offer" || last.phase === "interview";
+  const cls = isErr ? "border-destructive/40 bg-destructive/5 text-destructive"
+    : isOk ? "border-success/40 bg-success/5 text-success"
+    : "border-primary/30 bg-primary/5 text-foreground";
+  return (
+    <div className={cn("rounded-xl border px-4 py-3 flex items-start gap-3", cls)}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider">
+          <span>{last.phase}</span>
+          {last.status && <span className="opacity-70">· {last.status}</span>}
+          <span className="ml-auto opacity-70 normal-case font-normal tracking-normal">{timeAgo(last.ts)}</span>
+        </div>
+        {last.message && <div className="mt-1 text-sm leading-relaxed text-foreground/90">{last.message}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ScreenshotsPanel({ paths }: { paths: string[] }) {
+  const [urls, setUrls] = useState<Array<{ path: string; url: string }>>([]);
+  const [zoom, setZoom] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (paths.length === 0) { setUrls([]); return; }
+      const results: Array<{ path: string; url: string }> = [];
+      for (const p of paths) {
+        const { data } = await supabase.storage.from("screenshots").createSignedUrl(p, 3600);
+        if (data?.signedUrl) results.push({ path: p, url: data.signedUrl });
+      }
+      if (!cancelled) setUrls(results);
+    })();
+    return () => { cancelled = true; };
+  }, [paths]);
+
+  if (paths.length === 0) {
+    return (
+      <div className="rounded-xl border border-border/60 bg-card p-8 text-center text-sm text-muted-foreground italic">
+        No screenshots captured for this application yet.
+      </div>
+    );
+  }
+  return (
+    <>
+      <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border/40">
+          <h3 className="text-sm font-medium">Screenshots ({paths.length})</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3">
+          {urls.map((s, i) => (
+            <button key={s.path} onClick={() => setZoom(s.url)} className="group relative rounded-lg overflow-hidden border border-border/40 bg-surface-1 aspect-video hover:border-primary/50 transition-colors">
+              <img src={s.url} alt={`Screenshot ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+              <div className="absolute bottom-1 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white tabular-nums">#{i + 1}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      {zoom && (
+        <div onClick={() => setZoom(null)} className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 cursor-zoom-out">
+          <img src={zoom} alt="Screenshot" className="max-h-full max-w-full rounded-lg shadow-2xl" />
+        </div>
+      )}
+    </>
+  );
+}
