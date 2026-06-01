@@ -563,8 +563,19 @@ export async function fetchUSAJobs(keyword = 'software', location = ''): Promise
 // Apify — triggers a fresh actor run with the user's keywords/locations
 // via run-sync-get-dataset-items. Costs Apify compute, but returns
 // fresh, targeted jobs instead of stale cached datasets.
+//
+// Each actor expects a DIFFERENT input schema. Most of the consumer-site
+// scrapers (LinkedIn, Glassdoor, ZipRecruiter, Wellfound) take an array
+// of pre-built search URLs, NOT free-form keywords. Sending
+// `{ queries, locations }` to those actors results in a successful run
+// with 0 items every time — which is exactly what was happening before
+// this rewrite.
 // ============================================================
 const APIFY_RUN_TIMEOUT_MS = 110_000; // a touch under the run-tier 120s cap
+
+// Hard cap on (query × location) URLs per actor run, so 20 cyber keywords
+// don't blow past Apify's sync 100s window.
+const APIFY_MAX_URLS_PER_ACTOR = 8;
 
 async function runApifyActor(
   actorId: string,
@@ -589,7 +600,15 @@ async function runApifyActor(
       throw new Error(`apify ${actorId} ${res.status}: ${body.slice(0, 200)}`);
     }
     const data = await res.json();
-    return Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
+    const arr = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
+    // Lightweight observability: server logs let us tell "0 items but
+    // ran" from "garbage in" after the fact.
+    if (arr.length === 0) {
+      console.log(
+        `[apify] ${actorId} returned 0 items; payload keys=${Object.keys(payload).join(',')}`,
+      );
+    }
+    return arr;
   } finally {
     clearTimeout(to);
   }
@@ -602,17 +621,81 @@ const defaultCtx = (ctx?: ApifyCtx): ApifyCtx => ({
   locations: ctx?.locations?.length ? ctx.locations : ['United States'],
 });
 
+/** Pick the most specific queries first (longer phrases are more targeted),
+ *  pair with each location, and cap the total fan-out. */
+function pairQueriesLocations(
+  ctx: ApifyCtx,
+  cap = APIFY_MAX_URLS_PER_ACTOR,
+): Array<{ q: string; loc: string }> {
+  const queries = [...ctx.queries].sort((a, b) => b.length - a.length);
+  const locs = ctx.locations.length ? ctx.locations : ['United States'];
+  const out: Array<{ q: string; loc: string }> = [];
+  for (const loc of locs) {
+    for (const q of queries) {
+      if (out.length >= cap) return out;
+      out.push({ q, loc });
+    }
+  }
+  return out;
+}
+
+function buildLinkedInSearchUrls(ctx: ApifyCtx): string[] {
+  return pairQueriesLocations(ctx).map(({ q, loc }) => {
+    const params = new URLSearchParams({
+      keywords: q,
+      location: loc,
+      f_TPR: 'r604800', // last 7 days
+      sortBy: 'DD',     // date-descending
+    });
+    return `https://www.linkedin.com/jobs/search/?${params.toString()}`;
+  });
+}
+
+function buildGlassdoorSearchUrls(ctx: ApifyCtx): string[] {
+  return pairQueriesLocations(ctx).map(({ q, loc }) => {
+    const params = new URLSearchParams({
+      sc_keyword: q,
+      locT: 'N',
+      locName: loc,
+    });
+    return `https://www.glassdoor.com/Job/jobs.htm?${params.toString()}`;
+  });
+}
+
+function buildZipRecruiterSearchUrls(ctx: ApifyCtx): string[] {
+  return pairQueriesLocations(ctx).map(({ q, loc }) => {
+    const params = new URLSearchParams({
+      search: q,
+      location: loc,
+      days: '7',
+    });
+    return `https://www.ziprecruiter.com/jobs-search?${params.toString()}`;
+  });
+}
+
+function buildWellfoundStartUrls(ctx: ApifyCtx): Array<{ url: string }> {
+  return pairQueriesLocations(ctx, 4).map(({ q, loc }) => {
+    const slugRole = q.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const slugLoc = loc.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return { url: `https://wellfound.com/role/l/${slugRole}/${slugLoc}` };
+  });
+}
+
 export async function fetchApifyLinkedIn(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
   const c = defaultCtx(ctx);
+  const urls = buildLinkedInSearchUrls(c);
+  if (!urls.length) return [];
+  // bebity/linkedin-jobs-scraper documented input:
+  // { urls: string[], scrapeCompany?: bool, count?: number, proxy?: ... }
   const items = await runApifyActor('bebity~linkedin-jobs-scraper', {
-    queries: c.queries,
-    locations: c.locations,
-    rows: 80,
-    proxy: { useApifyProxy: true },
+    urls,
+    scrapeCompany: false,
+    count: 50,
+    proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
   });
   return items
     .map((it) => {
-      const url = String(it.link ?? it.jobUrl ?? '');
+      const url = String(it.link ?? it.jobUrl ?? it.url ?? '');
       if (!url) return null;
       return {
         source_key: 'apify:linkedin',
@@ -628,7 +711,7 @@ export async function fetchApifyLinkedIn(ctx?: ApifyCtx): Promise<NormalizedJob[
         salary_min: null, salary_max: null, salary_currency: null,
         employment_type: (it.employmentType as string) || null,
         seniority: (it.seniorityLevel as string) || null,
-        posted_at: safeIsoDate(it.postedAt ?? it.publishedAt),
+        posted_at: safeIsoDate(it.postedAt ?? it.publishedAt ?? it.postedTime),
         raw: it,
       } as NormalizedJob;
     })
@@ -637,15 +720,22 @@ export async function fetchApifyLinkedIn(ctx?: ApifyCtx): Promise<NormalizedJob[
 
 export async function fetchApifyIndeed(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
   const c = defaultCtx(ctx);
-  const items = await runApifyActor('misceres~indeed-scraper', {
-    position: c.queries[0],
-    country: 'US',
-    location: c.locations[0],
-    maxItems: 80,
-    parseCompanyDetails: false,
-    saveOnlyUniqueItems: true,
-  });
-  return items
+  // misceres/indeed-scraper takes single position + location. Run a few
+  // queries serially (top-N most specific) and merge.
+  const pairs = pairQueriesLocations(c, 4);
+  const all: Array<Record<string, unknown>> = [];
+  for (const { q, loc } of pairs) {
+    const items = await runApifyActor('misceres~indeed-scraper', {
+      position: q,
+      country: 'US',
+      location: loc,
+      maxItems: 30,
+      parseCompanyDetails: false,
+      saveOnlyUniqueItems: true,
+    });
+    all.push(...items);
+  }
+  return all
     .map((it) => {
       const url = String(it.url ?? it.externalApplyLink ?? '');
       if (!url) return null;
@@ -664,7 +754,7 @@ export async function fetchApifyIndeed(ctx?: ApifyCtx): Promise<NormalizedJob[]>
         salary_currency: (it.salary as { currency?: string } | undefined)?.currency ?? null,
         employment_type: (it.jobType as string) || null,
         seniority: null,
-        posted_at: safeIsoDate(it.postingDateParsed),
+        posted_at: safeIsoDate(it.postingDateParsed ?? it.postedAt),
         raw: it,
       } as NormalizedJob;
     })
@@ -673,11 +763,12 @@ export async function fetchApifyIndeed(ctx?: ApifyCtx): Promise<NormalizedJob[]>
 
 export async function fetchApifyGlassdoor(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
   const c = defaultCtx(ctx);
+  const urls = buildGlassdoorSearchUrls(c);
+  if (!urls.length) return [];
   const items = await runApifyActor('bebity~glassdoor-jobs-scraper', {
-    queries: c.queries,
-    locations: c.locations,
-    rows: 80,
-    proxy: { useApifyProxy: true },
+    urls,
+    count: 50,
+    proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
   });
   return items
     .map((it) => {
@@ -705,11 +796,12 @@ export async function fetchApifyGlassdoor(ctx?: ApifyCtx): Promise<NormalizedJob
 
 export async function fetchApifyZipRecruiter(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
   const c = defaultCtx(ctx);
+  const searchUrls = buildZipRecruiterSearchUrls(c).map((url) => ({ url }));
+  if (!searchUrls.length) return [];
   const items = await runApifyActor('bebity~ziprecruiter-scraper', {
-    queries: c.queries,
-    locations: c.locations,
-    rows: 80,
-    proxy: { useApifyProxy: true },
+    searchUrls,
+    maxItems: 50,
+    proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
   });
   return items
     .map((it) => {
@@ -738,10 +830,11 @@ export async function fetchApifyZipRecruiter(ctx?: ApifyCtx): Promise<Normalized
 
 export async function fetchApifyWellfound(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
   const c = defaultCtx(ctx);
+  const startUrls = buildWellfoundStartUrls(c);
+  if (!startUrls.length) return [];
   const items = await runApifyActor('epctex~wellfound-scraper', {
-    search: c.queries[0],
-    locations: c.locations,
-    maxItems: 80,
+    startUrls,
+    maxItems: 50,
     proxy: { useApifyProxy: true },
   });
   return items
@@ -773,8 +866,11 @@ export async function fetchApifyWellfound(ctx?: ApifyCtx): Promise<NormalizedJob
 
 export async function fetchApifyGoogleJobs(ctx?: ApifyCtx): Promise<NormalizedJob[]> {
   const c = defaultCtx(ctx);
+  // Cap to top-N queries to stay under sync timeout.
+  const queries = [...c.queries].sort((a, b) => b.length - a.length).slice(0, 6);
+  if (!queries.length) return [];
   const items = await runApifyActor('dan.poltawski~google-jobs-scraper', {
-    queries: c.queries,
+    queries,
     countryCode: 'us',
     languageCode: 'en',
     maxPagesPerQuery: 2,
