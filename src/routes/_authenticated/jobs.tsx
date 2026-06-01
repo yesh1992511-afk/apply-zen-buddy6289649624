@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { jobsQueryOptions, jobCountsQueryOptions, savedFiltersQueryOptions, useApplyToJob, useBulkQueueApplies, useClearAllJobs, useRescoreAllJobs, useLoosenActiveFilter, useDisableNoisySources, useDailyApplyBudget } from "@/lib/queries/jobs";
 import { Link } from "@tanstack/react-router";
 import { AllApplicationsTable } from "@/components/AllApplicationsTable";
+import { RunBatchButton } from "@/components/RunBatchButton";
 
 export const Route = createFileRoute("/_authenticated/jobs")({
   head: () => ({ meta: [{ title: "Jobs — JobPilot" }] }),
