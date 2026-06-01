@@ -156,7 +156,7 @@ function JobsPage() {
     <div className="space-y-6 max-w-[1400px]">
       <PageHeader
         title="Jobs"
-        description={`${filtered.length} matched · sorted by relevance score`}
+        description={`${filtered.length} ${mode === "matched" ? "matched" : "scraped"} · sorted by relevance score`}
         actions={
           <div className="flex items-center gap-2">
             <RunBatchButton defaultTarget={10} />
