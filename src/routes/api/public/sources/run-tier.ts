@@ -217,7 +217,7 @@ export const Route = createFileRoute('/api/public/sources/run-tier')({
               const warning = fetchedZero
                 ? (spec.provider.startsWith('apify:')
                     ? 'Apify actor returned 0 items for your keywords/locations — verify actor input.'
-                    : 'Source returned 0 cyber-relevant jobs this run.')
+                    : 'Source returned 0 jobs matching your target keywords this run.')
                 : null;
               await supabaseAdmin.from('sources').update({
                 last_run_at: runAt,
